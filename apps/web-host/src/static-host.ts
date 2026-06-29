@@ -162,16 +162,36 @@ function findMountedSite(sites: MountedSite[], pathname: string) {
   });
 }
 
+function parseJoinInviteToken(relativePath: string): string | null {
+  const match = relativePath.match(/^\/join\/([^/]+)\/?$/);
+  if (!match || match[1] === '_') return null;
+  return match[1];
+}
+
+function joinInviteRedirectPath(relativePath: string): string | null {
+  const token = parseJoinInviteToken(relativePath);
+  if (!token) return null;
+  return `/join?token=${encodeURIComponent(token)}`;
+}
+
 async function serveSiteFile(
   request: IncomingMessage,
   response: ServerResponse,
   site: MountedSite,
   relativePath: string,
 ) {
-  const file = await findStaticFile(site.rootDir, relativePath);
+  let file = await findStaticFile(site.rootDir, relativePath);
+
+  const joinRedirect = joinInviteRedirectPath(relativePath);
+  if (!file && joinRedirect) {
+    response.statusCode = 302;
+    response.setHeader('Location', joinRedirect);
+    response.end();
+    return;
+  }
 
   if (!file) {
-    await serveMissingFile(request, response, site.rootDir);
+    await serveMissingFile(request, response, site.rootDir, relativePath);
     return;
   }
 
@@ -191,7 +211,16 @@ async function serveMissingFile(
   request: IncomingMessage,
   response: ServerResponse,
   rootDir: string,
+  relativePath: string,
 ) {
+  if (joinInviteRedirectPath(relativePath)) {
+    const redirect = joinInviteRedirectPath(relativePath)!;
+    response.statusCode = 302;
+    response.setHeader('Location', redirect);
+    response.end();
+    return;
+  }
+
   const notFoundFile = await findStaticFile(rootDir, '/404.html');
 
   if (!notFoundFile) {

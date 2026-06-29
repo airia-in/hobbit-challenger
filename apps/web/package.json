@@ -21,6 +21,7 @@
     "@workspace-starter/types": "workspace:*",
     "@workspace-starter/ui": "workspace:*",
     "astro": "^6.3.5",
+    "qrcode": "^1.5.4",
     "react": "catalog:",
     "react-dom": "catalog:"
   },
@@ -31,6 +32,7 @@
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
     "@testing-library/user-event": "catalog:",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@workspace-starter/api": "workspace:*",

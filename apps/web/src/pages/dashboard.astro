@@ -1,0 +1,8 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { DashboardPage } from '../components/dashboard/DashboardPage';
+---
+
+<BaseLayout title="DRCODE 75 HARD CHALLENGE — Dashboard">
+  <DashboardPage client:load currentPath="/dashboard" />
+</BaseLayout>

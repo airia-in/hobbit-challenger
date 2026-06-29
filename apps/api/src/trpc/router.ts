@@ -1,35 +1,22 @@
-import { z } from 'zod';
-import { router, publicProcedure, protectedProcedure } from './trpc';
-
-const usersRouter = router({
-  list: publicProcedure.query(async () => {
-    // TODO: replace with real DB call
-    return [{ id: '1', name: 'Mokshit Jain', email: 'm@example.com' }];
-  }),
-
-  getById: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ input }) => {
-      // TODO: replace with real DB call
-      return { id: input.id, name: 'Mokshit Jain', email: 'm@example.com' };
-    }),
-
-  create: protectedProcedure
-    .input(
-      z.object({
-        name: z.string().min(1),
-        email: z.string().email(),
-      }),
-    )
-    .mutation(async ({ input }) => {
-      // TODO: replace with real DB call
-      return { id: crypto.randomUUID(), ...input };
-    }),
-});
+import { router } from './trpc';
+import { authRouter } from './routers/auth.router';
+import { groupsRouter } from './routers/groups.router';
+import { heatmapRouter } from './routers/heatmap.router';
+import { historyRouter } from './routers/history.router';
+import { leaderboardRouter } from './routers/leaderboard.router';
+import { profileRouter } from './routers/profile.router';
+import { statsRouter } from './routers/stats.router';
+import { tasksRouter } from './routers/tasks.router';
 
 export const appRouter = router({
-  users: usersRouter,
+  auth: authRouter,
+  groups: groupsRouter,
+  tasks: tasksRouter,
+  stats: statsRouter,
+  heatmap: heatmapRouter,
+  leaderboard: leaderboardRouter,
+  history: historyRouter,
+  profile: profileRouter,
 });
 
-// This type is imported by apps/web for end-to-end type safety
 export type AppRouter = typeof appRouter;

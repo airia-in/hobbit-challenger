@@ -1,0 +1,22 @@
+{
+  "name": "@workspace-starter/db",
+  "version": "0.0.1",
+  "private": true,
+  "files": ["src", "prisma"],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "prisma generate",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.8.2",
+    "prisma": "^6.8.2"
+  },
+  "devDependencies": {
+    "@workspace-starter/config-typescript": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

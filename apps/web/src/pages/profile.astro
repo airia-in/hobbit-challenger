@@ -1,0 +1,8 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { ProfilePage } from '../components/profile/ProfilePage';
+---
+
+<BaseLayout title="DRCODE 75 HARD CHALLENGE — Profile">
+  <ProfilePage client:load currentPath="/profile" />
+</BaseLayout>

@@ -1,9 +1,8 @@
 ---
-import '../styles/global.css';
-import HomePage from '../components/home/HomePage.astro';
-import { getLocale } from '../i18n/config';
-
-const locale = getLocale(Astro.currentLocale);
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { LoginForm } from '../components/auth/LoginForm';
 ---
 
-<HomePage locale={locale} />
+<BaseLayout title="DRCODE 75 HARD CHALLENGE — Sign In">
+  <LoginForm client:load />
+</BaseLayout>

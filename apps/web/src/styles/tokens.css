@@ -1,0 +1,18 @@
+:root {
+  --bg-black: #0a0a0a;
+  --surface: #111111;
+  --surface-raised: #1a1a1a;
+  --accent-red: #e63329;
+  --accent-orange: #f97316;
+  --gold: #f5c842;
+  --silver: #a8b2b8;
+  --bronze: #cd7f32;
+  --text-primary: #f0f0f0;
+  --text-muted: #6b7280;
+  --success: #22c55e;
+  --border: #2a2a2a;
+
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}

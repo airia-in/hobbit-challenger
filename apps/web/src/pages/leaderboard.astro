@@ -1,0 +1,8 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { LeaderboardPage } from '../components/leaderboard/LeaderboardPage';
+---
+
+<BaseLayout title="DRCODE 75 HARD CHALLENGE — Leaderboard">
+  <LeaderboardPage client:load currentPath="/leaderboard" />
+</BaseLayout>

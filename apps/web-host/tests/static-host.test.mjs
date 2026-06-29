@@ -92,6 +92,32 @@ test('redirects secondary app base path to its trailing-slash root', async (t) =
   assert.equal(response.headers.get('location'), '/secondary/');
 });
 
+test('redirects legacy join invite paths to query token URL', async (t) => {
+  const workspace = await mkdtemp(path.join(tmpdir(), 'web-host-'));
+  t.after(() => rm(workspace, { recursive: true, force: true }));
+
+  const primaryRoot = path.join(workspace, 'primary');
+
+  await createFixtureSite(primaryRoot, {
+    'index.html': '<h1>Primary</h1>',
+    'join/index.html': '<h1>Join</h1>',
+  });
+
+  const origin = await withServer(t, {
+    sites: [{ name: 'primary', basePath: '/', rootDir: primaryRoot }],
+  });
+
+  const response = await fetch(`${origin}/join/some-uuid-token/`, {
+    redirect: 'manual',
+  });
+
+  assert.equal(response.status, 302);
+  assert.equal(
+    response.headers.get('location'),
+    '/join?token=some-uuid-token',
+  );
+});
+
 test('does not serve files outside the mounted site root', async (t) => {
   const workspace = await mkdtemp(path.join(tmpdir(), 'web-host-'));
   t.after(() => rm(workspace, { recursive: true, force: true }));

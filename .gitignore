@@ -45,3 +45,9 @@ coverage
 
 # Orchestration scratch
 .orchestrate
+
+# Local data (SQLite DB + uploads)
+data/*.db
+data/*.db-journal
+data/uploads/*
+!data/uploads/.gitkeep

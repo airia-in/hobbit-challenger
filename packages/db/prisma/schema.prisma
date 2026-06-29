@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskType {
+  DIET
+  OUTDOOR_WORKOUT
+  INDOOR_WORKOUT
+  WATER
+  READING
+  PROGRESS_PHOTO
+}
+
+enum MemberStatus {
+  ACTIVE
+  ELIMINATED
+  COMPLETED
+}
+
+enum AiVerdict {
+  PASSED
+  FAILED
+  SKIPPED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  timezone      String    @default("UTC")
+  avatarUrl     String?
+  groupId       String?
+  group         Group?    @relation(fields: [groupId], references: [id])
+  reminderTime  String?
+  createdAt     DateTime  @default(now())
+  attempts      Attempt[]
+  taskLogs      TaskLog[]
+  adminOf       Group[]   @relation("GroupAdmin")
+}
+
+model Group {
+  id            String      @id @default(cuid())
+  name          String
+  inviteToken   String      @unique
+  adminUserId   String
+  admin         User        @relation("GroupAdmin", fields: [adminUserId], references: [id])
+  members       User[]
+  dayLabels     DayLabel[]
+  createdAt     DateTime    @default(now())
+}
+
+model Attempt {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  attemptNumber   Int
+  startDate       DateTime
+  endDate         DateTime?
+  isActive        Boolean   @default(true)
+  currentDay      Int       @default(1)
+  longestStreak   Int       @default(0)
+  timesRestarted  Int       @default(0)
+  taskLogs        TaskLog[]
+  dayResults      DayResult[]
+}
+
+model DayResult {
+  id          String   @id @default(cuid())
+  attemptId   String
+  attempt     Attempt  @relation(fields: [attemptId], references: [id])
+  date        DateTime
+  dayNumber   Int
+  completed   Boolean
+  failedAt    DateTime?
+  failReason  String?
+}
+
+model TaskLog {
+  id            String    @id @default(cuid())
+  attemptId     String
+  attempt       Attempt   @relation(fields: [attemptId], references: [id])
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  taskType      TaskType
+  date          DateTime
+  completedAt   DateTime?
+  proofUrl      String?
+  proofNotes    String?
+  bookTitle     String?
+  pageFrom      Int?
+  pageTo        Int?
+  dietConfirmed Boolean   @default(false)
+  aiVerdict     AiVerdict?
+  aiConfidence  Float?
+  aiReason      String?
+  isValid       Boolean   @default(true)
+}
+
+model DayLabel {
+  id          String   @id @default(cuid())
+  groupId     String
+  group       Group    @relation(fields: [groupId], references: [id])
+  dayNumber   Int
+  labelText   String
+  setByUserId String
+  updatedAt   DateTime @updatedAt
+
+  @@unique([groupId, dayNumber])
+}

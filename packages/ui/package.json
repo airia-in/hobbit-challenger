@@ -26,7 +26,14 @@
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
   },
+  "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "qrcode": "^1.5.4",
+    "tailwind-merge": "^3.6.0"
+  },
   "devDependencies": {
+    "@types/qrcode": "^1.5.6",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@workspace-starter/config-typescript": "workspace:*",
@@ -35,10 +42,5 @@
     "react-dom": "catalog:",
     "tsup": "catalog:",
     "typescript": "catalog:"
-  },
-  "dependencies": {
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^3.6.0"
   }
 }

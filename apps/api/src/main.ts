@@ -1,11 +1,21 @@
 import 'reflect-metadata';
+import { createWriteStream } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import { NestFactory } from '@nestjs/core';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
+import multipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
 import { fastifyTRPCPlugin } from '@trpc/server/adapters/fastify';
 import { AppModule } from './app.module';
+import { PrismaService } from './prisma/prisma.service';
+import { AuthService } from './services/auth.service';
+import { TasksService } from './services/tasks.service';
 import { appRouter } from './trpc/router';
-import { createContext } from './trpc/context';
+import { createContextFactory } from './trpc/context';
 
 async function bootstrap() {
   const allowedOrigins = (
@@ -15,6 +25,15 @@ async function bootstrap() {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+
+  const repoRoot = path.resolve(__dirname, '../../..');
+  const uploadDir = path.isAbsolute(process.env.UPLOAD_DIR ?? '')
+    ? (process.env.UPLOAD_DIR as string)
+    : path.resolve(repoRoot, process.env.UPLOAD_DIR ?? 'data/uploads');
+  const maxUploadBytes = parseInt(
+    process.env.MAX_UPLOAD_BYTES ?? '10485760',
+    10,
+  );
 
   const adapter = new FastifyAdapter({
     logger: process.env.NODE_ENV !== 'test',
@@ -38,8 +57,47 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Register tRPC on the underlying Fastify instance
+  const prisma = app.get(PrismaService);
+  const authService = app.get(AuthService);
+  const tasksService = app.get(TasksService);
+  const createContext = createContextFactory({
+    prisma,
+    authService,
+    tasksService,
+  });
+
   const fastify = app.getHttpAdapter().getInstance();
+
+  await mkdir(uploadDir, { recursive: true });
+
+  await fastify.register(multipart, {
+    limits: {
+      fileSize: maxUploadBytes,
+    },
+  });
+
+  await fastify.register(fastifyStatic, {
+    root: uploadDir,
+    prefix: '/uploads/',
+    decorateReply: false,
+  });
+
+  fastify.post('/api/uploads', async (request, reply) => {
+    const data = await request.file();
+
+    if (!data) {
+      return reply.status(400).send({ error: 'No file uploaded' });
+    }
+
+    const ext = path.extname(data.filename);
+    const filename = `${randomUUID()}${ext}`;
+    const filepath = path.join(uploadDir, filename);
+
+    await pipeline(data.file, createWriteStream(filepath));
+
+    return { url: `/uploads/${filename}` };
+  });
+
   await fastify.register(fastifyTRPCPlugin, {
     prefix: '/trpc',
     trpcOptions: {

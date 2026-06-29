@@ -24,5 +24,17 @@ services:
       NODE_ENV: production
       PORT: 3001
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:4321,http://127.0.0.1:4321}
+      DATABASE_URL: ${DATABASE_URL:-file:/app/data/prod.db}
+      JWT_SECRET: ${JWT_SECRET:-change-me}
+      UPLOAD_DIR: /app/data/uploads
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-10485760}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_VISION_MODEL: ${OPENAI_VISION_MODEL:-gpt-4o-mini}
     ports:
       - '${API_PORT:-3001}:3001'
+    volumes:
+      - app-data:/app/data
+
+volumes:
+  app-data:

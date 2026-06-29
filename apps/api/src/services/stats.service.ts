@@ -32,14 +32,20 @@ export async function getDashboardStats(
     select: { completed: true },
   });
 
-  const totalDaysCompleted = allDayResults.filter((day) => day.completed).length;
+  const totalDaysCompleted = allDayResults.filter(
+    (day) => day.completed,
+  ).length;
   const totalDaysEvaluated = allDayResults.length;
   const successRate =
     totalDaysEvaluated > 0
       ? Math.round((totalDaysCompleted / totalDaysEvaluated) * 100)
       : 0;
 
-  const yesterdayDate = addLocalDays(getUserLocalDate(user.timezone), -1, user.timezone);
+  const yesterdayDate = addLocalDays(
+    getUserLocalDate(user.timezone),
+    -1,
+    user.timezone,
+  );
   const yesterdayResult = attempt
     ? await prisma.dayResult.findFirst({
         where: {
@@ -52,10 +58,16 @@ export async function getDashboardStats(
   const yesterdayFailed = yesterdayResult?.completed === false;
 
   const currentStreak = attempt ? Math.max(0, attempt.currentDay - 1) : 0;
-  const daysRemaining = attempt ? Math.max(0, 75 - (attempt.currentDay - 1)) : 75;
+  const daysRemaining = attempt
+    ? Math.max(0, 75 - (attempt.currentDay - 1))
+    : 75;
   const estimatedFinishDate =
     attempt && daysRemaining > 0
-      ? addLocalDays(getUserLocalDate(user.timezone), daysRemaining, user.timezone)
+      ? addLocalDays(
+          getUserLocalDate(user.timezone),
+          daysRemaining,
+          user.timezone,
+        )
       : attempt && attempt.currentDay > 75
         ? getUserLocalDate(user.timezone)
         : null;

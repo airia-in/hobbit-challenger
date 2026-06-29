@@ -102,7 +102,11 @@ export function ProofUploader({
           buttonClassName,
         )}
       >
-        {uploading ? 'Uploading...' : preview ? 'Replace photo' : 'Upload photo proof'}
+        {uploading
+          ? 'Uploading...'
+          : preview
+            ? 'Replace photo'
+            : 'Upload photo proof'}
       </button>
     </div>
   );

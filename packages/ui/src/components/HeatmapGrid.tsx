@@ -25,7 +25,8 @@ const STATE_COLORS: Record<HeatmapCellState, string> = {
   completed: 'bg-[var(--success)]',
   failed: 'bg-[var(--accent-red)]',
   future: 'bg-[var(--border)]',
-  today: 'bg-[var(--gold)] ring-2 ring-[var(--gold)] ring-offset-1 ring-offset-[var(--bg-black)]',
+  today:
+    'bg-[var(--gold)] ring-2 ring-[var(--gold)] ring-offset-1 ring-offset-[var(--bg-black)]',
   not_started: 'bg-[var(--surface-raised)]',
 };
 
@@ -51,7 +52,9 @@ function CellTooltip({
           setEditing(false);
         }}
       >
-        <p className="mb-1 text-xs text-[var(--text-muted)]">Day {cell.dayNumber}</p>
+        <p className="mb-1 text-xs text-[var(--text-muted)]">
+          Day {cell.dayNumber}
+        </p>
         <input
           autoFocus
           value={labelText}
@@ -82,7 +85,9 @@ function CellTooltip({
     <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--text-primary)] group-hover:block">
       <span className="font-medium">Day {cell.dayNumber}</span>
       <span className="mx-1 text-[var(--text-muted)]">·</span>
-      <span className="capitalize text-[var(--text-muted)]">{cell.state.replace('_', ' ')}</span>
+      <span className="capitalize text-[var(--text-muted)]">
+        {cell.state.replace('_', ' ')}
+      </span>
       {cell.dayLabel && (
         <>
           <br />

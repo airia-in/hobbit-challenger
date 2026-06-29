@@ -20,9 +20,7 @@ export type LeaderboardResult = {
   podium: LeaderboardMember[];
 };
 
-function computeSuccessRate(
-  dayResults: { completed: boolean }[],
-): number {
+function computeSuccessRate(dayResults: { completed: boolean }[]): number {
   if (dayResults.length === 0) return 0;
   const completed = dayResults.filter((d) => d.completed).length;
   return Math.round((completed / dayResults.length) * 100);
@@ -36,7 +34,9 @@ function sortMembers(
 
   switch (sortBy) {
     case 'successRate':
-      sorted.sort((a, b) => b.successRate - a.successRate || b.currentDay - a.currentDay);
+      sorted.sort(
+        (a, b) => b.successRate - a.successRate || b.currentDay - a.currentDay,
+      );
       break;
     case 'streak':
       sorted.sort((a, b) => b.streak - a.streak || b.currentDay - a.currentDay);
@@ -46,7 +46,9 @@ function sortMembers(
       break;
     case 'day':
     default:
-      sorted.sort((a, b) => b.currentDay - a.currentDay || b.successRate - a.successRate);
+      sorted.sort(
+        (a, b) => b.currentDay - a.currentDay || b.successRate - a.successRate,
+      );
       break;
   }
 
@@ -61,7 +63,10 @@ export async function getLeaderboard(
   const user = await prisma.user.findUnique({ where: { id: userId } });
 
   if (!user?.groupId) {
-    throw new TRPCError({ code: 'NOT_FOUND', message: 'Join a group to view the leaderboard' });
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: 'Join a group to view the leaderboard',
+    });
   }
 
   const members = await prisma.user.findMany({
@@ -84,9 +89,7 @@ export async function getLeaderboard(
     const attempt = member.attempts[0] ?? null;
     const currentDay = attempt?.currentDay ?? 0;
     const streak = attempt ? Math.max(0, attempt.currentDay - 1) : 0;
-    const successRate = attempt
-      ? computeSuccessRate(attempt.dayResults)
-      : 0;
+    const successRate = attempt ? computeSuccessRate(attempt.dayResults) : 0;
 
     return {
       id: member.id,

@@ -46,6 +46,12 @@ coverage
 # Orchestration scratch
 .orchestrate
 
+# Playwright CLI local artifacts
+.playwright-cli/
+
+# Capacitor staged web bundle (copied from apps/web/dist)
+apps/mobile/www/
+
 # Local data (SQLite DB + uploads)
 data/*.db
 data/*.db-journal

@@ -54,10 +54,22 @@ const TASK_DEFINITIONS: Array<{
   icon: string;
 }> = [
   { taskType: TaskType.DIET, title: 'Follow Your Diet', icon: '🥗' },
-  { taskType: TaskType.OUTDOOR_WORKOUT, title: 'Outdoor Workout (45 min)', icon: '🌳' },
-  { taskType: TaskType.INDOOR_WORKOUT, title: 'Indoor Workout (45 min)', icon: '💪' },
+  {
+    taskType: TaskType.OUTDOOR_WORKOUT,
+    title: 'Outdoor Workout (45 min)',
+    icon: '🌳',
+  },
+  {
+    taskType: TaskType.INDOOR_WORKOUT,
+    title: 'Indoor Workout (45 min)',
+    icon: '💪',
+  },
   { taskType: TaskType.WATER, title: 'Drink 1 Gallon of Water', icon: '💧' },
-  { taskType: TaskType.READING, title: 'Read 10 Pages (non-fiction)', icon: '📖' },
+  {
+    taskType: TaskType.READING,
+    title: 'Read 10 Pages (non-fiction)',
+    icon: '📖',
+  },
   { taskType: TaskType.PROGRESS_PHOTO, title: 'Progress Photo', icon: '📸' },
 ];
 
@@ -105,7 +117,10 @@ function validateTaskInput(
 
   if (taskType === TaskType.DIET) {
     if (!input.dietConfirmed) {
-      return { isValid: false, reason: 'You must confirm you followed your diet' };
+      return {
+        isValid: false,
+        reason: 'You must confirm you followed your diet',
+      };
     }
     return { isValid: true };
   }
@@ -425,7 +440,11 @@ export function isTaskLogValid(log: {
   aiVerdict: AiVerdict | null;
   completedAt: Date | null;
 }): boolean {
-  return Boolean(log.completedAt) && log.isValid && log.aiVerdict !== AiVerdict.FAILED;
+  return (
+    Boolean(log.completedAt) &&
+    log.isValid &&
+    log.aiVerdict !== AiVerdict.FAILED
+  );
 }
 
 export const ALL_TASK_TYPES = TASK_DEFINITIONS.map((task) => task.taskType);

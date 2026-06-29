@@ -352,7 +352,9 @@ function DashboardContent() {
                         bookTitle: data.bookTitle as string | undefined,
                         pageFrom: data.pageFrom as number | undefined,
                         pageTo: data.pageTo as number | undefined,
-                        dietConfirmed: data.dietConfirmed as boolean | undefined,
+                        dietConfirmed: data.dietConfirmed as
+                          | boolean
+                          | undefined,
                       });
                     } else {
                       submitTask.mutate({
@@ -362,7 +364,9 @@ function DashboardContent() {
                         bookTitle: data.bookTitle as string | undefined,
                         pageFrom: data.pageFrom as number | undefined,
                         pageTo: data.pageTo as number | undefined,
-                        dietConfirmed: data.dietConfirmed as boolean | undefined,
+                        dietConfirmed: data.dietConfirmed as
+                          | boolean
+                          | undefined,
                       });
                     }
                   }}
@@ -410,7 +414,9 @@ function DashboardContent() {
             style={{ fontFamily: 'var(--font-mono)' }}
           >
             The 5 Rules
-            <span className="text-[var(--text-muted)]">{rulesOpen ? '−' : '+'}</span>
+            <span className="text-[var(--text-muted)]">
+              {rulesOpen ? '−' : '+'}
+            </span>
           </button>
           {rulesOpen && (
             <ol className="mt-3 space-y-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-6 py-4 text-sm text-[var(--text-muted)]">

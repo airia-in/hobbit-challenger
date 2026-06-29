@@ -1,7 +1,6 @@
 # DRCODE 75 HARD CHALLENGE — Implementation Plan
 
-> Customized for the **dailyhabbit** monorepo (`@workspace-starter/*` template).
-> Stack: Astro static frontend · NestJS + tRPC API · Prisma · SQLite (local) / libSQL (server) · OpenAI vision verification.
+> **dailyhabbit** monorepo — Astro static frontend · NestJS + tRPC API · Prisma · SQLite (local) / libSQL (server) · OpenAI vision verification.
 
 ---
 
@@ -9,24 +8,22 @@
 
 Build **DRCODE 75 HARD CHALLENGE** — a group accountability tracker for the 75 Hard mental toughness program. Users join groups via invite links, complete daily tasks with proof submissions, and compete on a shared leaderboard over 75 days. Miss one task → restart from Day 1.
 
-**Tagline:** *No shortcuts. No excuses. No cheat days.*
+**Tagline:** _No shortcuts. No excuses. No cheat days._
 
 ---
 
-## Architecture (Template-Aligned)
+## Architecture
 
-### Current template vs. target
-
-| Layer | Template today | Target for this product |
-|-------|----------------|-------------------------|
-| Frontend | `apps/web` — Astro static + React islands | Same. All product pages live here. |
-| API runtime | `apps/api` — NestJS + Fastify on `:3001` | **Keep and grow.** All tRPC procedures, uploads, cron, and OpenAI calls live here. |
-| API contract | `apps/api` exports `AppRouter` type | Same pattern. `apps/web` imports `AppRouter` as a type only. |
-| Static host | `apps/web-host` — serves staged Astro builds | **Unchanged.** Serves static Astro builds only — no API logic. |
-| Shared UI | `packages/ui` | DRCODE design-system components (`TaskCard`, `HeatmapGrid`, etc.). |
-| Shared types | `packages/types` | Domain DTOs reused outside tRPC inference. |
-| Database | None yet | New `packages/db` — Prisma schema, client, migrations. Consumed by `apps/api`. |
-| Deploy | `docker-compose.yml` — `web-host` + `api` | **Two-service compose** (template default), extended with DB volume + env vars. |
+| Layer        | Location                                     | Role                                                               |
+| ------------ | -------------------------------------------- | ------------------------------------------------------------------ |
+| Frontend     | `apps/web` — Astro static + React islands    | All product pages live here.                                       |
+| API runtime  | `apps/api` — NestJS + Fastify on `:3001`     | All tRPC procedures, uploads, cron, and OpenAI calls.              |
+| API contract | `apps/api` exports `AppRouter` type          | `apps/web` imports `AppRouter` as a type only.                     |
+| Static host  | `apps/web-host` — serves staged Astro builds | Serves static Astro builds only — no API logic.                    |
+| Shared UI    | `packages/ui`                                | DRCODE design-system components (`TaskCard`, `HeatmapGrid`, etc.). |
+| Shared types | `packages/types`                             | Domain DTOs reused outside tRPC inference.                         |
+| Database     | `packages/db`                                | Prisma schema, client, migrations. Consumed by `apps/api`.         |
+| Deploy       | `docker-compose.yml` — `web-host` + `api`    | Two-service compose with shared DB volume + env vars.              |
 
 ### Request flow
 
@@ -51,7 +48,7 @@ apps/web-host
 
 ### Why keep NestJS separate
 
-- Matches the template's existing split: **static frontends aggregate in `web-host`, backends deploy independently.**
+- **Static frontends aggregate in `web-host`, backends deploy independently.**
 - NestJS gives structured modules, DI, and `@nestjs/schedule` for midnight day-evaluation cron jobs.
 - tRPC already mounts on Fastify in `apps/api/src/main.ts` — extend that, don't rewrite.
 - Astro stays fully static; the web app calls `PUBLIC_API_URL/trpc` (or a reverse proxy can unify origins in prod).
@@ -60,19 +57,19 @@ apps/web-host
 
 ## Tech Stack
 
-| Concern | Choice |
-|---------|--------|
-| Monorepo | PNPM workspaces + Turborepo (`dailyhabbit/`) |
-| Frontend | Astro 5 static + React islands + Tailwind CSS v4 |
-| API | NestJS 11 + Fastify + tRPC v11 (`apps/api`) |
-| ORM | Prisma (`packages/db`) |
-| DB (local) | SQLite (`file:./data/dev.db`) |
-| DB (server) | libSQL via `@libsql/client` + Prisma `libsql` adapter (or Turso remote URL) |
-| Auth | JWT in `Authorization: Bearer` header (extend `context.ts`) |
-| File storage | Local `data/uploads/` in dev; shared Docker volume in prod |
-| AI verification | OpenAI Vision API (`OPENAI_API_KEY`, `OPENAI_BASE_URL` from env) |
-| Cron / midnight jobs | `@nestjs/schedule` in `apps/api` |
-| QR codes | `qrcode` npm package on invite page (client-side generation is fine) |
+| Concern              | Choice                                                                      |
+| -------------------- | --------------------------------------------------------------------------- |
+| Monorepo             | PNPM workspaces + Turborepo (`dailyhabbit/`)                                |
+| Frontend             | Astro 5 static + React islands + Tailwind CSS v4                            |
+| API                  | NestJS 11 + Fastify + tRPC v11 (`apps/api`)                                 |
+| ORM                  | Prisma (`packages/db`)                                                      |
+| DB (local)           | SQLite (`file:./data/dev.db`)                                               |
+| DB (server)          | libSQL via `@libsql/client` + Prisma `libsql` adapter (or Turso remote URL) |
+| Auth                 | JWT in `Authorization: Bearer` header (extend `context.ts`)                 |
+| File storage         | Local `data/uploads/` in dev; shared Docker volume in prod                  |
+| AI verification      | OpenAI Vision API (`OPENAI_API_KEY`, `OPENAI_BASE_URL` from env)            |
+| Cron / midnight jobs | `@nestjs/schedule` in `apps/api`                                            |
+| QR codes             | `qrcode` npm package on invite page (client-side generation is fine)        |
 
 ### Environment variables
 
@@ -131,14 +128,13 @@ dailyhabbit/
     └── drcode-75-hard-challenge-plan.md
 ```
 
-### Setup from template
+### Initial setup
 
 1. **Create `packages/db`** — Prisma init, schema (below), export `prisma` client.
 2. **Grow `apps/api`** — add NestJS modules, services, and tRPC routers; wire Prisma via DI.
 3. **Keep `apps/web-host` as-is** — static hosting only; no API routes added.
 4. **Keep `apps/web/src/lib/trpc.ts`** — points at `PUBLIC_API_URL/trpc` (default `http://localhost:3001`).
 5. **Extend `docker-compose.yml`** — add shared `data` volume + env vars to `api` service.
-6. **Rename scope** (optional): `@workspace-starter/*` → `@drcode/*` or `@dailyhabbit/*` per [customizing-the-template.md](./guides/customizing-the-template.md).
 
 ---
 
@@ -146,20 +142,20 @@ dailyhabbit/
 
 ### Color palette (CSS variables in `apps/web/src/styles/tokens.css`)
 
-| Token | Value | Usage |
-|-------|-------|-------|
-| `--bg-black` | `#0A0A0A` | Primary background |
-| `--surface` | `#111111` | Cards and panels |
-| `--surface-raised` | `#1A1A1A` | Elevated components |
-| `--accent-red` | `#E63329` | CTA, danger, streak fire |
-| `--accent-orange` | `#F97316` | Progress indicators |
-| `--gold` | `#F5C842` | Rank 1, achievements |
-| `--silver` | `#A8B2B8` | Rank 2 |
-| `--bronze` | `#CD7F32` | Rank 3 |
-| `--text-primary` | `#F0F0F0` | Main text |
-| `--text-muted` | `#6B7280` | Secondary text |
-| `--success` | `#22C55E` | Task completed |
-| `--border` | `#2A2A2A` | Dividers |
+| Token              | Value     | Usage                    |
+| ------------------ | --------- | ------------------------ |
+| `--bg-black`       | `#0A0A0A` | Primary background       |
+| `--surface`        | `#111111` | Cards and panels         |
+| `--surface-raised` | `#1A1A1A` | Elevated components      |
+| `--accent-red`     | `#E63329` | CTA, danger, streak fire |
+| `--accent-orange`  | `#F97316` | Progress indicators      |
+| `--gold`           | `#F5C842` | Rank 1, achievements     |
+| `--silver`         | `#A8B2B8` | Rank 2                   |
+| `--bronze`         | `#CD7F32` | Rank 3                   |
+| `--text-primary`   | `#F0F0F0` | Main text                |
+| `--text-muted`     | `#6B7280` | Secondary text           |
+| `--success`        | `#22C55E` | Task completed           |
+| `--border`         | `#2A2A2A` | Dividers                 |
 
 ### Typography
 
@@ -175,17 +171,17 @@ Dark military/athletic. Sharp edges, high contrast, red on black. Signature elem
 
 ### Shared components (`packages/ui`)
 
-| Component | Props / role |
-|-----------|----------------|
-| `TaskCard` | task, onSubmit, isCompleted |
-| `HeatmapGrid` | daysData, adminMode, onDayLabelEdit |
-| `DayCounter` | currentDay, totalDays, startDate |
-| `StatsRow` | stats object |
-| `LeaderboardTable` | members, currentUserId |
-| `PodiumBlock` | top3Members |
-| `ProofUploader` | onChange, preview, accept |
-| `GroupInviteCard` | inviteUrl, groupName |
-| `StreakBadge` | count |
+| Component          | Props / role                        |
+| ------------------ | ----------------------------------- |
+| `TaskCard`         | task, onSubmit, isCompleted         |
+| `HeatmapGrid`      | daysData, adminMode, onDayLabelEdit |
+| `DayCounter`       | currentDay, totalDays, startDate    |
+| `StatsRow`         | stats object                        |
+| `LeaderboardTable` | members, currentUserId              |
+| `PodiumBlock`      | top3Members                         |
+| `ProofUploader`    | onChange, preview, accept           |
+| `GroupInviteCard`  | inviteUrl, groupName                |
+| `StreakBadge`      | count                               |
 
 ---
 
@@ -193,16 +189,16 @@ Dark military/athletic. Sharp edges, high contrast, red on black. Signature elem
 
 Astro static pages with React islands for interactive sections. Use `client:load` or `client:visible` for task cards, heatmap, leaderboard.
 
-| URL | Astro page | Auth |
-|-----|------------|------|
-| `/` | `pages/index.astro` | Public — login/register |
-| `/join` | `pages/join/index.astro` | Protected — create/manage group |
+| URL             | Astro page                 | Auth                              |
+| --------------- | -------------------------- | --------------------------------- |
+| `/`             | `pages/index.astro`        | Public — login/register           |
+| `/join`         | `pages/join/index.astro`   | Protected — create/manage group   |
 | `/join/[token]` | `pages/join/[token].astro` | Public → login redirect if needed |
-| `/dashboard` | `pages/dashboard.astro` | Protected |
-| `/leaderboard` | `pages/leaderboard.astro` | Protected |
-| `/history` | `pages/history.astro` | Protected |
-| `/profile` | `pages/profile.astro` | Protected |
-| `/admin/group` | `pages/admin/group.astro` | Protected — group admin only |
+| `/dashboard`    | `pages/dashboard.astro`    | Protected                         |
+| `/leaderboard`  | `pages/leaderboard.astro`  | Protected                         |
+| `/history`      | `pages/history.astro`      | Protected                         |
+| `/profile`      | `pages/profile.astro`      | Protected                         |
+| `/admin/group`  | `pages/admin/group.astro`  | Protected — group admin only      |
 
 **Auth guard pattern:** React `AuthGate` island checks session via `trpc.auth.me`; redirects to `/` if unauthenticated. For static Astro, do not rely on server middleware — guard in client + API rejects unauthenticated calls.
 
@@ -225,7 +221,7 @@ Desktop: fixed left sidebar.
 - Full-screen dark background, centered card (max 420px).
 - Logo: **DRCODE** (red) + **75 HARD CHALLENGE** (white).
 - Tabs: Sign In | Register.
-- Footer: *"75 days. 5 tasks. No exceptions."*
+- Footer: _"75 days. 5 tasks. No exceptions."_
 
 **tRPC:** `auth.register`, `auth.login`, `auth.logout`, `auth.me`
 
@@ -253,19 +249,19 @@ Desktop: fixed left sidebar.
 #### 3a. Hero — Day Counter
 
 - Massive `DAY {n} / 75` + progress bar + start / estimated finish dates.
-- Red banner if yesterday failed: *"You missed a task yesterday. Your streak has reset to Day 1."*
+- Red banner if yesterday failed: _"You missed a task yesterday. Your streak has reset to Day 1."_
 - Count-up animation on load.
 
 #### 3b. Today's tasks (6 task types)
 
-| # | Task | Icon | Proof | AI verify |
-|---|------|------|-------|-----------|
-| 1 | Follow Your Diet | 🥗 | Checkbox + optional photo | Photo: meal plausibility |
-| 2 | Outdoor Workout (45 min) | 🌳 | Photo (+ optional GPS screenshot) | Outdoor activity cues |
-| 3 | Indoor Workout (45 min) | 💪 | Photo | Gym/indoor workout cues |
-| 4 | Drink 1 Gallon of Water | 💧 | Photo of bottle/jug | Water container visible |
-| 5 | Read 10 Pages (non-fiction) | 📖 | Book title + page range | N/A (text validation only) |
-| 6 | Progress Photo | 📸 | Full-body photo (required) | Person visible, full-body framing |
+| #   | Task                        | Icon | Proof                             | AI verify                         |
+| --- | --------------------------- | ---- | --------------------------------- | --------------------------------- |
+| 1   | Follow Your Diet            | 🥗   | Checkbox + optional photo         | Photo: meal plausibility          |
+| 2   | Outdoor Workout (45 min)    | 🌳   | Photo (+ optional GPS screenshot) | Outdoor activity cues             |
+| 3   | Indoor Workout (45 min)     | 💪   | Photo                             | Gym/indoor workout cues           |
+| 4   | Drink 1 Gallon of Water     | 💧   | Photo of bottle/jug               | Water container visible           |
+| 5   | Read 10 Pages (non-fiction) | 📖   | Book title + page range           | N/A (text validation only)        |
+| 6   | Progress Photo              | 📸   | Full-body photo (required)        | Person visible, full-body framing |
 
 - Cards collapsed by default; expand for proof UI.
 - Status: `PENDING` | `COMPLETED` | `OVERDUE` | `REJECTED` (AI failed).
@@ -328,11 +324,11 @@ Admin can set group-wide day labels (tooltip on hover). Edit mode toggle for gro
 
 ### Proof validation
 
-| Type | Server rules | OpenAI |
-|------|--------------|--------|
-| Photo tasks | JPEG/PNG, max 10MB, stored on disk | Vision: task-specific prompt, return `{ passed, confidence, reason }` |
-| Reading | `pageTo - pageFrom >= 10`, title required | — |
-| Diet | Checkbox required | Optional photo AI check |
+| Type        | Server rules                              | OpenAI                                                                |
+| ----------- | ----------------------------------------- | --------------------------------------------------------------------- |
+| Photo tasks | JPEG/PNG, max 10MB, stored on disk        | Vision: task-specific prompt, return `{ passed, confidence, reason }` |
+| Reading     | `pageTo - pageFrom >= 10`, title required | —                                                                     |
+| Diet        | Checkbox required                         | Optional photo AI check                                               |
 
 - Submissions immutable after midnight.
 - `task_logs.ai_verdict`, `ai_confidence`, `ai_reason` stored for transparency.
@@ -358,7 +354,10 @@ Server-only NestJS service: `apps/api/src/services/proof-verifier.service.ts`.
 
 ```typescript
 // Pseudocode — use env OPENAI_API_KEY + OPENAI_BASE_URL
-async function verifyProof(taskType: TaskType, imageUrl: string): Promise<Verdict> {
+async function verifyProof(
+  taskType: TaskType,
+  imageUrl: string,
+): Promise<Verdict> {
   const prompt = TASK_PROMPTS[taskType]; // per-task rubric
   const response = await openai.chat.completions.create({
     model: process.env.OPENAI_VISION_MODEL ?? 'gpt-4o-mini',
@@ -571,7 +570,7 @@ Follow [trpc-feature-flow skill](../.agents/skills/trpc-feature-flow/SKILL.md): 
 
 ## NestJS API Changes
 
-Extend `apps/api` — the template already mounts tRPC on Fastify in `main.ts`. Add:
+Extend `apps/api` — tRPC is already mounted on Fastify in `main.ts`. Add:
 
 ### NestJS modules
 
@@ -607,7 +606,9 @@ Use `@nestjs/schedule` with a `@Cron()` job (e.g. every minute) in `apps/api/src
 // apps/api/src/prisma/prisma.service.ts
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
-  async onModuleInit() { await this.$connect(); }
+  async onModuleInit() {
+    await this.$connect();
+  }
 }
 ```
 
@@ -678,11 +679,11 @@ Root `pnpm start` stays as-is (builds frontends, runs web-host + api in parallel
 
 ## Notifications
 
-| Trigger | Mechanism |
-|---------|-----------|
-| Daily reminder | Browser `Notification` + `localStorage` schedule (user opt-in on Profile) |
-| 10 PM warning | Client-side check while app is open; optional future: Web Push via service worker |
-| Group activity | In-app toast on dashboard when polling `leaderboard.get` detects changes |
+| Trigger        | Mechanism                                                                         |
+| -------------- | --------------------------------------------------------------------------------- |
+| Daily reminder | Browser `Notification` + `localStorage` schedule (user opt-in on Profile)         |
+| 10 PM warning  | Client-side check while app is open; optional future: Web Push via service worker |
+| Group activity | In-app toast on dashboard when polling `leaderboard.get` detects changes          |
 
 v2: server-sent events or WebSocket in `apps/api` for live feed.
 
@@ -801,7 +802,7 @@ pnpm --filter @workspace-starter/api dev
 pnpm --filter @workspace-starter/web dev
 ```
 
-Or use the template's combined dev:
+Or run everything together:
 
 ```bash
 pnpm dev
@@ -817,4 +818,4 @@ pnpm start
 
 ---
 
-*DRCODE 75 HARD CHALLENGE — Build it hard. Use it harder.*
+_DRCODE 75 HARD CHALLENGE — Build it hard. Use it harder._

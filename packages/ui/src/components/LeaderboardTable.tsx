@@ -115,7 +115,9 @@ export function LeaderboardTable({
                         member.name.charAt(0).toUpperCase()
                       )}
                     </div>
-                    <span className="text-[var(--text-primary)]">{member.name}</span>
+                    <span className="text-[var(--text-primary)]">
+                      {member.name}
+                    </span>
                   </div>
                 </td>
                 <td

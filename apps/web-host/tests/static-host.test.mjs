@@ -112,10 +112,7 @@ test('redirects legacy join invite paths to query token URL', async (t) => {
   });
 
   assert.equal(response.status, 302);
-  assert.equal(
-    response.headers.get('location'),
-    '/join?token=some-uuid-token',
-  );
+  assert.equal(response.headers.get('location'), '/join?token=some-uuid-token');
 });
 
 test('does not serve files outside the mounted site root', async (t) => {

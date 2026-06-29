@@ -67,7 +67,9 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4">
         <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-8 text-center">
-          <p className="text-[var(--accent-red)]">This invite link is invalid or expired.</p>
+          <p className="text-[var(--accent-red)]">
+            This invite link is invalid or expired.
+          </p>
         </div>
       </div>
     );
@@ -101,7 +103,8 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
           className="mb-8 text-[var(--text-muted)]"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          {preview.data.memberCount} member{preview.data.memberCount === 1 ? '' : 's'}
+          {preview.data.memberCount} member
+          {preview.data.memberCount === 1 ? '' : 's'}
         </p>
 
         {join.error && (

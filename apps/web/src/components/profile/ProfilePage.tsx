@@ -28,7 +28,9 @@ function ProfileContent() {
       setMessage('You have left the group');
     },
   });
-  const exportCsv = trpc.history.exportCsv.useQuery(undefined, { enabled: false });
+  const exportCsv = trpc.history.exportCsv.useQuery(undefined, {
+    enabled: false,
+  });
 
   useEffect(() => {
     if (profile.data) {
@@ -95,16 +97,24 @@ function ProfileContent() {
       <div className="flex items-center gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--border)] text-2xl font-bold text-[var(--text-muted)]">
           {data.avatarUrl ? (
-            <img src={data.avatarUrl} alt="" className="h-16 w-16 rounded-full object-cover" />
+            <img
+              src={data.avatarUrl}
+              alt=""
+              className="h-16 w-16 rounded-full object-cover"
+            />
           ) : (
             data.name.charAt(0).toUpperCase()
           )}
         </div>
         <div>
-          <p className="text-lg font-medium text-[var(--text-primary)]">{data.name}</p>
+          <p className="text-lg font-medium text-[var(--text-primary)]">
+            {data.name}
+          </p>
           <p className="text-sm text-[var(--text-muted)]">{data.email}</p>
           {data.groupName && (
-            <p className="text-xs text-[var(--text-muted)]">Group: {data.groupName}</p>
+            <p className="text-xs text-[var(--text-muted)]">
+              Group: {data.groupName}
+            </p>
           )}
         </div>
       </div>
@@ -162,7 +172,9 @@ function ProfileContent() {
         </div>
 
         <div className="flex items-center justify-between">
-          <span className="text-sm text-[var(--text-muted)]">Browser notifications</span>
+          <span className="text-sm text-[var(--text-muted)]">
+            Browser notifications
+          </span>
           {notificationsEnabled ? (
             <span className="text-xs text-[var(--success)]">Enabled</span>
           ) : (
@@ -177,7 +189,9 @@ function ProfileContent() {
         </div>
 
         {updateProfile.error && (
-          <p className="text-sm text-[var(--accent-red)]">{updateProfile.error.message}</p>
+          <p className="text-sm text-[var(--accent-red)]">
+            {updateProfile.error.message}
+          </p>
         )}
 
         <button
@@ -219,7 +233,9 @@ function ProfileContent() {
               {data.groupName}.
             </p>
             {leaveGroup.error && (
-              <p className="mt-2 text-sm text-[var(--accent-red)]">{leaveGroup.error.message}</p>
+              <p className="mt-2 text-sm text-[var(--accent-red)]">
+                {leaveGroup.error.message}
+              </p>
             )}
             <div className="mt-6 flex gap-3">
               <button

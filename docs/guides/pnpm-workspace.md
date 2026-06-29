@@ -16,12 +16,13 @@ The workspace is defined in [pnpm-workspace.yaml](../../pnpm-workspace.yaml).
 ```bash
 pnpm install
 pnpm --filter @workspace-starter/web dev
-pnpm --filter @workspace-starter/secondary-web dev
-pnpm --filter @workspace-starter/web-host start
 pnpm --filter @workspace-starter/api dev
+pnpm --filter @workspace-starter/web-host start
+pnpm --filter @workspace-starter/db exec prisma migrate dev
 pnpm --filter @workspace-starter/ui build
 pnpm --filter @workspace-starter/types typecheck
 pnpm --filter @workspace-starter/i18n test
+pnpm --filter @workspace-starter/mobile build
 ```
 
 ## Workspace Dependencies
@@ -31,7 +32,7 @@ Use `workspace:*` for internal packages:
 ```json
 {
   "dependencies": {
-    "@workspace-starter/i18n": "workspace:*",
+    "@workspace-starter/db": "workspace:*",
     "@workspace-starter/ui": "workspace:*"
   }
 }
@@ -41,7 +42,7 @@ That keeps local package resolution explicit and makes refactors easier across t
 
 ## Catalogs
 
-This starter uses PNPM catalogs in [pnpm-workspace.yaml](../../pnpm-workspace.yaml) for common dependency versions. Use `catalog:` when multiple workspaces should share the same version of a dependency.
+PNPM catalogs in [pnpm-workspace.yaml](../../pnpm-workspace.yaml) pin common dependency versions. Use `catalog:` when multiple workspaces should share the same version of a dependency.
 
 ## Adding A New Package
 

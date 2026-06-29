@@ -73,7 +73,9 @@ function formatDateKey(date: Date, timeZone: string): string {
   return date.toLocaleDateString('en-CA', { timeZone });
 }
 
-function parseDateKey(dateKey: string): Omit<DateParts, 'hour' | 'minute' | 'second'> {
+function parseDateKey(
+  dateKey: string,
+): Omit<DateParts, 'hour' | 'minute' | 'second'> {
   const [year, month, day] = dateKey.split('-').map(Number);
   return { year, month, day };
 }
@@ -98,7 +100,10 @@ export function isBeforeMidnight(timezone: string, now = new Date()): boolean {
 }
 
 /** Returns the start (midnight) and end (23:59:59.999) of a calendar day in the user's timezone. */
-export function getDayWindow(date: Date, timezone: string): { start: Date; end: Date } {
+export function getDayWindow(
+  date: Date,
+  timezone: string,
+): { start: Date; end: Date } {
   const dateKey = formatDateKey(date, timezone);
   const { year, month, day } = parseDateKey(dateKey);
   const start = zonedTimeToUtc({ year, month, day }, timezone);

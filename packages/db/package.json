@@ -2,13 +2,17 @@
   "name": "@workspace-starter/db",
   "version": "0.0.1",
   "private": true,
-  "files": ["src", "prisma"],
+  "files": [
+    "src",
+    "prisma"
+  ],
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
     "build": "prisma generate",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts\"",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -17,6 +21,7 @@
   },
   "devDependencies": {
     "@workspace-starter/config-typescript": "workspace:*",
+    "eslint": "catalog:dev-tools",
     "typescript": "catalog:"
   }
 }

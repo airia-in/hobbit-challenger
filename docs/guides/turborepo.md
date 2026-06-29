@@ -31,9 +31,9 @@ Turbo works well with PNPM filters:
 
 ```bash
 pnpm --filter @workspace-starter/web build
-pnpm --filter @workspace-starter/secondary-web build
 pnpm --filter @workspace-starter/web-host typecheck
 pnpm --filter @workspace-starter/api typecheck
+pnpm --filter @workspace-starter/db build
 pnpm --filter @workspace-starter/i18n test
 ```
 

@@ -151,7 +151,11 @@ function LoginFormInner() {
             disabled={isPending}
             className="mt-2 w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-white transition hover:bg-[#c42a22] disabled:opacity-50"
           >
-            {isPending ? 'Loading...' : tab === 'signin' ? 'Sign In' : 'Create Account'}
+            {isPending
+              ? 'Loading...'
+              : tab === 'signin'
+                ? 'Sign In'
+                : 'Create Account'}
           </button>
         </form>
       </div>

@@ -43,9 +43,12 @@ function HistoryContent() {
 
   const history = trpc.history.list.useQuery(hasFilters ? filters : undefined);
 
-  const exportCsv = trpc.history.exportCsv.useQuery(hasFilters ? filters : undefined, {
-    enabled: false,
-  });
+  const exportCsv = trpc.history.exportCsv.useQuery(
+    hasFilters ? filters : undefined,
+    {
+      enabled: false,
+    },
+  );
 
   function handleExport() {
     void exportCsv.refetch().then((result) => {
@@ -81,7 +84,9 @@ function HistoryContent() {
           >
             History
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">Your challenge timeline</p>
+          <p className="text-sm text-[var(--text-muted)]">
+            Your challenge timeline
+          </p>
         </div>
         <button
           type="button"
@@ -122,7 +127,9 @@ function HistoryContent() {
       </div>
 
       {history.isLoading && (
-        <p className="text-center text-sm text-[var(--text-muted)]">Loading history...</p>
+        <p className="text-center text-sm text-[var(--text-muted)]">
+          Loading history...
+        </p>
       )}
 
       <div className="space-y-4">
@@ -149,20 +156,27 @@ function HistoryContent() {
                 }`}
               >
                 <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-sm font-medium text-[var(--text-primary)]">{dateKey}</h3>
+                  <h3 className="text-sm font-medium text-[var(--text-primary)]">
+                    {dateKey}
+                  </h3>
                   {dayResult?.type === 'day' && (
                     <span
                       className={`text-xs uppercase tracking-wider ${
-                        dayResult.completed ? 'text-[var(--success)]' : 'text-[var(--accent-red)]'
+                        dayResult.completed
+                          ? 'text-[var(--success)]'
+                          : 'text-[var(--accent-red)]'
                       }`}
                     >
-                      Day {dayResult.dayNumber} · {dayResult.completed ? 'Complete' : 'Failed'}
+                      Day {dayResult.dayNumber} ·{' '}
+                      {dayResult.completed ? 'Complete' : 'Failed'}
                     </span>
                   )}
                 </div>
 
                 {dayResult?.type === 'day' && dayResult.failReason && (
-                  <p className="mb-3 text-xs text-[var(--accent-red)]">{dayResult.failReason}</p>
+                  <p className="mb-3 text-xs text-[var(--accent-red)]">
+                    {dayResult.failReason}
+                  </p>
                 )}
 
                 {tasks.length > 0 && (
@@ -178,10 +192,13 @@ function HistoryContent() {
                           </span>
                           <span
                             className={`text-xs ${
-                              task.isValid ? 'text-[var(--success)]' : 'text-[var(--accent-red)]'
+                              task.isValid
+                                ? 'text-[var(--success)]'
+                                : 'text-[var(--accent-red)]'
                             }`}
                           >
-                            {task.aiVerdict ?? (task.isValid ? 'Valid' : 'Invalid')}
+                            {task.aiVerdict ??
+                              (task.isValid ? 'Valid' : 'Invalid')}
                           </span>
                         </li>
                       ) : null,
@@ -194,7 +211,9 @@ function HistoryContent() {
         })}
 
         {!history.isLoading && entries.length === 0 && (
-          <p className="text-center text-sm text-[var(--text-muted)]">No history yet.</p>
+          <p className="text-center text-sm text-[var(--text-muted)]">
+            No history yet.
+          </p>
         )}
       </div>
     </div>

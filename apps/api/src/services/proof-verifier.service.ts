@@ -172,7 +172,9 @@ function parsePromptMarkdown(raw: string): PromptContent {
   const user = userMatch?.[1]?.trim();
 
   if (!system || !user) {
-    throw new Error('Prompt markdown must include ## System and ## User sections');
+    throw new Error(
+      'Prompt markdown must include ## System and ## User sections',
+    );
   }
 
   return { system, user };

@@ -125,7 +125,10 @@ export const groupsRouter = router({
       });
 
       if (!group) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Invalid invite link' });
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Invalid invite link',
+        });
       }
 
       return {
@@ -153,7 +156,10 @@ export const groupsRouter = router({
       });
 
       if (!group) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Invalid invite link' });
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Invalid invite link',
+        });
       }
 
       await ctx.prisma.$transaction(async (tx) => {

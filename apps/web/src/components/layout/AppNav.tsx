@@ -34,7 +34,10 @@ function NavLink({
       }`}
     >
       <span aria-hidden>{icon}</span>
-      <span className="uppercase tracking-wider" style={{ fontFamily: 'var(--font-mono)' }}>
+      <span
+        className="uppercase tracking-wider"
+        style={{ fontFamily: 'var(--font-mono)' }}
+      >
         {label}
       </span>
     </a>

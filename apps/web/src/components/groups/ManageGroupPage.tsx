@@ -114,7 +114,9 @@ function ManageGroupContent() {
       <GroupInviteCard
         inviteUrl={group.data.inviteUrl}
         groupName={group.data.name}
-        onRegenerate={group.data.isAdmin ? () => regenerateInvite.mutate() : undefined}
+        onRegenerate={
+          group.data.isAdmin ? () => regenerateInvite.mutate() : undefined
+        }
         isRegenerating={regenerateInvite.isPending}
       />
 
@@ -136,7 +138,9 @@ function ManageGroupContent() {
                   {member.name.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <p className="font-medium text-[var(--text-primary)]">{member.name}</p>
+                  <p className="font-medium text-[var(--text-primary)]">
+                    {member.name}
+                  </p>
                   <p
                     className={`text-xs uppercase tracking-wider ${statusColors[member.status] ?? ''}`}
                   >

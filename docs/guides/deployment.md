@@ -1,7 +1,6 @@
 # Deployment
 
-This template builds **products**, so it ships the deployment _mechanism_ and
-contract, not a commitment to any one host. Each product fills in the host.
+DailyHabbit ships a deployment mechanism and contract, not a commitment to any one host. Configure the target adapter for your environment.
 
 ## Model: frontends aggregate, backends stay independent
 
@@ -80,8 +79,7 @@ so a fresh clone stays green.
 ### Writing an adapter
 
 1. Copy `scripts/deploy/adapters/example-echo.mjs` to
-   `scripts/deploy/adapters/<target>.mjs` (or run `setup:starter`, which
-   scaffolds a stub for the target you name).
+   `scripts/deploy/adapters/<target>.mjs`.
 2. Implement `deploy(context)` for your host. Common shapes:
    - **VPS:** `ssh host 'cd /srv/app && docker compose pull && docker compose up -d'`
    - **Cloud Run:** `gcloud run deploy <svc> --image <imageRef>` per image

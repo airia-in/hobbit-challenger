@@ -1,9 +1,6 @@
 import { TaskType } from '@workspace-starter/db';
 import { z } from 'zod';
-import {
-  exportHistoryCsv,
-  listHistory,
-} from '../../services/history.service';
+import { exportHistoryCsv, listHistory } from '../../services/history.service';
 import { protectedProcedure, router } from '../trpc';
 
 const filtersSchema = z.object({

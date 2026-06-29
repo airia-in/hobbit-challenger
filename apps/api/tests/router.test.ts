@@ -2,38 +2,45 @@ import { describe, expect, it } from 'vitest';
 import { appRouter } from '../src/trpc/router';
 import type { Context } from '../src/trpc/context';
 
-function createTestContext(): Context {
+function createTestContext(overrides: Partial<Context> = {}): Context {
   return {
-    req: {} as Context['req'],
+    req: { headers: {} } as Context['req'],
     res: {} as Context['res'],
     user: null,
+    prisma: {} as Context['prisma'],
+    authService: {
+      hashPassword: async () => 'hash',
+      verifyPassword: async () => true,
+      signToken: () => 'token',
+      verifyToken: () => null,
+      detectTimezone: () => 'UTC',
+    } as Context['authService'],
+    tasksService: {} as Context['tasksService'],
+    ...overrides,
   };
 }
 
-describe('appRouter users procedures', () => {
-  it('lists the starter sample user', async () => {
-    const caller = appRouter.createCaller(createTestContext());
-
-    await expect(caller.users.list()).resolves.toEqual([
-      { id: '1', name: 'Mokshit Jain', email: 'm@example.com' },
-    ]);
+describe('appRouter', () => {
+  it('exposes DRCODE routers', () => {
+    expect(appRouter._def.procedures).toHaveProperty('auth.register');
+    expect(appRouter._def.procedures).toHaveProperty('groups.create');
+    expect(appRouter._def.procedures).toHaveProperty('tasks.getToday');
+    expect(appRouter._def.procedures).toHaveProperty('leaderboard.get');
   });
 
-  it('returns a user by id', async () => {
+  it('rejects unauthenticated auth.me', async () => {
     const caller = appRouter.createCaller(createTestContext());
 
-    await expect(caller.users.getById({ id: '42' })).resolves.toEqual({
-      id: '42',
-      name: 'Mokshit Jain',
-      email: 'm@example.com',
+    await expect(caller.auth.me()).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
     });
   });
 
-  it('rejects unauthenticated user creation', async () => {
+  it('rejects unauthenticated group creation', async () => {
     const caller = appRouter.createCaller(createTestContext());
 
-    await expect(
-      caller.users.create({ name: 'Ada Lovelace', email: 'ada@example.com' }),
-    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.groups.create({ name: 'Squad' })).rejects.toMatchObject(
+      { code: 'UNAUTHORIZED' },
+    );
   });
 });

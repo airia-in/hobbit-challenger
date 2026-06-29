@@ -2,10 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AiVerdict, TaskType } from '@workspace-starter/db';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  ALL_TASK_TYPES,
-  isTaskLogValid,
-} from '../services/tasks.service';
+import { ALL_TASK_TYPES, isTaskLogValid } from '../services/tasks.service';
 import { addLocalDays, getUserLocalDate } from '../utils/day-window';
 
 @Injectable()
@@ -78,7 +75,9 @@ export class DayEvaluatorService {
     });
 
     const logsByType = new Map(taskLogs.map((log) => [log.taskType, log]));
-    const allTasksPresent = ALL_TASK_TYPES.every((type) => logsByType.has(type));
+    const allTasksPresent = ALL_TASK_TYPES.every((type) =>
+      logsByType.has(type),
+    );
     const allTasksValid =
       allTasksPresent &&
       ALL_TASK_TYPES.every((type) => {
@@ -91,7 +90,13 @@ export class DayEvaluatorService {
       return;
     }
 
-    await this.handleFailedDay(userId, attempt, previousDay, allTasksPresent, logsByType);
+    await this.handleFailedDay(
+      userId,
+      attempt,
+      previousDay,
+      allTasksPresent,
+      logsByType,
+    );
   }
 
   private async handleSuccessfulDay(
@@ -103,7 +108,10 @@ export class DayEvaluatorService {
     date: Date,
   ) {
     const newDay = attempt.currentDay + 1;
-    const newLongestStreak = Math.max(attempt.longestStreak, attempt.currentDay);
+    const newLongestStreak = Math.max(
+      attempt.longestStreak,
+      attempt.currentDay,
+    );
 
     await this.prisma.$transaction(async (tx) => {
       await tx.dayResult.create({

@@ -38,7 +38,10 @@ export type HistoryRestartEntry = {
   reason: string | null;
 };
 
-export type HistoryEntry = HistoryTaskEntry | HistoryDayEntry | HistoryRestartEntry;
+export type HistoryEntry =
+  | HistoryTaskEntry
+  | HistoryDayEntry
+  | HistoryRestartEntry;
 
 export async function listHistory(
   prisma: PrismaService,
@@ -131,7 +134,6 @@ export async function listHistory(
   }
 
   for (let i = 1; i < attempts.length; i++) {
-    const prev = attempts[i - 1]!;
     const curr = attempts[i]!;
     const alreadyHasRestart = entries.some(
       (e) => e.type === 'restart' && e.attemptNumber === curr.attemptNumber,
@@ -223,5 +225,7 @@ export async function exportHistoryCsv(
     ];
   });
 
-  return [headers, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\n');
+  return [headers, ...rows]
+    .map((row) => row.map(escapeCsv).join(','))
+    .join('\n');
 }

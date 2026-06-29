@@ -7,10 +7,7 @@ type AuthGateProps = {
   redirectTo?: string;
 };
 
-export function AuthGateInner({
-  children,
-  redirectTo = '/',
-}: AuthGateProps) {
+export function AuthGateInner({ children, redirectTo = '/' }: AuthGateProps) {
   const me = trpc.auth.me.useQuery();
 
   useEffect(() => {

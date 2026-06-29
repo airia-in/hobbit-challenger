@@ -32,7 +32,10 @@ function LeaderboardContent() {
     return (
       <div className="mx-auto max-w-lg px-4 py-12 text-center">
         <p className="text-[var(--accent-red)]">{leaderboard.error.message}</p>
-        <a href="/join" className="mt-4 inline-block text-sm text-[var(--text-muted)] hover:text-[var(--accent-red)]">
+        <a
+          href="/join"
+          className="mt-4 inline-block text-sm text-[var(--text-muted)] hover:text-[var(--accent-red)]"
+        >
           Join a group →
         </a>
       </div>

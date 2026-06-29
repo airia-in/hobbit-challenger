@@ -38,7 +38,10 @@ export async function getHeatmap(
 
   const attempt = user.attempts[0] ?? null;
   const labelMap = new Map(
-    (user.group?.dayLabels ?? []).map((label) => [label.dayNumber, label.labelText]),
+    (user.group?.dayLabels ?? []).map((label) => [
+      label.dayNumber,
+      label.labelText,
+    ]),
   );
 
   const resultsByDay = new Map(

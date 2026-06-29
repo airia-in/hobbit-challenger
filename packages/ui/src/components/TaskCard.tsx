@@ -51,7 +51,9 @@ export function TaskCard({
         <span className="text-2xl" aria-hidden>
           {icon}
         </span>
-        <span className="flex-1 font-medium text-[var(--text-primary)]">{title}</span>
+        <span className="flex-1 font-medium text-[var(--text-primary)]">
+          {title}
+        </span>
         <span
           className={cn(
             'rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
@@ -66,7 +68,9 @@ export function TaskCard({
       </button>
 
       {expanded && children && (
-        <div className="border-t border-[var(--border)] px-4 py-4">{children}</div>
+        <div className="border-t border-[var(--border)] px-4 py-4">
+          {children}
+        </div>
       )}
     </div>
   );

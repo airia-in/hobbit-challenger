@@ -46,11 +46,18 @@ export async function updateProfile(
   userId: string,
   input: { name?: string; password?: string; reminderTime?: string | null },
 ) {
-  const data: { name?: string; passwordHash?: string; reminderTime?: string | null } = {};
+  const data: {
+    name?: string;
+    passwordHash?: string;
+    reminderTime?: string | null;
+  } = {};
 
   if (input.name !== undefined) {
     if (input.name.trim().length === 0) {
-      throw new TRPCError({ code: 'BAD_REQUEST', message: 'Name cannot be empty' });
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Name cannot be empty',
+      });
     }
     data.name = input.name.trim();
   }
@@ -66,7 +73,10 @@ export async function updateProfile(
   }
 
   if (input.reminderTime !== undefined) {
-    if (input.reminderTime !== null && !/^\d{2}:\d{2}$/.test(input.reminderTime)) {
+    if (
+      input.reminderTime !== null &&
+      !/^\d{2}:\d{2}$/.test(input.reminderTime)
+    ) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
         message: 'Reminder time must be HH:MM format',
@@ -76,7 +86,10 @@ export async function updateProfile(
   }
 
   if (Object.keys(data).length === 0) {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'No fields to update' });
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'No fields to update',
+    });
   }
 
   const user = await prisma.user.update({
@@ -110,7 +123,10 @@ export async function leaveGroup(prisma: PrismaService, userId: string) {
   }
 
   if (!user.groupId) {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'You are not in a group' });
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'You are not in a group',
+    });
   }
 
   if (user.group?.adminUserId === userId) {

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { NotificationScheduler } from './NotificationScheduler';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊' },
@@ -108,6 +109,7 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-[var(--bg-black)] pb-16 md:pb-0 md:pl-56">
       <AppNav currentPath={currentPath} />
+      <NotificationScheduler />
       {children}
     </div>
   );

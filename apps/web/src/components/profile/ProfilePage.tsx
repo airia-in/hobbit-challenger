@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AuthGateInner } from '../auth/AuthGate';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
+import { performClientLogout } from '../../lib/auth';
 import { trpc } from '../../lib/trpc';
 
 function ProfileContent() {
@@ -26,6 +27,11 @@ function ProfileContent() {
       void utils.profile.get.invalidate();
       setShowLeaveModal(false);
       setMessage('You have left the group');
+    },
+  });
+  const logout = trpc.auth.logout.useMutation({
+    onSettled: () => {
+      performClientLogout();
     },
   });
   const exportCsv = trpc.history.exportCsv.useQuery(undefined, {
@@ -222,6 +228,16 @@ function ProfileContent() {
             Leave Group
           </button>
         )}
+
+        <button
+          type="button"
+          data-testid="sign-out-button"
+          onClick={() => logout.mutate()}
+          disabled={logout.isPending}
+          className="w-full rounded border border-[var(--border)] py-3 text-sm uppercase tracking-wider text-[var(--text-muted)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-50"
+        >
+          {logout.isPending ? 'Signing out...' : 'Sign Out'}
+        </button>
       </div>
 
       {showLeaveModal && (

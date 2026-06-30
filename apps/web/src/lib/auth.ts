@@ -13,6 +13,12 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+/** Clears the session token and returns the user to the login page. */
+export function performClientLogout(): void {
+  clearToken();
+  window.location.href = '/';
+}
+
 export function getTimezoneHeader(): Record<string, string> {
   try {
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;

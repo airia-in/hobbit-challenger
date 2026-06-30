@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AuthGateInner } from '../auth/AuthGate';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
+import { PersonalActivitiesSection } from '../activities/PersonalActivitiesSection';
 import { performClientLogout } from '../../lib/auth';
 import { trpc } from '../../lib/trpc';
 
@@ -312,6 +313,8 @@ function ProfileContent() {
           {updateProfile.isPending ? 'Saving...' : 'Save Changes'}
         </button>
       </form>
+
+      <PersonalActivitiesSection />
 
       <div className="space-y-3">
         <button

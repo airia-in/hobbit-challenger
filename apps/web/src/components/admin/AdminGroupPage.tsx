@@ -68,12 +68,20 @@ function AdminGroupContent() {
           </h1>
           <p className="text-sm text-[var(--text-muted)]">Group admin</p>
         </div>
-        <a
-          href="/join"
-          className="text-xs uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--accent-red)]"
-        >
-          Manage members →
-        </a>
+        <div className="flex flex-col items-end gap-2 text-xs uppercase tracking-wider">
+          <a
+            href="/admin/activities"
+            className="text-[var(--accent-red)] hover:underline"
+          >
+            Edit activities →
+          </a>
+          <a
+            href="/join"
+            className="text-[var(--text-muted)] hover:text-[var(--accent-red)]"
+          >
+            Manage members →
+          </a>
+        </div>
       </header>
 
       <GroupInviteCard

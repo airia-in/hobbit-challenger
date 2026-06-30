@@ -536,6 +536,7 @@ describe('DayEvaluatorService — cron guards', () => {
       users: [
         {
           id: 'user-1',
+          phone: null,
           email: 'a@b.com',
           passwordHash: 'x',
           name: 'User',
@@ -575,6 +576,7 @@ describe('DayEvaluatorService — cron guards', () => {
       users: [
         {
           id: 'user-1',
+          phone: null,
           email: 'a@b.com',
           passwordHash: 'x',
           name: 'User',
@@ -629,6 +631,7 @@ describe('DayEvaluatorService — cron guards', () => {
       users: [
         {
           id: 'user-1',
+          phone: null,
           email: 'a@b.com',
           passwordHash: 'x',
           name: 'User',
@@ -668,6 +671,7 @@ describe('DayEvaluatorService — cron guards', () => {
       users: [
         {
           id: 'user-1',
+          phone: null,
           email: 'a@b.com',
           passwordHash: 'x',
           name: 'User',

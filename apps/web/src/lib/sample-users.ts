@@ -1,5 +1,10 @@
 export interface SampleUsersState {
-  users: Array<{ id: string; name: string; email: string }>;
+  users: Array<{
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+  }>;
   available: boolean;
 }
 

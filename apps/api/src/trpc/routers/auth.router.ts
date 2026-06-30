@@ -1,35 +1,71 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { normalizePhone, PhoneValidationError } from '../../auth/phone';
 import { publicProcedure, protectedProcedure, router } from '../trpc';
 
 const userSelect = {
   id: true,
   name: true,
   email: true,
+  phone: true,
   avatarUrl: true,
   timezone: true,
   groupId: true,
 } as const;
+
+function invalidCredentials(): never {
+  throw new TRPCError({
+    code: 'UNAUTHORIZED',
+    message: 'Invalid credentials',
+  });
+}
 
 export const authRouter = router({
   register: publicProcedure
     .input(
       z.object({
         name: z.string().min(1),
-        email: z.string().email(),
+        phone: z.string().min(1),
         password: z.string().min(8),
+        email: z.string().email().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const existing = await ctx.prisma.user.findUnique({
-        where: { email: input.email },
+      let normalizedPhone: string;
+      try {
+        normalizedPhone = normalizePhone(input.phone);
+      } catch (error) {
+        if (error instanceof PhoneValidationError) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Invalid phone number',
+          });
+        }
+        throw error;
+      }
+
+      const existingByPhone = await ctx.prisma.user.findUnique({
+        where: { phone: normalizedPhone },
       });
 
-      if (existing) {
+      if (existingByPhone) {
         throw new TRPCError({
           code: 'CONFLICT',
-          message: 'Email already registered',
+          message: 'Account already exists',
         });
+      }
+
+      if (input.email) {
+        const existingByEmail = await ctx.prisma.user.findUnique({
+          where: { email: input.email },
+        });
+
+        if (existingByEmail) {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'Account already exists',
+          });
+        }
       }
 
       const passwordHash = await ctx.authService.hashPassword(input.password);
@@ -39,7 +75,8 @@ export const authRouter = router({
         const created = await tx.user.create({
           data: {
             name: input.name,
-            email: input.email,
+            phone: normalizedPhone,
+            email: input.email ?? null,
             passwordHash,
             timezone,
           },
@@ -59,31 +96,48 @@ export const authRouter = router({
         return created;
       });
 
-      const token = ctx.authService.signToken({
-        userId: user.id,
-        email: user.email,
-      });
+      const token = ctx.authService.signToken({ userId: user.id });
 
       return { token, user };
     }),
 
+  /**
+   * Transitional dual-login: `identifier` may be a normalized phone or legacy email.
+   * New signups use phone; existing email users can still sign in with email.
+   */
   login: publicProcedure
     .input(
       z.object({
-        email: z.string().email(),
+        identifier: z.string().min(1),
         password: z.string().min(1),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const user = await ctx.prisma.user.findUnique({
-        where: { email: input.email },
-      });
+      const isEmailLogin = input.identifier.includes('@');
+
+      let user;
+      if (isEmailLogin) {
+        user = await ctx.prisma.user.findUnique({
+          where: { email: input.identifier },
+        });
+      } else {
+        let normalizedPhone: string;
+        try {
+          normalizedPhone = normalizePhone(input.identifier);
+        } catch (error) {
+          if (error instanceof PhoneValidationError) {
+            invalidCredentials();
+          }
+          throw error;
+        }
+
+        user = await ctx.prisma.user.findUnique({
+          where: { phone: normalizedPhone },
+        });
+      }
 
       if (!user) {
-        throw new TRPCError({
-          code: 'UNAUTHORIZED',
-          message: 'Invalid email or password',
-        });
+        invalidCredentials();
       }
 
       const valid = await ctx.authService.verifyPassword(
@@ -92,16 +146,10 @@ export const authRouter = router({
       );
 
       if (!valid) {
-        throw new TRPCError({
-          code: 'UNAUTHORIZED',
-          message: 'Invalid email or password',
-        });
+        invalidCredentials();
       }
 
-      const token = ctx.authService.signToken({
-        userId: user.id,
-        email: user.email,
-      });
+      const token = ctx.authService.signToken({ userId: user.id });
 
       return {
         token,
@@ -109,6 +157,7 @@ export const authRouter = router({
           id: user.id,
           name: user.name,
           email: user.email,
+          phone: user.phone,
           avatarUrl: user.avatarUrl,
           timezone: user.timezone,
           groupId: user.groupId,

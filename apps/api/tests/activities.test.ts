@@ -416,6 +416,7 @@ function createActivitiesFixture() {
   const user: User = {
     id: USER_ID,
     name: 'Test User',
+    phone: null,
     email: 'test@example.com',
     passwordHash: 'hash',
     timezone: 'UTC',

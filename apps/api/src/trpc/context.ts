@@ -5,7 +5,8 @@ import type { ActivitiesService } from '../services/activities.service';
 
 export type AuthUser = {
   id: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   name: string;
 };
 
@@ -47,10 +48,10 @@ async function getUserFromRequest(
 
   const user = await deps.prisma.user.findUnique({
     where: { id: payload.userId },
-    select: { id: true, email: true, name: true },
+    select: { id: true, email: true, phone: true, name: true },
   });
 
-  if (!user || user.email !== payload.email) return null;
+  if (!user) return null;
 
   return user;
 }

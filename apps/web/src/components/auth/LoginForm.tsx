@@ -22,7 +22,7 @@ function routeAfterAuth(groupId: string | null | undefined) {
 function LoginFormInner() {
   const [tab, setTab] = useState<Tab>('signin');
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -49,11 +49,11 @@ function LoginFormInner() {
     setError(null);
 
     if (tab === 'signin') {
-      login.mutate({ email, password });
+      login.mutate({ identifier: phone, password });
       return;
     }
 
-    register.mutate({ name, email, password });
+    register.mutate({ name, phone, password });
   }
 
   return (
@@ -113,16 +113,29 @@ function LoginFormInner() {
 
           <div>
             <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
-              Email
+              {tab === 'signin' ? 'Phone or email' : 'Phone'}
             </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded border border-[var(--border)] bg-[var(--surface-raised)] px-4 py-3 text-[var(--text-primary)] outline-none focus:border-[var(--accent-red)]"
-              placeholder="you@example.com"
-            />
+            <div className="flex">
+              {tab === 'register' && (
+                <span className="inline-flex items-center rounded-l border border-r-0 border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm text-[var(--text-muted)]">
+                  +91
+                </span>
+              )}
+              <input
+                type={tab === 'signin' ? 'text' : 'tel'}
+                required
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className={`w-full border border-[var(--border)] bg-[var(--surface-raised)] px-4 py-3 text-[var(--text-primary)] outline-none focus:border-[var(--accent-red)] ${
+                  tab === 'register' ? 'rounded-r' : 'rounded'
+                }`}
+                placeholder={
+                  tab === 'signin'
+                    ? '9876543210 or you@example.com'
+                    : '9876543210'
+                }
+              />
+            </div>
           </div>
 
           <div>

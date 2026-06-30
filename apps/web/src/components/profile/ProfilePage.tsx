@@ -116,7 +116,12 @@ function ProfileContent() {
           <p className="text-lg font-medium text-[var(--text-primary)]">
             {data.name}
           </p>
-          <p className="text-sm text-[var(--text-muted)]">{data.email}</p>
+          <p className="text-sm text-[var(--text-muted)]">
+            {data.phone ?? data.email ?? 'No contact on file'}
+          </p>
+          {data.email && data.phone && (
+            <p className="text-xs text-[var(--text-muted)]">{data.email}</p>
+          )}
           {data.groupName && (
             <p className="text-xs text-[var(--text-muted)]">
               Group: {data.groupName}

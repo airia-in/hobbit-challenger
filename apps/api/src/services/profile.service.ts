@@ -6,7 +6,8 @@ import { activeChallengeRelationArgs } from '../utils/challenge-query';
 export type ProfileData = {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   avatarUrl: string | null;
   timezone: string;
   reminderTime: string | null;
@@ -32,6 +33,7 @@ export async function getProfile(
     id: user.id,
     name: user.name,
     email: user.email,
+    phone: user.phone,
     avatarUrl: user.avatarUrl,
     timezone: user.timezone,
     reminderTime: user.reminderTime,
@@ -100,6 +102,7 @@ export async function updateProfile(
       id: true,
       name: true,
       email: true,
+      phone: true,
       avatarUrl: true,
       timezone: true,
       reminderTime: true,

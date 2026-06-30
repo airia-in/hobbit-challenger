@@ -8,7 +8,8 @@ type FastifyRequest = CreateFastifyContextOptions['req'];
 
 export type JwtPayload = {
   userId: string;
-  email: string;
+  /** Present on tokens issued before phone-auth migration; ignored for validation. */
+  email?: string | null;
 };
 
 @Injectable()
@@ -27,15 +28,15 @@ export class AuthService {
     return bcrypt.compare(password, hash);
   }
 
-  signToken(payload: JwtPayload): string {
+  signToken(payload: Pick<JwtPayload, 'userId'>): string {
     return jwt.sign(payload, this.jwtSecret, { expiresIn: '7d' });
   }
 
   verifyToken(token: string): JwtPayload | null {
     try {
       const decoded = jwt.verify(token, this.jwtSecret) as JwtPayload;
-      if (!decoded.userId || !decoded.email) return null;
-      return { userId: decoded.userId, email: decoded.email };
+      if (!decoded.userId) return null;
+      return { userId: decoded.userId, email: decoded.email ?? null };
     } catch {
       return null;
     }

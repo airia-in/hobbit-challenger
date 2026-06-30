@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { AiVerdict, TaskType } from '@workspace-starter/db';
 import { PrismaService } from '../prisma/prisma.service';
-import { ALL_TASK_TYPES, isTaskLogValid } from '../services/tasks.service';
+import { activeChallengeRelationArgs } from '../utils/challenge-query';
+import { computeDayLoggingStatus } from '../utils/day-completion';
 import { addLocalDays, getUserLocalDate } from '../utils/day-window';
 
 @Injectable()
@@ -13,22 +13,24 @@ export class DayEvaluatorService {
   async evaluateDays() {
     const users = await this.prisma.user.findMany({
       where: {
-        attempts: { some: { isActive: true } },
+        challenges: { some: { isActive: true } },
       },
       include: {
-        attempts: {
-          where: { isActive: true },
-          take: 1,
-        },
+        challenges: activeChallengeRelationArgs(),
       },
     });
 
     for (const user of users) {
-      const attempt = user.attempts[0];
-      if (!attempt) continue;
+      const challenge = user.challenges[0];
+      if (!challenge) continue;
 
       try {
-        await this.evaluateUserDay(user.id, user.timezone, attempt);
+        await this.evaluateUserDay(
+          user.id,
+          user.timezone,
+          user.groupId,
+          challenge,
+        );
       } catch (error) {
         console.error(`Day evaluation failed for user ${user.id}:`, error);
       }
@@ -38,190 +40,113 @@ export class DayEvaluatorService {
   private async evaluateUserDay(
     userId: string,
     timezone: string,
-    attempt: {
+    groupId: string | null,
+    challenge: {
       id: string;
-      attemptNumber: number;
       startDate: Date;
       currentDay: number;
+      lengthDays: number;
       longestStreak: number;
-      timesRestarted: number;
+      currentStreak: number;
     },
   ) {
-    const localToday = getUserLocalDate(timezone);
-    const previousDay = addLocalDays(localToday, -1, timezone);
-    const attemptStartDay = getUserLocalDate(timezone, attempt.startDate);
-
-    if (previousDay.getTime() < attemptStartDay.getTime()) {
+    if (!groupId) {
       return;
     }
 
-    const existingResult = await this.prisma.dayResult.findFirst({
+    const scoredActivities = await this.prisma.activity.findMany({
+      where: { groupId, active: true, scored: true },
+      select: { id: true },
+    });
+
+    if (scoredActivities.length === 0) {
+      return;
+    }
+
+    const localToday = getUserLocalDate(timezone);
+    const previousDay = addLocalDays(localToday, -1, timezone);
+    const challengeStartDay = getUserLocalDate(timezone, challenge.startDate);
+
+    if (previousDay.getTime() < challengeStartDay.getTime()) {
+      return;
+    }
+
+    const existingScore = await this.prisma.dayScore.findFirst({
       where: {
-        attemptId: attempt.id,
+        challengeId: challenge.id,
         date: previousDay,
       },
     });
 
-    if (existingResult) {
+    if (existingScore?.finalized) {
       return;
     }
 
-    const taskLogs = await this.prisma.taskLog.findMany({
+    const activityLogs = await this.prisma.activityLog.findMany({
       where: {
-        attemptId: attempt.id,
+        challengeId: challenge.id,
         userId,
         date: previousDay,
       },
     });
 
-    const logsByType = new Map(taskLogs.map((log) => [log.taskType, log]));
-    const allTasksPresent = ALL_TASK_TYPES.every((type) =>
-      logsByType.has(type),
+    const scoredActivityIds = scoredActivities.map((activity) => activity.id);
+    const { allScoredLogged } = computeDayLoggingStatus(
+      scoredActivityIds,
+      activityLogs.map((log) => ({
+        activityId: log.activityId,
+        state: log.state,
+        tier: log.tier,
+        value: log.value,
+        subPoints: log.subPoints,
+      })),
     );
-    const allTasksValid =
-      allTasksPresent &&
-      ALL_TASK_TYPES.every((type) => {
-        const log = logsByType.get(type)!;
-        return isTaskLogValid(log);
-      });
 
-    if (allTasksValid) {
-      await this.handleSuccessfulDay(attempt, previousDay);
-      return;
-    }
-
-    await this.handleFailedDay(
-      userId,
-      attempt,
-      previousDay,
-      allTasksPresent,
-      logsByType,
-    );
-  }
-
-  private async handleSuccessfulDay(
-    attempt: {
-      id: string;
-      currentDay: number;
-      longestStreak: number;
-    },
-    date: Date,
-  ) {
-    const newDay = attempt.currentDay + 1;
-    const newLongestStreak = Math.max(
-      attempt.longestStreak,
-      attempt.currentDay,
-    );
+    const netXp = activityLogs.reduce((sum, log) => sum + log.xpAwarded, 0);
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.dayResult.create({
-        data: {
-          attemptId: attempt.id,
-          date,
-          dayNumber: attempt.currentDay,
-          completed: true,
-        },
-      });
-
-      if (newDay > 75) {
-        await tx.attempt.update({
-          where: { id: attempt.id },
-          data: {
-            currentDay: 76,
-            longestStreak: newLongestStreak,
-            endDate: new Date(),
+      await tx.dayScore.upsert({
+        where: {
+          challengeId_date: {
+            challengeId: challenge.id,
+            date: previousDay,
           },
-        });
-      } else {
-        await tx.attempt.update({
-          where: { id: attempt.id },
-          data: {
-            currentDay: newDay,
-            longestStreak: newLongestStreak,
-          },
-        });
-      }
-    });
-  }
-
-  private async handleFailedDay(
-    userId: string,
-    attempt: {
-      id: string;
-      attemptNumber: number;
-      currentDay: number;
-      timesRestarted: number;
-    },
-    date: Date,
-    allTasksPresent: boolean,
-    logsByType: Map<
-      TaskType,
-      {
-        taskType: TaskType;
-        isValid: boolean;
-        aiVerdict: AiVerdict | null;
-        completedAt: Date | null;
-      }
-    >,
-  ) {
-    const failReason = this.buildFailReason(allTasksPresent, logsByType);
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.dayResult.create({
-        data: {
-          attemptId: attempt.id,
-          date,
-          dayNumber: attempt.currentDay,
-          completed: false,
-          failedAt: new Date(),
-          failReason,
         },
-      });
-
-      await tx.attempt.update({
-        where: { id: attempt.id },
-        data: {
-          isActive: false,
-          endDate: new Date(),
-        },
-      });
-
-      await tx.attempt.create({
-        data: {
+        create: {
+          challengeId: challenge.id,
           userId,
-          attemptNumber: attempt.attemptNumber + 1,
-          startDate: new Date(),
-          currentDay: 1,
-          isActive: true,
-          longestStreak: 0,
-          timesRestarted: attempt.timesRestarted + 1,
+          date: previousDay,
+          dayNumber: challenge.currentDay,
+          netXp,
+          xpEarned: Math.max(0, netXp),
+          xpDeducted: Math.max(0, -netXp),
+          breakdown: { allScoredLogged },
+          finalized: true,
+        },
+        update: {
+          netXp,
+          xpEarned: Math.max(0, netXp),
+          xpDeducted: Math.max(0, -netXp),
+          breakdown: { allScoredLogged },
+          finalized: true,
+        },
+      });
+
+      const newStreak = allScoredLogged ? challenge.currentStreak + 1 : 0;
+      const newLongestStreak = Math.max(challenge.longestStreak, newStreak);
+      const newDay = challenge.currentDay + 1;
+      const completed = newDay > challenge.lengthDays;
+
+      await tx.challenge.update({
+        where: { id: challenge.id },
+        data: {
+          currentDay: completed ? challenge.lengthDays + 1 : newDay,
+          currentStreak: newStreak,
+          longestStreak: newLongestStreak,
+          totalXp: { increment: netXp },
+          ...(completed ? { isActive: false, endDate: new Date() } : {}),
         },
       });
     });
-  }
-
-  private buildFailReason(
-    allTasksPresent: boolean,
-    logsByType: Map<
-      TaskType,
-      {
-        taskType: TaskType;
-        isValid: boolean;
-        aiVerdict: AiVerdict | null;
-        completedAt: Date | null;
-      }
-    >,
-  ): string {
-    if (!allTasksPresent) {
-      const missing = ALL_TASK_TYPES.filter((type) => !logsByType.has(type));
-      return `Missing tasks: ${missing.join(', ')}`;
-    }
-
-    const invalid = ALL_TASK_TYPES.filter((type) => {
-      const log = logsByType.get(type);
-      return !log || !isTaskLogValid(log);
-    });
-
-    return `Invalid or incomplete tasks: ${invalid.join(', ')}`;
   }
 }

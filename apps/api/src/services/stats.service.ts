@@ -1,7 +1,12 @@
 import { TRPCError } from '@trpc/server';
 import type { PrismaService } from '../prisma/prisma.service';
-import { computeCurrentStreak } from './tasks.service';
+import { challengeDisplayOrderBy } from '../utils/challenge-query';
+import {
+  isInterimDayCompleted,
+  isInterimDayFailed,
+} from '../utils/day-completion';
 import { addLocalDays, getUserLocalDate } from '../utils/day-window';
+import { getLiveStreak } from '../utils/live-streak';
 
 export type DashboardStats = {
   currentStreak: number;
@@ -24,19 +29,21 @@ export async function getDashboardStats(
     throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
   }
 
-  const attempt = await prisma.attempt.findFirst({
-    where: { userId, isActive: true },
+  const challenge = await prisma.challenge.findFirst({
+    where: { userId },
+    orderBy: challengeDisplayOrderBy,
   });
 
-  const allDayResults = await prisma.dayResult.findMany({
-    where: { attempt: { userId } },
-    select: { completed: true },
+  const allDayScores = await prisma.dayScore.findMany({
+    where: { challenge: { userId } },
+    select: { finalized: true, breakdown: true },
   });
 
-  const totalDaysCompleted = allDayResults.filter(
-    (day) => day.completed,
+  const finalizedScores = allDayScores.filter((day) => day.finalized);
+  const totalDaysCompleted = finalizedScores.filter((day) =>
+    isInterimDayCompleted(day),
   ).length;
-  const totalDaysEvaluated = allDayResults.length;
+  const totalDaysEvaluated = finalizedScores.length;
   const successRate =
     totalDaysEvaluated > 0
       ? Math.round((totalDaysCompleted / totalDaysEvaluated) * 100)
@@ -47,60 +54,55 @@ export async function getDashboardStats(
     -1,
     user.timezone,
   );
-  const yesterdayResult = attempt
-    ? await prisma.dayResult.findFirst({
+  const yesterdayScore = challenge
+    ? await prisma.dayScore.findFirst({
         where: {
-          attemptId: attempt.id,
+          challengeId: challenge.id,
           date: yesterdayDate,
         },
+        select: { finalized: true, breakdown: true },
       })
     : null;
 
-  const yesterdayFailed = yesterdayResult?.completed === false;
+  const yesterdayFailed = yesterdayScore
+    ? isInterimDayFailed(yesterdayScore)
+    : false;
 
-  let currentStreak = 0;
-  if (attempt) {
-    const todayDate = getUserLocalDate(user.timezone);
-    const todayLogs = await prisma.taskLog.findMany({
-      where: {
-        attemptId: attempt.id,
+  const currentStreak = challenge
+    ? await getLiveStreak(prisma, {
+        challengeId: challenge.id,
         userId,
-        date: todayDate,
-      },
-      select: {
-        taskType: true,
-        isValid: true,
-        aiVerdict: true,
-        completedAt: true,
-      },
-    });
-    currentStreak = computeCurrentStreak(attempt.currentDay, todayLogs);
-  }
-  const daysRemaining = attempt
-    ? Math.max(0, 75 - (attempt.currentDay - 1))
-    : 75;
+        groupId: user.groupId,
+        timezone: user.timezone,
+        storedStreak: challenge.currentStreak,
+      })
+    : 0;
+  const lengthDays = challenge?.lengthDays ?? 30;
+  const daysRemaining = challenge
+    ? Math.max(0, lengthDays - (challenge.currentDay - 1))
+    : lengthDays;
   const estimatedFinishDate =
-    attempt && daysRemaining > 0
+    challenge && daysRemaining > 0
       ? addLocalDays(
           getUserLocalDate(user.timezone),
           daysRemaining,
           user.timezone,
         )
-      : attempt && attempt.currentDay > 75
+      : challenge && challenge.currentDay > lengthDays
         ? getUserLocalDate(user.timezone)
         : null;
 
   return {
     currentStreak,
-    longestStreak: attempt
-      ? Math.max(attempt.longestStreak, currentStreak)
+    longestStreak: challenge
+      ? Math.max(challenge.longestStreak, currentStreak)
       : 0,
     totalDaysCompleted,
     successRate,
-    timesRestarted: attempt?.timesRestarted ?? 0,
+    timesRestarted: 0,
     yesterdayFailed,
-    currentDay: attempt?.currentDay ?? 1,
-    startDate: attempt?.startDate ?? null,
+    currentDay: challenge?.currentDay ?? 1,
+    startDate: challenge?.startDate ?? null,
     estimatedFinishDate,
   };
 }

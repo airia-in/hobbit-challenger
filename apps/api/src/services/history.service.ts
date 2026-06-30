@@ -1,9 +1,13 @@
-import { TaskType } from '@workspace-starter/db';
 import { TRPCError } from '@trpc/server';
 import type { PrismaService } from '../prisma/prisma.service';
+import {
+  isInterimDayCompleted,
+  isInterimDayFailed,
+} from '../utils/day-completion';
+import type { LegacyTaskType } from './tasks.service';
 
 export type HistoryFilters = {
-  taskType?: TaskType;
+  taskType?: LegacyTaskType;
   dateFrom?: Date;
   dateTo?: Date;
 };
@@ -13,7 +17,7 @@ export type HistoryTaskEntry = {
   id: string;
   date: Date;
   dayNumber: number | null;
-  taskType: TaskType;
+  taskType: LegacyTaskType;
   completedAt: Date | null;
   proofUrl: string | null;
   aiVerdict: string | null;
@@ -31,17 +35,28 @@ export type HistoryDayEntry = {
   attemptNumber: number;
 };
 
-export type HistoryRestartEntry = {
-  type: 'restart';
-  date: Date;
-  attemptNumber: number;
-  reason: string | null;
+export type HistoryEntry = HistoryTaskEntry | HistoryDayEntry;
+
+const SEED_KEY_TO_TASK_TYPE: Record<string, LegacyTaskType> = {
+  DIET: 'DIET',
+  ACTIVITY: 'OUTDOOR_WORKOUT',
+  WATER: 'WATER',
+  READING: 'READING',
+  PROGRESS_PHOTO: 'PROGRESS_PHOTO',
+  NO_REELS: 'NO_REELS',
+  NO_SOCIAL: 'NO_SOCIAL',
 };
 
-export type HistoryEntry =
-  | HistoryTaskEntry
-  | HistoryDayEntry
-  | HistoryRestartEntry;
+const TASK_TYPE_TO_SEED_KEY: Partial<Record<LegacyTaskType, string>> = {
+  DIET: 'DIET',
+  OUTDOOR_WORKOUT: 'ACTIVITY',
+  INDOOR_WORKOUT: 'ACTIVITY',
+  WATER: 'WATER',
+  READING: 'READING',
+  PROGRESS_PHOTO: 'PROGRESS_PHOTO',
+  NO_REELS: 'NO_REELS',
+  NO_SOCIAL: 'NO_SOCIAL',
+};
 
 export async function listHistory(
   prisma: PrismaService,
@@ -53,28 +68,26 @@ export async function listHistory(
     throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
   }
 
-  const attempts = await prisma.attempt.findMany({
-    where: { userId },
-    orderBy: { attemptNumber: 'asc' },
-    select: { id: true, attemptNumber: true, startDate: true },
-  });
-
   const dateFilter: { gte?: Date; lte?: Date } = {};
   if (filters.dateFrom) dateFilter.gte = filters.dateFrom;
   if (filters.dateTo) dateFilter.lte = filters.dateTo;
 
-  const taskLogs = await prisma.taskLog.findMany({
+  const seedKeyFilter = filters.taskType
+    ? TASK_TYPE_TO_SEED_KEY[filters.taskType]
+    : undefined;
+
+  const activityLogs = await prisma.activityLog.findMany({
     where: {
       userId,
-      ...(filters.taskType ? { taskType: filters.taskType } : {}),
+      ...(seedKeyFilter ? { activity: { seedKey: seedKeyFilter } } : {}),
       ...(Object.keys(dateFilter).length > 0 ? { date: dateFilter } : {}),
     },
-    orderBy: [{ date: 'desc' }, { completedAt: 'desc' }],
+    orderBy: [{ date: 'desc' }],
     include: {
-      attempt: {
+      activity: { select: { seedKey: true } },
+      challenge: {
         select: {
-          attemptNumber: true,
-          dayResults: {
+          dayScores: {
             select: { date: true, dayNumber: true },
           },
         },
@@ -82,77 +95,52 @@ export async function listHistory(
     },
   });
 
-  const dayResults = await prisma.dayResult.findMany({
+  const dayScores = await prisma.dayScore.findMany({
     where: {
-      attempt: { userId },
+      challenge: { userId },
       ...(Object.keys(dateFilter).length > 0 ? { date: dateFilter } : {}),
     },
     orderBy: { date: 'desc' },
-    include: { attempt: { select: { attemptNumber: true } } },
   });
 
   const entries: HistoryEntry[] = [];
 
-  for (const log of taskLogs) {
-    const dayResult = log.attempt.dayResults.find(
-      (dr) => dr.date.getTime() === log.date.getTime(),
+  for (const log of activityLogs) {
+    const dayScore = log.challenge.dayScores.find(
+      (ds) => ds.date.getTime() === log.date.getTime(),
     );
+    const seedKey = log.activity.seedKey ?? 'DIET';
+    const taskType = SEED_KEY_TO_TASK_TYPE[seedKey] ?? 'DIET';
 
     entries.push({
       type: 'task',
       id: log.id,
       date: log.date,
-      dayNumber: dayResult?.dayNumber ?? null,
-      taskType: log.taskType,
-      completedAt: log.completedAt,
+      dayNumber: dayScore?.dayNumber ?? null,
+      taskType,
+      completedAt: log.state === 'DONE' ? log.date : null,
       proofUrl: log.proofUrl,
       aiVerdict: log.aiVerdict,
-      isValid: log.isValid,
-      attemptNumber: log.attempt.attemptNumber,
+      isValid: log.state === 'DONE' && log.aiVerdict !== 'FAILED',
+      attemptNumber: 1,
     });
   }
 
-  for (const day of dayResults) {
+  for (const day of dayScores) {
     entries.push({
       type: 'day',
       id: day.id,
       date: day.date,
       dayNumber: day.dayNumber,
-      completed: day.completed,
-      failReason: day.failReason,
-      attemptNumber: day.attempt.attemptNumber,
+      completed: isInterimDayCompleted(day),
+      failReason: isInterimDayFailed(day)
+        ? 'Not all scored activities were logged'
+        : null,
+      attemptNumber: 1,
     });
-
-    if (!day.completed) {
-      entries.push({
-        type: 'restart',
-        date: day.failedAt ?? day.date,
-        attemptNumber: day.attempt.attemptNumber + 1,
-        reason: day.failReason,
-      });
-    }
   }
 
-  for (let i = 1; i < attempts.length; i++) {
-    const curr = attempts[i]!;
-    const alreadyHasRestart = entries.some(
-      (e) => e.type === 'restart' && e.attemptNumber === curr.attemptNumber,
-    );
-    if (!alreadyHasRestart) {
-      entries.push({
-        type: 'restart',
-        date: curr.startDate,
-        attemptNumber: curr.attemptNumber,
-        reason: 'Challenge restarted',
-      });
-    }
-  }
-
-  entries.sort((a, b) => {
-    const dateA = a.type === 'restart' ? a.date : a.date;
-    const dateB = b.type === 'restart' ? b.date : b.date;
-    return dateB.getTime() - dateA.getTime();
-  });
+  entries.sort((a, b) => b.date.getTime() - a.date.getTime());
 
   return { entries };
 }
@@ -180,7 +168,7 @@ export async function exportHistoryCsv(
     'Task Type',
     'Completed',
     'Fail Reason',
-    'Attempt',
+    'Challenge',
     'AI Verdict',
     'Proof URL',
   ];
@@ -199,26 +187,14 @@ export async function exportHistoryCsv(
         entry.proofUrl ?? '',
       ];
     }
-    if (entry.type === 'day') {
-      return [
-        'day',
-        entry.date.toISOString(),
-        entry.dayNumber,
-        '',
-        entry.completed ? 'yes' : 'no',
-        entry.failReason ?? '',
-        entry.attemptNumber,
-        '',
-        '',
-      ];
-    }
+
     return [
-      'restart',
+      'day',
       entry.date.toISOString(),
+      entry.dayNumber,
       '',
-      '',
-      '',
-      entry.reason ?? '',
+      entry.completed ? 'yes' : 'no',
+      entry.failReason ?? '',
       entry.attemptNumber,
       '',
       '',

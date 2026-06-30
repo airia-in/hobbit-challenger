@@ -3,8 +3,8 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { TaskType } from '@workspace-starter/db';
 import OpenAI from 'openai';
+import type { LegacyTaskType } from './tasks.service';
 
 export type VerificationResult = {
   passed: boolean;
@@ -12,12 +12,11 @@ export type VerificationResult = {
   reason: string;
 };
 
-const PROMPT_FILES: Partial<Record<TaskType, string>> = {
-  [TaskType.OUTDOOR_WORKOUT]: 'outdoor-workout.md',
-  [TaskType.INDOOR_WORKOUT]: 'indoor-workout.md',
-  [TaskType.WATER]: 'water.md',
-  [TaskType.PROGRESS_PHOTO]: 'progress-photo.md',
-  [TaskType.DIET]: 'diet.md',
+const PROMPT_FILES: Partial<Record<LegacyTaskType, string>> = {
+  OUTDOOR_WORKOUT: 'outdoor-workout.md',
+  INDOOR_WORKOUT: 'indoor-workout.md',
+  WATER: 'water.md',
+  PROGRESS_PHOTO: 'progress-photo.md',
 };
 
 type PromptContent = {
@@ -52,7 +51,7 @@ export class ProofVerifierService {
   }
 
   async verifyProof(
-    taskType: TaskType,
+    taskType: LegacyTaskType,
     imageUrl: string,
   ): Promise<VerificationResult> {
     if (!this.openai) {
@@ -102,7 +101,7 @@ export class ProofVerifierService {
     }
   }
 
-  private async loadPrompt(taskType: TaskType): Promise<PromptContent> {
+  private async loadPrompt(taskType: LegacyTaskType): Promise<PromptContent> {
     const filename = PROMPT_FILES[taskType];
     if (!filename) {
       throw new Error(`No prompt configured for task type ${taskType}`);

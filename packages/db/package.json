@@ -15,6 +15,9 @@
     "lint": "eslint \"src/**/*.ts\"",
     "postinstall": "prisma generate"
   },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "dependencies": {
     "@prisma/client": "^6.8.2",
     "prisma": "^6.8.2"
@@ -22,6 +25,7 @@
   "devDependencies": {
     "@workspace-starter/config-typescript": "workspace:*",
     "eslint": "catalog:dev-tools",
+    "tsx": "^4.19.4",
     "typescript": "catalog:"
   }
 }

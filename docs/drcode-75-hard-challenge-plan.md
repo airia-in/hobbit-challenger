@@ -14,7 +14,7 @@
 > the softer Discipline Challenge first; if it sustains engagement, evolve back toward the
 > strict mechanic described here. Treat anything below that conflicts with the phase docs
 > (elimination, AI gating, mandatory diet/progress photos, hardcoded 6-task forms) as the
-> *future* direction, not current scope.
+> _future_ direction, not current scope.
 
 ---
 

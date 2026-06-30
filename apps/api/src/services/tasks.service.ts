@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { TRPCError } from '@trpc/server';
-import { AiVerdict, TaskType } from '@workspace-starter/db';
 import type { PrismaService } from '../prisma/prisma.service';
 import {
   getUserLocalDate,
@@ -9,10 +8,52 @@ import {
 } from '../utils/day-window';
 import { ProofVerifierService } from './proof-verifier.service';
 
+export const LEGACY_TASK_TYPES = [
+  'DIET',
+  'OUTDOOR_WORKOUT',
+  'INDOOR_WORKOUT',
+  'WATER',
+  'READING',
+  'PROGRESS_PHOTO',
+  'NO_REELS',
+  'NO_SOCIAL',
+] as const;
+
+export type LegacyTaskType = (typeof LEGACY_TASK_TYPES)[number];
+
+const TASK_TYPE_TO_SEED_KEY: Record<LegacyTaskType, string> = {
+  DIET: 'DIET',
+  OUTDOOR_WORKOUT: 'ACTIVITY',
+  INDOOR_WORKOUT: 'ACTIVITY',
+  WATER: 'WATER',
+  READING: 'READING',
+  PROGRESS_PHOTO: 'PROGRESS_PHOTO',
+  NO_REELS: 'NO_REELS',
+  NO_SOCIAL: 'NO_SOCIAL',
+};
+
+const SEED_KEY_TO_TASK_TYPE: Record<string, LegacyTaskType> = {
+  DIET: 'DIET',
+  ACTIVITY: 'OUTDOOR_WORKOUT',
+  WATER: 'WATER',
+  READING: 'READING',
+  PROGRESS_PHOTO: 'PROGRESS_PHOTO',
+  NO_REELS: 'NO_REELS',
+  NO_SOCIAL: 'NO_SOCIAL',
+};
+
+function seedKeyToTaskType(seedKey: string | null): LegacyTaskType {
+  if (seedKey && seedKey in SEED_KEY_TO_TASK_TYPE) {
+    return SEED_KEY_TO_TASK_TYPE[seedKey]!;
+  }
+
+  return 'DIET';
+}
+
 export type TaskStatus = 'PENDING' | 'COMPLETED' | 'OVERDUE' | 'REJECTED';
 
 export type TodayTask = {
-  taskType: TaskType;
+  taskType: LegacyTaskType;
   title: string;
   icon: string;
   status: TaskStatus;
@@ -23,14 +64,14 @@ export type TodayTask = {
   pageFrom: number | null;
   pageTo: number | null;
   dietConfirmed: boolean;
-  aiVerdict: AiVerdict | null;
+  aiVerdict: string | null;
   aiReason: string | null;
   completedAt: Date | null;
   canEdit: boolean;
 };
 
 export type SubmitTaskInput = {
-  taskType: TaskType;
+  taskType: LegacyTaskType;
   proofUrl?: string;
   proofNotes?: string;
   bookTitle?: string;
@@ -48,66 +89,40 @@ export type UpdateProofInput = {
   dietConfirmed?: boolean;
 };
 
-const TASK_DEFINITIONS: Array<{
-  taskType: TaskType;
-  title: string;
-  icon: string;
-}> = [
-  { taskType: TaskType.DIET, title: 'Follow Your Diet', icon: '🥗' },
-  {
-    taskType: TaskType.OUTDOOR_WORKOUT,
-    title: 'Outdoor Workout (45 min)',
-    icon: '🌳',
-  },
-  {
-    taskType: TaskType.INDOOR_WORKOUT,
-    title: 'Indoor Workout (45 min)',
-    icon: '💪',
-  },
-  { taskType: TaskType.WATER, title: 'Drink 1 Gallon of Water', icon: '💧' },
-  {
-    taskType: TaskType.READING,
-    title: 'Read 10 Pages (non-fiction)',
-    icon: '📖',
-  },
-  { taskType: TaskType.PROGRESS_PHOTO, title: 'Progress Photo', icon: '📸' },
-];
-
-const OPTIONAL_PHOTO_TASKS = new Set<TaskType>([
-  TaskType.OUTDOOR_WORKOUT,
-  TaskType.INDOOR_WORKOUT,
-  TaskType.WATER,
+const OPTIONAL_PHOTO_TASKS = new Set<LegacyTaskType>([
+  'OUTDOOR_WORKOUT',
+  'INDOOR_WORKOUT',
+  'WATER',
 ]);
 
-const PHOTO_TASKS = new Set<TaskType>([
+const PHOTO_TASKS = new Set<LegacyTaskType>([
   ...OPTIONAL_PHOTO_TASKS,
-  TaskType.PROGRESS_PHOTO,
+  'PROGRESS_PHOTO',
 ]);
 
 function resolveTaskStatus(
   log: {
-    completedAt: Date | null;
-    isValid: boolean;
-    aiVerdict: AiVerdict | null;
+    state: string | null;
+    aiVerdict: string | null;
   } | null,
   canSubmit: boolean,
 ): TaskStatus {
-  if (!log?.completedAt) {
+  if (!log?.state || log.state === 'UNLOGGED') {
     return canSubmit ? 'PENDING' : 'OVERDUE';
   }
 
-  if (!log.isValid || log.aiVerdict === AiVerdict.FAILED) {
+  if (log.aiVerdict === 'FAILED' || log.state === 'FAILED') {
     return 'REJECTED';
   }
 
-  return 'COMPLETED';
+  return log.state === 'DONE' ? 'COMPLETED' : 'PENDING';
 }
 
 function validateTaskInput(
-  taskType: TaskType,
+  taskType: LegacyTaskType,
   input: SubmitTaskInput | UpdateProofInput,
 ): { isValid: boolean; reason?: string } {
-  if (taskType === TaskType.READING) {
+  if (taskType === 'READING') {
     if (!input.bookTitle?.trim()) {
       return { isValid: false, reason: 'Book title is required' };
     }
@@ -119,7 +134,7 @@ function validateTaskInput(
     return { isValid: true };
   }
 
-  if (taskType === TaskType.DIET) {
+  if (taskType === 'DIET') {
     if (!input.dietConfirmed) {
       return {
         isValid: false,
@@ -129,7 +144,7 @@ function validateTaskInput(
     return { isValid: true };
   }
 
-  if (taskType === TaskType.PROGRESS_PHOTO && !input.proofUrl) {
+  if (taskType === 'PROGRESS_PHOTO' && !input.proofUrl) {
     return { isValid: false, reason: 'Photo proof is required' };
   }
 
@@ -137,14 +152,10 @@ function validateTaskInput(
 }
 
 function needsAiVerification(
-  taskType: TaskType,
+  taskType: LegacyTaskType,
   proofUrl?: string | null,
 ): boolean {
   if (PHOTO_TASKS.has(taskType)) {
-    return Boolean(proofUrl);
-  }
-
-  if (taskType === TaskType.DIET) {
     return Boolean(proofUrl);
   }
 
@@ -156,50 +167,107 @@ function mapVerificationToVerdict(result: {
   confidence: number;
   reason: string;
 }): {
-  aiVerdict: AiVerdict;
-  aiConfidence: number;
-  aiReason: string;
-  isValid: boolean;
+  aiVerdict: string | null;
+  aiReason: string | null;
 } {
   if (result.reason === 'SKIPPED') {
-    return {
-      aiVerdict: AiVerdict.SKIPPED,
-      aiConfidence: result.confidence,
-      aiReason: result.reason,
-      isValid: true,
-    };
+    return { aiVerdict: 'SKIPPED', aiReason: result.reason };
   }
 
   if (result.passed) {
+    return { aiVerdict: 'PASSED', aiReason: result.reason };
+  }
+
+  return { aiVerdict: 'FAILED', aiReason: result.reason };
+}
+
+function buildLogPayload(
+  taskType: LegacyTaskType,
+  _input: SubmitTaskInput | UpdateProofInput,
+): {
+  state: string;
+  value?: number;
+  subPoints?: Record<string, string>;
+} {
+  if (taskType === 'WATER') {
+    return { state: 'DONE', value: 3.8 };
+  }
+
+  if (taskType === 'READING') {
     return {
-      aiVerdict: AiVerdict.PASSED,
-      aiConfidence: result.confidence,
-      aiReason: result.reason,
-      isValid: true,
+      state: 'DONE',
+      subPoints: {
+        PAGES_10: 'DONE',
+        NON_FICTION: 'DONE',
+      },
     };
   }
 
-  return {
-    aiVerdict: AiVerdict.FAILED,
-    aiConfidence: result.confidence,
-    aiReason: result.reason,
-    isValid: false,
-  };
+  if (taskType === 'DIET') {
+    return {
+      state: 'DONE',
+      subPoints: {
+        HEALTHY: 'DONE',
+        NO_JUNK: 'DONE',
+        NO_ALCOHOL: 'DONE',
+      },
+    };
+  }
+
+  if (taskType === 'OUTDOOR_WORKOUT' || taskType === 'INDOOR_WORKOUT') {
+    return {
+      state: 'DONE',
+      subPoints: {
+        MIN_45: 'DONE',
+        OUTSIDE: taskType === 'OUTDOOR_WORKOUT' ? 'DONE' : 'FAILED',
+      },
+    };
+  }
+
+  return { state: 'DONE' };
 }
 
-async function getActiveAttempt(prisma: PrismaService, userId: string) {
-  const attempt = await prisma.attempt.findFirst({
+async function getActiveChallenge(prisma: PrismaService, userId: string) {
+  const challenge = await prisma.challenge.findFirst({
     where: { userId, isActive: true },
+    orderBy: { startDate: 'desc' },
   });
 
-  if (!attempt) {
+  if (!challenge) {
     throw new TRPCError({
       code: 'NOT_FOUND',
-      message: 'No active challenge attempt found',
+      message: 'No active challenge found',
     });
   }
 
-  return attempt;
+  return challenge;
+}
+
+async function findActivityForTaskType(
+  prisma: PrismaService,
+  groupId: string | null | undefined,
+  taskType: LegacyTaskType,
+) {
+  if (!groupId) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Join a group to access challenge activities',
+    });
+  }
+
+  const seedKey = TASK_TYPE_TO_SEED_KEY[taskType];
+  const activity = await prisma.activity.findFirst({
+    where: { groupId, seedKey, active: true },
+  });
+
+  if (!activity) {
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: `Activity not found for task type ${taskType}`,
+    });
+  }
+
+  return activity;
 }
 
 @Injectable()
@@ -220,43 +288,69 @@ export class TasksService {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
     }
 
-    const attempt = await getActiveAttempt(prisma, userId);
+    const challenge = await getActiveChallenge(prisma, userId);
     const todayDate = getUserLocalDate(user.timezone);
     const canSubmit = isBeforeMidnight(user.timezone);
 
-    const logs = await prisma.taskLog.findMany({
-      where: {
-        userId,
-        attemptId: attempt.id,
+    if (!user.groupId) {
+      return {
+        currentDay: challenge.currentDay,
         date: todayDate,
-      },
+        canSubmit,
+        tasks: [],
+      };
+    }
+
+    const activities = await prisma.activity.findMany({
+      where: { groupId: user.groupId, active: true, scored: true },
+      orderBy: { sortOrder: 'asc' },
     });
 
-    const logByType = new Map(logs.map((log) => [log.taskType, log]));
-
-    const tasks = TASK_DEFINITIONS.map((definition) => {
-      const log = logByType.get(definition.taskType) ?? null;
+    if (activities.length === 0) {
       return {
-        taskType: definition.taskType,
-        title: definition.title,
-        icon: definition.icon,
+        currentDay: challenge.currentDay,
+        date: todayDate,
+        canSubmit,
+        tasks: [],
+      };
+    }
+
+    const logs = await prisma.activityLog.findMany({
+      where: {
+        userId,
+        challengeId: challenge.id,
+        date: todayDate,
+      },
+      include: { activity: true },
+    });
+
+    const logByActivityId = new Map(logs.map((log) => [log.activityId, log]));
+
+    const tasks = activities.map((activity) => {
+      const log = logByActivityId.get(activity.id) ?? null;
+      const taskType = seedKeyToTaskType(activity.seedKey);
+
+      return {
+        taskType,
+        title: activity.title,
+        icon: activity.emoji ?? '✅',
         status: resolveTaskStatus(log, canSubmit),
         taskLogId: log?.id ?? null,
         proofUrl: log?.proofUrl ?? null,
-        proofNotes: log?.proofNotes ?? null,
-        bookTitle: log?.bookTitle ?? null,
-        pageFrom: log?.pageFrom ?? null,
-        pageTo: log?.pageTo ?? null,
-        dietConfirmed: log?.dietConfirmed ?? false,
+        proofNotes: null,
+        bookTitle: null,
+        pageFrom: null,
+        pageTo: null,
+        dietConfirmed: log?.state === 'DONE' && taskType === 'DIET',
         aiVerdict: log?.aiVerdict ?? null,
-        aiReason: log?.aiReason ?? null,
-        completedAt: log?.completedAt ?? null,
+        aiReason: null,
+        completedAt: log?.state === 'DONE' ? todayDate : null,
         canEdit: canSubmit && Boolean(log),
       };
     });
 
     return {
-      currentDay: attempt.currentDay,
+      currentDay: challenge.currentDay,
       date: todayDate,
       canSubmit,
       tasks,
@@ -280,13 +374,18 @@ export class TasksService {
       });
     }
 
-    const attempt = await getActiveAttempt(prisma, userId);
+    const challenge = await getActiveChallenge(prisma, userId);
     const todayDate = getUserLocalDate(user.timezone);
+    const activity = await findActivityForTaskType(
+      prisma,
+      user.groupId,
+      input.taskType,
+    );
 
-    const existing = await prisma.taskLog.findFirst({
+    const existing = await prisma.activityLog.findFirst({
       where: {
-        attemptId: attempt.id,
-        taskType: input.taskType,
+        challengeId: challenge.id,
+        activityId: activity.id,
         date: todayDate,
       },
     });
@@ -307,25 +406,24 @@ export class TasksService {
     }
 
     const aiFields = await this.runVerification(input.taskType, input.proofUrl);
+    const payload = buildLogPayload(input.taskType, input);
 
-    const taskLog = await prisma.taskLog.create({
+    const activityLog = await prisma.activityLog.create({
       data: {
-        attemptId: attempt.id,
+        challengeId: challenge.id,
         userId,
-        taskType: input.taskType,
+        activityId: activity.id,
         date: todayDate,
-        completedAt: new Date(),
+        state: payload.state,
+        value: payload.value,
+        subPoints: payload.subPoints,
         proofUrl: input.proofUrl,
-        proofNotes: input.proofNotes,
-        bookTitle: input.bookTitle,
-        pageFrom: input.pageFrom,
-        pageTo: input.pageTo,
-        dietConfirmed: input.dietConfirmed ?? false,
+        xpAwarded: 0,
         ...aiFields,
       },
     });
 
-    return taskLog;
+    return activityLog;
   }
 
   async updateProof(
@@ -346,33 +444,36 @@ export class TasksService {
       });
     }
 
-    const taskLog = await prisma.taskLog.findFirst({
+    const activityLog = await prisma.activityLog.findFirst({
       where: { id: taskLogId, userId },
+      include: { activity: true },
     });
 
-    if (!taskLog) {
+    if (!activityLog) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Task log not found' });
     }
 
     const todayDate = getUserLocalDate(user.timezone);
-    if (!isSameLocalDay(taskLog.date, todayDate, user.timezone)) {
+    if (!isSameLocalDay(activityLog.date, todayDate, user.timezone)) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
         message: 'Can only update proof for today',
       });
     }
 
+    const taskType = seedKeyToTaskType(activityLog.activity.seedKey);
+
     const merged = {
-      proofUrl: input.proofUrl ?? taskLog.proofUrl ?? undefined,
-      proofNotes: input.proofNotes ?? taskLog.proofNotes ?? undefined,
-      bookTitle: input.bookTitle ?? taskLog.bookTitle ?? undefined,
-      pageFrom: input.pageFrom ?? taskLog.pageFrom ?? undefined,
-      pageTo: input.pageTo ?? taskLog.pageTo ?? undefined,
-      dietConfirmed: input.dietConfirmed ?? taskLog.dietConfirmed,
+      proofUrl: input.proofUrl ?? activityLog.proofUrl ?? undefined,
+      proofNotes: input.proofNotes,
+      bookTitle: input.bookTitle,
+      pageFrom: input.pageFrom,
+      pageTo: input.pageTo,
+      dietConfirmed: input.dietConfirmed,
     };
 
-    const validation = validateTaskInput(taskLog.taskType, {
-      taskType: taskLog.taskType,
+    const validation = validateTaskInput(taskType, {
+      taskType,
       ...merged,
     });
 
@@ -384,54 +485,41 @@ export class TasksService {
     }
 
     const proofUrlChanged =
-      input.proofUrl !== undefined && input.proofUrl !== taskLog.proofUrl;
+      input.proofUrl !== undefined && input.proofUrl !== activityLog.proofUrl;
     const shouldVerify =
-      needsAiVerification(taskLog.taskType, merged.proofUrl) &&
-      (proofUrlChanged || taskLog.aiVerdict === AiVerdict.FAILED);
+      needsAiVerification(taskType, merged.proofUrl) &&
+      (proofUrlChanged || activityLog.aiVerdict === 'FAILED');
 
     const aiFields = shouldVerify
-      ? await this.runVerification(taskLog.taskType, merged.proofUrl)
+      ? await this.runVerification(taskType, merged.proofUrl)
       : {
-          isValid: true,
-          aiVerdict: taskLog.aiVerdict,
-          aiConfidence: taskLog.aiConfidence,
-          aiReason: taskLog.aiReason,
+          aiVerdict: activityLog.aiVerdict,
+          aiReason: null,
         };
 
-    return prisma.taskLog.update({
+    const payload = buildLogPayload(taskType, { taskType, ...merged });
+
+    return prisma.activityLog.update({
       where: { id: taskLogId },
       data: {
         proofUrl: merged.proofUrl,
-        proofNotes: merged.proofNotes,
-        bookTitle: merged.bookTitle,
-        pageFrom: merged.pageFrom,
-        pageTo: merged.pageTo,
-        dietConfirmed: merged.dietConfirmed,
-        completedAt: new Date(),
-        isValid: aiFields.isValid,
+        state: payload.state,
+        value: payload.value,
+        subPoints: payload.subPoints,
         aiVerdict: aiFields.aiVerdict,
-        aiConfidence: aiFields.aiConfidence,
-        aiReason: aiFields.aiReason,
       },
     });
   }
 
   private async runVerification(
-    taskType: TaskType,
+    taskType: LegacyTaskType,
     proofUrl?: string | null,
   ): Promise<{
-    isValid: boolean;
-    aiVerdict: AiVerdict | null;
-    aiConfidence: number | null;
+    aiVerdict: string | null;
     aiReason: string | null;
   }> {
     if (!needsAiVerification(taskType, proofUrl) || !proofUrl) {
-      return {
-        isValid: true,
-        aiVerdict: null,
-        aiConfidence: null,
-        aiReason: null,
-      };
+      return { aiVerdict: null, aiReason: null };
     }
 
     const result = await this.proofVerifier.verifyProof(taskType, proofUrl);
@@ -439,48 +527,10 @@ export class TasksService {
   }
 }
 
-export function isTaskLogValid(log: {
-  isValid: boolean;
-  aiVerdict: AiVerdict | null;
-  completedAt: Date | null;
-}): boolean {
-  return (
-    Boolean(log.completedAt) &&
-    log.isValid &&
-    log.aiVerdict !== AiVerdict.FAILED
-  );
-}
+export {
+  computeCurrentStreak,
+  computeDayLoggingStatus,
+  isActivityLogLogged,
+} from '../utils/day-completion';
 
-export function areAllTasksCompleteForDay(
-  taskLogs: Array<{
-    taskType: TaskType;
-    isValid: boolean;
-    aiVerdict: AiVerdict | null;
-    completedAt: Date | null;
-  }>,
-): boolean {
-  const logsByType = new Map(taskLogs.map((log) => [log.taskType, log]));
-
-  return (
-    ALL_TASK_TYPES.every((type) => logsByType.has(type)) &&
-    ALL_TASK_TYPES.every((type) => isTaskLogValid(logsByType.get(type)!))
-  );
-}
-
-export function computeCurrentStreak(
-  currentDay: number,
-  todayTaskLogs: Array<{
-    taskType: TaskType;
-    isValid: boolean;
-    aiVerdict: AiVerdict | null;
-    completedAt: Date | null;
-  }>,
-): number {
-  if (areAllTasksCompleteForDay(todayTaskLogs)) {
-    return currentDay;
-  }
-
-  return Math.max(0, currentDay - 1);
-}
-
-export const ALL_TASK_TYPES = TASK_DEFINITIONS.map((task) => task.taskType);
+export const ALL_TASK_TYPES = LEGACY_TASK_TYPES;

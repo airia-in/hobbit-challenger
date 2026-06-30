@@ -1,5 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import type { PrismaService } from '../prisma/prisma.service';
+import { latestChallengeRelationArgs } from '../utils/challenge-query';
+import {
+  isInterimDayCompleted,
+  isInterimDayFailed,
+} from '../utils/day-completion';
 
 export type HeatmapCellState =
   | 'completed'
@@ -14,6 +19,13 @@ export type HeatmapCell = {
   dayLabel: string | null;
 };
 
+function dayScoreCompleted(score: {
+  finalized: boolean;
+  breakdown: unknown;
+}): boolean {
+  return isInterimDayCompleted(score);
+}
+
 export async function getHeatmap(
   prisma: PrismaService,
   userId: string,
@@ -24,10 +36,9 @@ export async function getHeatmap(
       group: {
         include: { dayLabels: true },
       },
-      attempts: {
-        where: { isActive: true },
-        take: 1,
-        include: { dayResults: true },
+      challenges: {
+        ...latestChallengeRelationArgs(),
+        include: { dayScores: true },
       },
     },
   });
@@ -36,7 +47,7 @@ export async function getHeatmap(
     throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
   }
 
-  const attempt = user.attempts[0] ?? null;
+  const challenge = user.challenges[0] ?? null;
   const labelMap = new Map(
     (user.group?.dayLabels ?? []).map((label) => [
       label.dayNumber,
@@ -44,35 +55,34 @@ export async function getHeatmap(
     ]),
   );
 
-  const resultsByDay = new Map(
-    (attempt?.dayResults ?? []).map((result) => [result.dayNumber, result]),
+  const scoresByDay = new Map(
+    (challenge?.dayScores ?? []).map((score) => [score.dayNumber, score]),
   );
 
-  const currentDay = attempt?.currentDay ?? 1;
-  const isActive = attempt?.isActive ?? false;
+  const currentDay = challenge?.currentDay ?? 1;
+  const isActive = challenge?.isActive ?? false;
+  const lengthDays = challenge?.lengthDays ?? 30;
 
   const cells: HeatmapCell[] = [];
 
-  for (let dayNumber = 1; dayNumber <= 75; dayNumber++) {
+  for (let dayNumber = 1; dayNumber <= lengthDays; dayNumber++) {
     let state: HeatmapCellState;
 
-    if (!attempt) {
+    if (!challenge) {
       state = 'not_started';
-    } else if (dayNumber > 75 || (currentDay > 75 && dayNumber > 75)) {
-      state = 'not_started';
-    } else if (currentDay > 75) {
-      const result = resultsByDay.get(dayNumber);
-      if (result?.completed) state = 'completed';
-      else if (result && !result.completed) state = 'failed';
+    } else if (currentDay > lengthDays) {
+      const score = scoresByDay.get(dayNumber);
+      if (score && dayScoreCompleted(score)) state = 'completed';
+      else if (score && isInterimDayFailed(score)) state = 'failed';
       else state = 'not_started';
     } else if (dayNumber === currentDay && isActive) {
       state = 'today';
     } else if (dayNumber > currentDay) {
       state = 'future';
     } else {
-      const result = resultsByDay.get(dayNumber);
-      if (result?.completed) state = 'completed';
-      else if (result && !result.completed) state = 'failed';
+      const score = scoresByDay.get(dayNumber);
+      if (score && dayScoreCompleted(score)) state = 'completed';
+      else if (score && isInterimDayFailed(score)) state = 'failed';
       else state = 'not_started';
     }
 
@@ -110,8 +120,18 @@ export async function setDayLabel(
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only' });
   }
 
-  if (dayNumber < 1 || dayNumber > 75) {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Day must be 1–75' });
+  const challenge = await prisma.challenge.findFirst({
+    where: { userId },
+    orderBy: [{ isActive: 'desc' }, { startDate: 'desc' }],
+    select: { lengthDays: true },
+  });
+  const maxDay = challenge?.lengthDays ?? 30;
+
+  if (dayNumber < 1 || dayNumber > maxDay) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `Day must be 1–${maxDay}`,
+    });
   }
 
   const label = await prisma.dayLabel.upsert({

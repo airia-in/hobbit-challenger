@@ -7,13 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum TaskType {
-  DIET
-  OUTDOOR_WORKOUT
-  INDOOR_WORKOUT
-  WATER
-  READING
-  PROGRESS_PHOTO
+enum ActivityKind {
+  CHECKBOX
+  NUMBER
+  TIERED
+  SUBPOINTS
 }
 
 enum MemberStatus {
@@ -22,84 +20,118 @@ enum MemberStatus {
   COMPLETED
 }
 
-enum AiVerdict {
-  PASSED
-  FAILED
-  SKIPPED
-}
-
 model User {
-  id            String    @id @default(cuid())
-  name          String
-  email         String    @unique
-  passwordHash  String
-  timezone      String    @default("UTC")
-  avatarUrl     String?
-  groupId       String?
-  group         Group?    @relation(fields: [groupId], references: [id])
-  reminderTime  String?
-  createdAt     DateTime  @default(now())
-  attempts      Attempt[]
-  taskLogs      TaskLog[]
-  adminOf       Group[]   @relation("GroupAdmin")
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  timezone     String        @default("UTC")
+  avatarUrl    String?
+  groupId      String?
+  group        Group?        @relation(fields: [groupId], references: [id])
+  reminderTime String?
+  createdAt    DateTime      @default(now())
+  challenges   Challenge[]
+  activityLogs ActivityLog[]
+  adminOf      Group[]       @relation("GroupAdmin")
 }
 
 model Group {
-  id            String      @id @default(cuid())
-  name          String
-  inviteToken   String      @unique
-  adminUserId   String
-  admin         User        @relation("GroupAdmin", fields: [adminUserId], references: [id])
-  members       User[]
-  dayLabels     DayLabel[]
-  createdAt     DateTime    @default(now())
+  id          String     @id @default(cuid())
+  name        String
+  inviteToken String     @unique
+  adminUserId String
+  admin       User       @relation("GroupAdmin", fields: [adminUserId], references: [id])
+  members     User[]
+  dayLabels   DayLabel[]
+  activities  Activity[]
+  createdAt   DateTime   @default(now())
 }
 
-model Attempt {
-  id              String    @id @default(cuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id])
-  attemptNumber   Int
-  startDate       DateTime
-  endDate         DateTime?
-  isActive        Boolean   @default(true)
-  currentDay      Int       @default(1)
-  longestStreak   Int       @default(0)
-  timesRestarted  Int       @default(0)
-  taskLogs        TaskLog[]
-  dayResults      DayResult[]
+model Challenge {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  groupId       String?
+  startDate     DateTime
+  endDate       DateTime?
+  lengthDays    Int           @default(30)
+  currentDay    Int           @default(1)
+  isActive      Boolean       @default(true)
+  totalXp       Int           @default(0)
+  currentStreak Int           @default(0)
+  longestStreak Int           @default(0)
+  activityLogs  ActivityLog[]
+  dayScores     DayScore[]
 }
 
-model DayResult {
-  id          String   @id @default(cuid())
-  attemptId   String
-  attempt     Attempt  @relation(fields: [attemptId], references: [id])
+model Activity {
+  id               String        @id @default(cuid())
+  groupId          String?
+  group            Group?        @relation(fields: [groupId], references: [id])
+  ownerUserId      String?
+  seedKey          String?
+  title            String
+  emoji            String?
+  kind             ActivityKind
+  scored           Boolean       @default(true)
+  isPersonal       Boolean       @default(false)
+  xpComplete       Int?
+  xpMiss           Int?
+  unitLabel        String?
+  xpPerUnit        Float?
+  xpCap            Int?
+  missXp           Int?
+  subPoints        Json?
+  tiers            Json?
+  deductMultiplier Float         @default(2)
+  sortOrder        Int           @default(0)
+  active           Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  logs             ActivityLog[]
+
+  @@unique([groupId, seedKey])
+  @@index([groupId])
+  @@index([ownerUserId])
+}
+
+model ActivityLog {
+  id          String    @id @default(cuid())
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id])
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  activityId  String
+  activity    Activity  @relation(fields: [activityId], references: [id])
+  date        DateTime
+  value       Float?
+  tier        String?
+  subPoints   Json?
+  state       String?
+  xpAwarded   Int       @default(0)
+  proofUrl    String?
+  aiVerdict   String?
+
+  @@unique([challengeId, activityId, date])
+  @@index([userId, activityId, date])
+}
+
+model DayScore {
+  id          String    @id @default(cuid())
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id])
+  userId      String
   date        DateTime
   dayNumber   Int
-  completed   Boolean
-  failedAt    DateTime?
-  failReason  String?
-}
+  xpEarned    Int       @default(0)
+  xpDeducted  Int       @default(0)
+  netXp       Int       @default(0)
+  personalXp  Int       @default(0)
+  breakdown   Json
+  finalized   Boolean   @default(false)
 
-model TaskLog {
-  id            String    @id @default(cuid())
-  attemptId     String
-  attempt       Attempt   @relation(fields: [attemptId], references: [id])
-  userId        String
-  user          User      @relation(fields: [userId], references: [id])
-  taskType      TaskType
-  date          DateTime
-  completedAt   DateTime?
-  proofUrl      String?
-  proofNotes    String?
-  bookTitle     String?
-  pageFrom      Int?
-  pageTo        Int?
-  dietConfirmed Boolean   @default(false)
-  aiVerdict     AiVerdict?
-  aiConfidence  Float?
-  aiReason      String?
-  isValid       Boolean   @default(true)
+  @@unique([challengeId, date])
+  @@index([userId, date])
 }
 
 model DayLabel {

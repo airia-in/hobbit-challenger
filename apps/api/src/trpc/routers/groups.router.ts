@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
+import { seedGroupActivities } from '@workspace-starter/db';
 import { z } from 'zod';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { latestChallengeRelationArgs } from '../../utils/challenge-query';
 import { buildInviteUrl } from '../../utils/invite-url';
 import { getMemberStatus } from '../../utils/member-status';
 import { publicProcedure, protectedProcedure, router } from '../trpc';
@@ -55,6 +57,8 @@ export const groupsRouter = router({
           data: { groupId: created.id },
         });
 
+        await seedGroupActivities(tx, created.id);
+
         return created;
       });
 
@@ -81,10 +85,7 @@ export const groupsRouter = router({
             id: true,
             name: true,
             avatarUrl: true,
-            attempts: {
-              where: { isActive: true },
-              take: 1,
-            },
+            challenges: latestChallengeRelationArgs(),
           },
         },
       },
@@ -95,13 +96,13 @@ export const groupsRouter = router({
     }
 
     const members = group.members.map((member) => {
-      const attempt = member.attempts[0] ?? null;
+      const challenge = member.challenges[0] ?? null;
       return {
         id: member.id,
         name: member.name,
         avatarUrl: member.avatarUrl,
-        currentDay: attempt?.currentDay ?? 0,
-        status: getMemberStatus(attempt),
+        currentDay: challenge?.currentDay ?? 0,
+        status: getMemberStatus(challenge),
       };
     });
 
@@ -168,19 +169,32 @@ export const groupsRouter = router({
           data: { groupId: group.id },
         });
 
-        const existingAttempt = await tx.attempt.findFirst({
+        const activityCount = await tx.activity.count({
+          where: { groupId: group.id },
+        });
+        if (activityCount === 0) {
+          await seedGroupActivities(tx, group.id);
+        }
+
+        const existingChallenge = await tx.challenge.findFirst({
           where: { userId: ctx.user.id, isActive: true },
         });
 
-        if (!existingAttempt) {
-          await tx.attempt.create({
+        if (!existingChallenge) {
+          await tx.challenge.create({
             data: {
               userId: ctx.user.id,
-              attemptNumber: 1,
+              groupId: group.id,
               startDate: new Date(),
               currentDay: 1,
               isActive: true,
+              lengthDays: 30,
             },
+          });
+        } else {
+          await tx.challenge.update({
+            where: { id: existingChallenge.id },
+            data: { groupId: group.id },
           });
         }
       });
@@ -233,15 +247,34 @@ export const groupsRouter = router({
 
       const member = await ctx.prisma.user.findFirst({
         where: { id: input.userId, groupId: user.groupId },
+        include: {
+          challenges: {
+            where: { isActive: true },
+            orderBy: { startDate: 'desc' },
+            take: 1,
+          },
+        },
       });
 
       if (!member) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Member not found' });
       }
 
-      await ctx.prisma.user.update({
-        where: { id: input.userId },
-        data: { groupId: null },
+      // Mirror leaveGroup: deactivate the member's active challenge so it is not
+      // left frozen-but-active (the day finalizer skips users without a group).
+      await ctx.prisma.$transaction(async (tx) => {
+        const activeChallenge = member.challenges[0];
+        if (activeChallenge) {
+          await tx.challenge.update({
+            where: { id: activeChallenge.id },
+            data: { isActive: false, endDate: new Date() },
+          });
+        }
+
+        await tx.user.update({
+          where: { id: input.userId },
+          data: { groupId: null },
+        });
       });
 
       return { success: true };
@@ -275,11 +308,11 @@ export const groupsRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Member not found' });
       }
 
-      const group = await ctx.prisma.group.update({
+      await ctx.prisma.group.update({
         where: { id: user.groupId },
         data: { adminUserId: input.userId },
       });
 
-      return { adminUserId: group.adminUserId };
+      return { adminUserId: input.userId };
     }),
 });

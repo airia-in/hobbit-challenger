@@ -134,20 +134,12 @@ function HistoryContent() {
 
       <div className="space-y-4">
         {[...groupedByDate.entries()].map(([dateKey, dayEntries]) => {
-          const restart = dayEntries.find((e) => e.type === 'restart');
           const dayResult = dayEntries.find((e) => e.type === 'day');
           const tasks = dayEntries.filter((e) => e.type === 'task');
           const failed = dayResult?.type === 'day' && !dayResult.completed;
 
           return (
             <div key={dateKey}>
-              {restart && (
-                <div className="mb-2 rounded-lg border border-[var(--accent-red)] bg-[var(--accent-red)]/10 px-4 py-3 text-center text-sm text-[var(--accent-red)]">
-                  Challenge restarted — Attempt #{restart.attemptNumber}
-                  {restart.reason && `: ${restart.reason}`}
-                </div>
-              )}
-
               <div
                 className={`rounded-lg border bg-[var(--surface)] p-4 ${
                   failed

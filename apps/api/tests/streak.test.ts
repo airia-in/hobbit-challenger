@@ -1,42 +1,49 @@
-import { AiVerdict, TaskType } from '@workspace-starter/db';
 import { describe, expect, it } from 'vitest';
-import {
-  ALL_TASK_TYPES,
-  computeCurrentStreak,
-} from '../src/services/tasks.service';
+import { getMemberStatus } from '../src/utils/member-status';
 
-function makeValidLog(taskType: TaskType) {
+function makeChallenge(
+  overrides: Partial<{
+    isActive: boolean;
+    currentDay: number;
+    lengthDays: number;
+  }> = {},
+) {
   return {
-    taskType,
-    isValid: true,
-    aiVerdict: AiVerdict.PASSED,
-    completedAt: new Date(),
+    id: 'challenge-1',
+    userId: 'user-1',
+    groupId: null,
+    startDate: new Date(),
+    endDate: null,
+    lengthDays: 30,
+    currentDay: 1,
+    isActive: true,
+    totalXp: 0,
+    currentStreak: 0,
+    longestStreak: 0,
+    ...overrides,
   };
 }
 
-describe('computeCurrentStreak', () => {
-  it('returns 0 on day 1 before all tasks are complete', () => {
-    expect(computeCurrentStreak(1, [])).toBe(0);
+describe('getMemberStatus', () => {
+  it('returns ACTIVE for an in-progress challenge', () => {
     expect(
-      computeCurrentStreak(1, [makeValidLog(TaskType.DIET)]),
-    ).toBe(0);
+      getMemberStatus(makeChallenge({ currentDay: 5, lengthDays: 30 })),
+    ).toBe('ACTIVE');
   });
 
-  it('returns 1 on day 1 once all tasks are complete', () => {
-    const logs = ALL_TASK_TYPES.map((taskType) => makeValidLog(taskType));
-
-    expect(computeCurrentStreak(1, logs)).toBe(1);
+  it('returns COMPLETED when currentDay exceeds lengthDays', () => {
+    expect(
+      getMemberStatus(makeChallenge({ currentDay: 31, lengthDays: 30 })),
+    ).toBe('COMPLETED');
   });
 
-  it('returns previous-day streak when today is incomplete', () => {
-    const logs = ALL_TASK_TYPES.map((taskType) => makeValidLog(taskType));
-
-    expect(computeCurrentStreak(3, logs.slice(0, 5))).toBe(2);
+  it('returns COMPLETED when challenge is inactive', () => {
+    expect(getMemberStatus(makeChallenge({ isActive: false }))).toBe(
+      'COMPLETED',
+    );
   });
 
-  it('includes today when all tasks are complete', () => {
-    const logs = ALL_TASK_TYPES.map((taskType) => makeValidLog(taskType));
-
-    expect(computeCurrentStreak(3, logs)).toBe(3);
+  it('returns COMPLETED for null challenge', () => {
+    expect(getMemberStatus(null)).toBe('COMPLETED');
   });
 });

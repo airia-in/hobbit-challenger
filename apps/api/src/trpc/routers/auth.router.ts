@@ -46,13 +46,13 @@ export const authRouter = router({
           select: userSelect,
         });
 
-        await tx.attempt.create({
+        await tx.challenge.create({
           data: {
             userId: created.id,
-            attemptNumber: 1,
             startDate: new Date(),
             currentDay: 1,
             isActive: true,
+            lengthDays: 30,
           },
         });
 
@@ -130,19 +130,20 @@ export const authRouter = router({
       throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
     }
 
-    const attempt = await ctx.prisma.attempt.findFirst({
+    const challenge = await ctx.prisma.challenge.findFirst({
       where: { userId: user.id, isActive: true },
       select: {
         id: true,
-        attemptNumber: true,
         currentDay: true,
         startDate: true,
         isActive: true,
         longestStreak: true,
-        timesRestarted: true,
+        currentStreak: true,
+        totalXp: true,
+        lengthDays: true,
       },
     });
 
-    return { user, attempt };
+    return { user, attempt: challenge };
   }),
 });

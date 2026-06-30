@@ -1,23 +1,17 @@
-import type { Attempt } from '@workspace-starter/db';
+import type { Challenge } from '@workspace-starter/db';
 
-export type MemberStatusValue = 'ACTIVE' | 'ELIMINATED' | 'COMPLETED';
+export type MemberStatusValue = 'ACTIVE' | 'COMPLETED';
 
-export function getMemberStatus(attempt: Attempt | null): MemberStatusValue {
-  if (!attempt || !attempt.isActive) {
-    return 'ELIMINATED';
-  }
-
-  if (attempt.currentDay > 75) {
+export function getMemberStatus(
+  challenge: Challenge | null,
+): MemberStatusValue {
+  if (!challenge || !challenge.isActive) {
     return 'COMPLETED';
   }
 
-  if (attempt.timesRestarted > 0 && attempt.currentDay === 1) {
-    return 'ELIMINATED';
+  if (challenge.currentDay > challenge.lengthDays) {
+    return 'COMPLETED';
   }
 
-  if (attempt.currentDay >= 1) {
-    return 'ACTIVE';
-  }
-
-  return 'ELIMINATED';
+  return 'ACTIVE';
 }

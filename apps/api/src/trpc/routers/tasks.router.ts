@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { TaskType } from '@workspace-starter/db';
+import { LEGACY_TASK_TYPES } from '../../services/tasks.service';
 import { protectedProcedure, router } from '../trpc';
 
-const taskTypeSchema = z.nativeEnum(TaskType);
+const taskTypeSchema = z.enum(LEGACY_TASK_TYPES);
 
 const proofInputSchema = z.object({
   proofUrl: z.string().optional(),

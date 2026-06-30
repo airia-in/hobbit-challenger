@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { AuthService } from './auth.service';
+import { activeChallengeRelationArgs } from '../utils/challenge-query';
 
 export type ProfileData = {
   id: string;
@@ -114,7 +115,7 @@ export async function leaveGroup(prisma: PrismaService, userId: string) {
     where: { id: userId },
     include: {
       group: true,
-      attempts: { where: { isActive: true }, take: 1 },
+      challenges: activeChallengeRelationArgs(),
     },
   });
 
@@ -137,10 +138,10 @@ export async function leaveGroup(prisma: PrismaService, userId: string) {
   }
 
   await prisma.$transaction(async (tx) => {
-    const activeAttempt = user.attempts[0];
-    if (activeAttempt) {
-      await tx.attempt.update({
-        where: { id: activeAttempt.id },
+    const activeChallenge = user.challenges[0];
+    if (activeChallenge) {
+      await tx.challenge.update({
+        where: { id: activeChallenge.id },
         data: { isActive: false, endDate: new Date() },
       });
     }

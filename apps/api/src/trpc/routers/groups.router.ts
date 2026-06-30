@@ -247,15 +247,34 @@ export const groupsRouter = router({
 
       const member = await ctx.prisma.user.findFirst({
         where: { id: input.userId, groupId: user.groupId },
+        include: {
+          challenges: {
+            where: { isActive: true },
+            orderBy: { startDate: 'desc' },
+            take: 1,
+          },
+        },
       });
 
       if (!member) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Member not found' });
       }
 
-      await ctx.prisma.user.update({
-        where: { id: input.userId },
-        data: { groupId: null },
+      // Mirror leaveGroup: deactivate the member's active challenge so it is not
+      // left frozen-but-active (the day finalizer skips users without a group).
+      await ctx.prisma.$transaction(async (tx) => {
+        const activeChallenge = member.challenges[0];
+        if (activeChallenge) {
+          await tx.challenge.update({
+            where: { id: activeChallenge.id },
+            data: { isActive: false, endDate: new Date() },
+          });
+        }
+
+        await tx.user.update({
+          where: { id: input.userId },
+          data: { groupId: null },
+        });
       });
 
       return { success: true };

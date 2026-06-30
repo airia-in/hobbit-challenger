@@ -6,6 +6,7 @@ import {
   isInterimDayFailed,
 } from '../utils/day-completion';
 import { addLocalDays, getUserLocalDate } from '../utils/day-window';
+import { getLiveStreak } from '../utils/live-streak';
 
 export type DashboardStats = {
   currentStreak: number;
@@ -67,7 +68,15 @@ export async function getDashboardStats(
     ? isInterimDayFailed(yesterdayScore)
     : false;
 
-  const currentStreak = challenge?.currentStreak ?? 0;
+  const currentStreak = challenge
+    ? await getLiveStreak(prisma, {
+        challengeId: challenge.id,
+        userId,
+        groupId: user.groupId,
+        timezone: user.timezone,
+        storedStreak: challenge.currentStreak,
+      })
+    : 0;
   const lengthDays = challenge?.lengthDays ?? 30;
   const daysRemaining = challenge
     ? Math.max(0, lengthDays - (challenge.currentDay - 1))

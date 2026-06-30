@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import type { PrismaService } from '../prisma/prisma.service';
 import { latestChallengeRelationArgs } from '../utils/challenge-query';
 import { isInterimDayCompleted } from '../utils/day-completion';
+import { getLiveStreak } from '../utils/live-streak';
 import { getMemberStatus } from '../utils/member-status';
 
 export type LeaderboardSortBy = 'day' | 'successRate' | 'streak' | 'name';
@@ -80,6 +81,8 @@ export async function getLeaderboard(
       id: true,
       name: true,
       avatarUrl: true,
+      timezone: true,
+      groupId: true,
       challenges: {
         ...latestChallengeRelationArgs(),
         include: {
@@ -89,22 +92,34 @@ export async function getLeaderboard(
     },
   });
 
-  const entries = members.map((member) => {
-    const challenge = member.challenges[0] ?? null;
-    const currentDay = challenge?.currentDay ?? 0;
-    const streak = challenge?.currentStreak ?? 0;
-    const successRate = challenge ? computeSuccessRate(challenge.dayScores) : 0;
+  const entries = await Promise.all(
+    members.map(async (member) => {
+      const challenge = member.challenges[0] ?? null;
+      const currentDay = challenge?.currentDay ?? 0;
+      const streak = challenge
+        ? await getLiveStreak(prisma, {
+            challengeId: challenge.id,
+            userId: member.id,
+            groupId: member.groupId,
+            timezone: member.timezone,
+            storedStreak: challenge.currentStreak,
+          })
+        : 0;
+      const successRate = challenge
+        ? computeSuccessRate(challenge.dayScores)
+        : 0;
 
-    return {
-      id: member.id,
-      name: member.name,
-      avatarUrl: member.avatarUrl,
-      currentDay,
-      status: getMemberStatus(challenge),
-      streak,
-      successRate,
-    };
-  });
+      return {
+        id: member.id,
+        name: member.name,
+        avatarUrl: member.avatarUrl,
+        currentDay,
+        status: getMemberStatus(challenge),
+        streak,
+        successRate,
+      };
+    }),
+  );
 
   const sorted = sortMembers(entries, sortBy);
   const ranked: LeaderboardMember[] = sorted.map((entry, index) => ({

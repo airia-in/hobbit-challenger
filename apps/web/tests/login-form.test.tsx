@@ -123,6 +123,33 @@ describe('LoginForm', () => {
     });
   });
 
+  it('honors returnTo on the mount redirect (invite deep-link)', async () => {
+    mockGetToken.mockReturnValue('existing-token');
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        get href() {
+          return locationHref;
+        },
+        set href(value: string) {
+          locationHref = value;
+        },
+        search: '?returnTo=/join?token=abc123',
+      },
+    });
+    mockMeUseQuery.mockReturnValue({
+      data: { user: { groupId: 'group-123' }, attempt: null },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<LoginForm />);
+
+    await waitFor(() => {
+      expect(locationHref).toBe('/join?token=abc123');
+    });
+  });
+
   it('renders the form when the token is invalid or expired', () => {
     mockGetToken.mockReturnValue('expired-token');
     mockMeUseQuery.mockReturnValue({

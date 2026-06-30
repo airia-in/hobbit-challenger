@@ -18,6 +18,12 @@ import {
   computeActivityXp,
   computeDayScore,
 } from './scoring.service';
+import type {
+  ActivityEditorRow,
+  CreateCustomActivityInput,
+  SetActivityActiveInput,
+  UpdateActivityInput,
+} from '@workspace-starter/types';
 import { ProofVerifierService } from './proof-verifier.service';
 
 export const LEGACY_TASK_TYPES = [
@@ -231,6 +237,199 @@ type RecomputeParams = {
   timezone: string;
   groupId: string | null;
 };
+
+export function mapActivityToEditorRow(activity: Activity): ActivityEditorRow {
+  return {
+    id: activity.id,
+    groupId: activity.groupId,
+    ownerUserId: activity.ownerUserId,
+    seedKey: activity.seedKey,
+    title: activity.title,
+    emoji: activity.emoji,
+    kind: activity.kind,
+    scored: activity.scored,
+    isPersonal: activity.isPersonal,
+    xpComplete: activity.xpComplete,
+    xpMiss: activity.xpMiss,
+    unitLabel: activity.unitLabel,
+    xpPerUnit: activity.xpPerUnit,
+    xpCap: activity.xpCap,
+    missXp: activity.missXp,
+    subPoints: (activity.subPoints ?? null) as ActivityEditorRow['subPoints'],
+    tiers: (activity.tiers ?? null) as ActivityEditorRow['tiers'],
+    deductMultiplier: activity.deductMultiplier,
+    sortOrder: activity.sortOrder,
+    active: activity.active,
+  };
+}
+
+async function resolveNextSortOrder(
+  prisma: PrismaService,
+  where: Prisma.ActivityWhereInput,
+): Promise<number> {
+  const max = await prisma.activity.aggregate({
+    where,
+    _max: { sortOrder: true },
+  });
+  return (max._max.sortOrder ?? -1) + 1;
+}
+
+function buildCreateActivityData(input: CreateCustomActivityInput) {
+  const base = {
+    title: input.title,
+    emoji: input.emoji ?? null,
+    kind: input.kind,
+    deductMultiplier: input.deductMultiplier,
+    sortOrder: input.sortOrder,
+    seedKey: null,
+    active: true,
+  };
+
+  if (input.kind === 'CHECKBOX') {
+    return {
+      ...base,
+      xpComplete: input.xpComplete,
+      xpMiss: input.xpMiss,
+      unitLabel: null,
+      xpPerUnit: null,
+      xpCap: null,
+      missXp: null,
+    };
+  }
+
+  return {
+    ...base,
+    xpComplete: null,
+    xpMiss: null,
+    unitLabel: input.unitLabel,
+    xpPerUnit: input.xpPerUnit,
+    xpCap: input.xpCap,
+    missXp: input.missXp,
+  };
+}
+
+function assertKindSpecificUpdateFields(
+  activity: Activity,
+  input: UpdateActivityInput,
+) {
+  const hasCheckboxFields =
+    input.xpComplete !== undefined || input.xpMiss !== undefined;
+  const hasNumberFields =
+    input.unitLabel !== undefined ||
+    input.xpPerUnit !== undefined ||
+    input.xpCap !== undefined ||
+    input.missXp !== undefined;
+  const hasSubPoints = input.subPoints !== undefined;
+  const hasTiers = input.tiers !== undefined;
+
+  switch (activity.kind) {
+    case 'CHECKBOX':
+      if (hasNumberFields || hasSubPoints || hasTiers) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Invalid fields for CHECKBOX activity',
+        });
+      }
+      break;
+    case 'NUMBER':
+      if (hasCheckboxFields || hasSubPoints || hasTiers) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Invalid fields for NUMBER activity',
+        });
+      }
+      break;
+    case 'SUBPOINTS':
+      if (hasCheckboxFields || hasNumberFields || hasTiers) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Invalid fields for SUBPOINTS activity',
+        });
+      }
+      break;
+    case 'TIERED':
+      if (hasCheckboxFields || hasNumberFields || hasSubPoints) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Invalid fields for TIERED activity',
+        });
+      }
+      break;
+    default: {
+      const _exhaustive: never = activity.kind;
+      throw new Error(`Unsupported activity kind: ${String(_exhaustive)}`);
+    }
+  }
+}
+
+function buildUpdateActivityData(
+  activity: Activity,
+  input: UpdateActivityInput,
+): Prisma.ActivityUpdateInput {
+  assertKindSpecificUpdateFields(activity, input);
+
+  const data: Prisma.ActivityUpdateInput = {};
+
+  if (input.title !== undefined) data.title = input.title;
+  if (input.emoji !== undefined) data.emoji = input.emoji;
+  if (input.deductMultiplier !== undefined) {
+    data.deductMultiplier = input.deductMultiplier;
+  }
+  if (input.sortOrder !== undefined) data.sortOrder = input.sortOrder;
+
+  if (activity.kind === 'CHECKBOX') {
+    if (input.xpComplete !== undefined) data.xpComplete = input.xpComplete;
+    if (input.xpMiss !== undefined) data.xpMiss = input.xpMiss;
+  } else if (activity.kind === 'NUMBER') {
+    if (input.unitLabel !== undefined) data.unitLabel = input.unitLabel;
+    if (input.xpPerUnit !== undefined) data.xpPerUnit = input.xpPerUnit;
+    if (input.xpCap !== undefined) data.xpCap = input.xpCap;
+    if (input.missXp !== undefined) data.missXp = input.missXp;
+  } else if (activity.kind === 'SUBPOINTS') {
+    if (input.subPoints !== undefined) data.subPoints = input.subPoints;
+  } else if (activity.kind === 'TIERED') {
+    if (input.tiers !== undefined) data.tiers = input.tiers;
+  }
+
+  return data;
+}
+
+async function assertGroupActivity(
+  prisma: PrismaService,
+  activityId: string,
+  groupId: string,
+): Promise<Activity> {
+  const activity = await prisma.activity.findUnique({
+    where: { id: activityId },
+  });
+
+  if (
+    !activity ||
+    activity.groupId !== groupId ||
+    activity.isPersonal ||
+    !activity.scored
+  ) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Activity not found' });
+  }
+
+  return activity;
+}
+
+async function assertPersonalActivityOwnership(
+  prisma: PrismaService,
+  activityId: string,
+  userId: string,
+): Promise<Activity> {
+  const activity = await prisma.activity.findUnique({
+    where: { id: activityId },
+  });
+
+  if (!activity || !activity.isPersonal || activity.ownerUserId !== userId) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Activity not found' });
+  }
+
+  return activity;
+}
 
 export async function recomputeLiveDayScore(
   prisma: PrismaService,
@@ -821,6 +1020,163 @@ export class ActivitiesService {
     });
 
     return { log, dayTotals };
+  }
+
+  // Activity editor — mid-challenge edits affect scoring FORWARD only; stored
+  // DayScore rows are never retroactively recomputed.
+  async listGroupActivities(
+    prisma: PrismaService,
+    userId: string,
+    groupId: string,
+  ): Promise<ActivityEditorRow[]> {
+    const activities = await prisma.activity.findMany({
+      where: { groupId, isPersonal: false, scored: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+    return activities.map(mapActivityToEditorRow);
+  }
+
+  async createGroupActivity(
+    prisma: PrismaService,
+    userId: string,
+    groupId: string,
+    input: CreateCustomActivityInput,
+  ): Promise<ActivityEditorRow> {
+    const sortOrder =
+      input.sortOrder ??
+      (await resolveNextSortOrder(prisma, {
+        groupId,
+        isPersonal: false,
+        scored: true,
+      }));
+
+    const activity = await prisma.activity.create({
+      data: {
+        ...buildCreateActivityData({ ...input, sortOrder }),
+        groupId,
+        ownerUserId: null,
+        isPersonal: false,
+        scored: true,
+      },
+    });
+
+    return mapActivityToEditorRow(activity);
+  }
+
+  async updateGroupActivity(
+    prisma: PrismaService,
+    userId: string,
+    groupId: string,
+    input: UpdateActivityInput,
+  ): Promise<ActivityEditorRow> {
+    const activity = await assertGroupActivity(
+      prisma,
+      input.activityId,
+      groupId,
+    );
+    const data = buildUpdateActivityData(activity, input);
+
+    const updated = await prisma.activity.update({
+      where: { id: activity.id },
+      data,
+    });
+
+    return mapActivityToEditorRow(updated);
+  }
+
+  async setGroupActivityActive(
+    prisma: PrismaService,
+    userId: string,
+    groupId: string,
+    input: SetActivityActiveInput,
+  ): Promise<ActivityEditorRow> {
+    const activity = await assertGroupActivity(
+      prisma,
+      input.activityId,
+      groupId,
+    );
+
+    const updated = await prisma.activity.update({
+      where: { id: activity.id },
+      data: { active: input.active },
+    });
+
+    return mapActivityToEditorRow(updated);
+  }
+
+  async listMyPersonalActivities(
+    prisma: PrismaService,
+    userId: string,
+  ): Promise<ActivityEditorRow[]> {
+    const activities = await prisma.activity.findMany({
+      where: { ownerUserId: userId, isPersonal: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+    return activities.map(mapActivityToEditorRow);
+  }
+
+  async createPersonalActivity(
+    prisma: PrismaService,
+    userId: string,
+    input: CreateCustomActivityInput,
+  ): Promise<ActivityEditorRow> {
+    const sortOrder =
+      input.sortOrder ??
+      (await resolveNextSortOrder(prisma, {
+        ownerUserId: userId,
+        isPersonal: true,
+      }));
+
+    const activity = await prisma.activity.create({
+      data: {
+        ...buildCreateActivityData({ ...input, sortOrder }),
+        groupId: null,
+        ownerUserId: userId,
+        isPersonal: true,
+        scored: false,
+      },
+    });
+
+    return mapActivityToEditorRow(activity);
+  }
+
+  async updatePersonalActivity(
+    prisma: PrismaService,
+    userId: string,
+    input: UpdateActivityInput,
+  ): Promise<ActivityEditorRow> {
+    const activity = await assertPersonalActivityOwnership(
+      prisma,
+      input.activityId,
+      userId,
+    );
+    const data = buildUpdateActivityData(activity, input);
+
+    const updated = await prisma.activity.update({
+      where: { id: activity.id },
+      data,
+    });
+
+    return mapActivityToEditorRow(updated);
+  }
+
+  async archivePersonalActivity(
+    prisma: PrismaService,
+    userId: string,
+    activityId: string,
+  ): Promise<ActivityEditorRow> {
+    const activity = await assertPersonalActivityOwnership(
+      prisma,
+      activityId,
+      userId,
+    );
+
+    const updated = await prisma.activity.update({
+      where: { id: activity.id },
+      data: { active: false },
+    });
+
+    return mapActivityToEditorRow(updated);
   }
 }
 

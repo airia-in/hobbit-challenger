@@ -8,7 +8,7 @@ import { buildInviteUrl } from '../../utils/invite-url';
 import { getMemberStatus } from '../../utils/member-status';
 import { publicProcedure, protectedProcedure, router } from '../trpc';
 
-async function requireGroupAdmin(
+export async function requireGroupAdmin(
   prisma: PrismaService,
   userId: string,
   groupId: string,

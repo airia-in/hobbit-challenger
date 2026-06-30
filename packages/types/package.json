@@ -9,6 +9,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"src/**/*.ts\""
   },
+  "dependencies": {
+    "zod": "catalog:"
+  },
   "devDependencies": {
     "@workspace-starter/config-typescript": "workspace:*",
     "eslint": "catalog:dev-tools",

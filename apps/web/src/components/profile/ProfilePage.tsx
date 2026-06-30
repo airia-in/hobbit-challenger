@@ -1,17 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AuthGateInner } from '../auth/AuthGate';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
 import { performClientLogout } from '../../lib/auth';
 import { trpc } from '../../lib/trpc';
 
+function phoneToLocalInput(e164: string | null): string {
+  if (!e164) return '';
+  if (e164.startsWith('+91')) return e164.slice(3);
+  return e164.replace(/^\+\d+/, '');
+}
+
 function ProfileContent() {
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [reminderTime, setReminderTime] = useState('');
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const phoneInputRef = useRef<HTMLInputElement>(null);
 
   const utils = trpc.useUtils();
   const profile = trpc.profile.get.useQuery();
@@ -41,6 +50,8 @@ function ProfileContent() {
   useEffect(() => {
     if (profile.data) {
       setName(profile.data.name);
+      setPhone(phoneToLocalInput(profile.data.phone));
+      setEmail(profile.data.email ?? '');
       setReminderTime(profile.data.reminderTime ?? '');
     }
   }, [profile.data]);
@@ -50,6 +61,19 @@ function ProfileContent() {
       setNotificationsEnabled(Notification.permission === 'granted');
     }
   }, []);
+
+  const needsPhoneMigration = Boolean(
+    profile.data?.email && !profile.data?.phone,
+  );
+
+  useEffect(() => {
+    if (!needsPhoneMigration || !phoneInputRef.current) return;
+    phoneInputRef.current.focus();
+    phoneInputRef.current.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    });
+  }, [needsPhoneMigration]);
 
   async function requestNotifications() {
     if (!('Notification' in window)) return;
@@ -100,6 +124,21 @@ function ProfileContent() {
         </p>
       )}
 
+      {needsPhoneMigration && (
+        <div
+          className="rounded-lg border border-[var(--accent-red)]/50 bg-[var(--accent-red)]/10 px-4 py-4"
+          role="status"
+        >
+          <p className="text-sm font-medium text-[var(--text-primary)]">
+            Add your phone number to finish setting up your account
+          </p>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            We&apos;re moving to phone-based sign-in. Add your number below so
+            you can log in with it next time.
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--border)] text-2xl font-bold text-[var(--text-muted)]">
           {data.avatarUrl ? (
@@ -136,6 +175,13 @@ function ProfileContent() {
           setMessage(null);
           updateProfile.mutate({
             name: name !== data.name ? name : undefined,
+            phone: phone !== phoneToLocalInput(data.phone) ? phone : undefined,
+            email:
+              email !== (data.email ?? '')
+                ? email
+                  ? email
+                  : undefined
+                : undefined,
             password: password || undefined,
             reminderTime: reminderTime || null,
           });
@@ -153,6 +199,42 @@ function ProfileContent() {
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
+            className="w-full rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-[var(--text-primary)]"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs uppercase tracking-wider text-[var(--text-muted)]">
+            Phone
+          </label>
+          <div className="flex">
+            <span className="inline-flex items-center rounded-l border border-r-0 border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm text-[var(--text-muted)]">
+              +91
+            </span>
+            <input
+              ref={phoneInputRef}
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="9876543210"
+              className={`w-full rounded-r border bg-[var(--surface-raised)] px-3 py-2 text-[var(--text-primary)] ${
+                needsPhoneMigration
+                  ? 'border-[var(--accent-red)] focus:border-[var(--accent-red)]'
+                  : 'border-[var(--border)]'
+              }`}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs uppercase tracking-wider text-[var(--text-muted)]">
+            Email <span className="normal-case">(optional)</span>
+          </label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
             className="w-full rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-[var(--text-primary)]"
           />
         </div>

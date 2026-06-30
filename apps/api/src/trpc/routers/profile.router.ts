@@ -17,6 +17,8 @@ export const profileRouter = router({
         name: z.string().min(1).optional(),
         password: z.string().min(8).optional(),
         reminderTime: z.string().nullable().optional(),
+        phone: z.string().min(1).optional(),
+        email: z.string().email().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

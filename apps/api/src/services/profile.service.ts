@@ -1,4 +1,5 @@
 import { TRPCError } from '@trpc/server';
+import { normalizePhone, PhoneValidationError } from '../auth/phone';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { AuthService } from './auth.service';
 import { activeChallengeRelationArgs } from '../utils/challenge-query';
@@ -43,16 +44,26 @@ export async function getProfile(
   };
 }
 
+export type UpdateProfileInput = {
+  name?: string;
+  password?: string;
+  reminderTime?: string | null;
+  phone?: string;
+  email?: string;
+};
+
 export async function updateProfile(
   prisma: PrismaService,
   authService: AuthService,
   userId: string,
-  input: { name?: string; password?: string; reminderTime?: string | null },
+  input: UpdateProfileInput,
 ) {
   const data: {
     name?: string;
     passwordHash?: string;
     reminderTime?: string | null;
+    phone?: string;
+    email?: string;
   } = {};
 
   if (input.name !== undefined) {
@@ -86,6 +97,49 @@ export async function updateProfile(
       });
     }
     data.reminderTime = input.reminderTime;
+  }
+
+  if (input.phone !== undefined) {
+    let normalizedPhone: string;
+    try {
+      normalizedPhone = normalizePhone(input.phone);
+    } catch (error) {
+      if (error instanceof PhoneValidationError) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Invalid phone number',
+        });
+      }
+      throw error;
+    }
+
+    const existingByPhone = await prisma.user.findUnique({
+      where: { phone: normalizedPhone },
+    });
+
+    if (existingByPhone && existingByPhone.id !== userId) {
+      throw new TRPCError({
+        code: 'CONFLICT',
+        message: 'Account already exists',
+      });
+    }
+
+    data.phone = normalizedPhone;
+  }
+
+  if (input.email !== undefined) {
+    const existingByEmail = await prisma.user.findUnique({
+      where: { email: input.email },
+    });
+
+    if (existingByEmail && existingByEmail.id !== userId) {
+      throw new TRPCError({
+        code: 'CONFLICT',
+        message: 'Account already exists',
+      });
+    }
+
+    data.email = input.email;
   }
 
   if (Object.keys(data).length === 0) {

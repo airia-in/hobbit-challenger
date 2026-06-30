@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
 import { setToken } from '../../lib/auth';
+import { formatRegisterPhonePreview } from '../../lib/phone-preview';
 
 type Tab = 'signin' | 'register';
 
@@ -43,6 +44,8 @@ function LoginFormInner() {
   });
 
   const isPending = login.isPending || register.isPending;
+  const phonePreview =
+    tab === 'register' ? formatRegisterPhonePreview(phone) : null;
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -136,6 +139,11 @@ function LoginFormInner() {
                 }
               />
             </div>
+            {phonePreview && (
+              <p className="mt-1.5 text-xs text-[var(--text-muted)]">
+                Will register as {phonePreview}
+              </p>
+            )}
           </div>
 
           <div>

@@ -186,8 +186,9 @@ export async function getActivitySeries(
   const range = clampDateRange(fromKey, toKey);
   if (range.to < range.from) return [];
 
+  // Include inactive challenges so historical progress stays visible (see getDashboardStats).
   const challenge = await prisma.challenge.findFirst({
-    where: { userId, isActive: true },
+    where: { userId },
     orderBy: challengeDisplayOrderBy,
   });
   if (!challenge) return [];
@@ -256,8 +257,9 @@ export async function getActivityCompletion(
     return { rateByWeek: [], streak: 0, days: [] };
   }
 
+  // Include inactive challenges so historical progress stays visible (see getDashboardStats).
   const challenge = await prisma.challenge.findFirst({
-    where: { userId, isActive: true },
+    where: { userId },
     orderBy: challengeDisplayOrderBy,
   });
   if (!challenge) {

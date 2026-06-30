@@ -25,6 +25,7 @@ services:
       PORT: 3001
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:4321,http://127.0.0.1:4321}
       DATABASE_URL: ${DATABASE_URL:-file:/app/data/prod.db}
+      DATABASE_AUTH_TOKEN: ${DATABASE_AUTH_TOKEN:-}
       JWT_SECRET: ${JWT_SECRET:-change-me}
       UPLOAD_DIR: /app/data/uploads
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-10485760}

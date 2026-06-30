@@ -12,20 +12,25 @@
   "scripts": {
     "build": "prisma generate",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint \"src/**/*.ts\"",
+    "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "test": "vitest run",
     "postinstall": "prisma generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@libsql/client": "^0.8.1",
+    "@prisma/adapter-libsql": "^6.19.3",
     "@prisma/client": "^6.8.2",
     "prisma": "^6.8.2"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "@workspace-starter/config-typescript": "workspace:*",
     "eslint": "catalog:dev-tools",
     "tsx": "^4.19.4",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

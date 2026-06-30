@@ -1,5 +1,8 @@
 {
   "extends": "@workspace-starter/config-typescript/base.json",
-  "include": ["src"],
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src", "tests"],
   "exclude": ["node_modules"]
 }

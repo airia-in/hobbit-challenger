@@ -240,15 +240,16 @@ describe('profileRouter avatarUrl', () => {
     expect(stores.users.get(USER_ID)?.avatarUrl).toBeNull();
   });
 
-  it.each(['https://evil.com/x.jpg', '/uploads/../x.jpg'])(
-    'rejects invalid avatarUrl %s with BAD_REQUEST',
-    async (avatarUrl) => {
-      const stores = legacyUserStore();
-      const caller = profileRouter.createCaller(createProfileContext(stores));
+  it.each([
+    'https://evil.com/x.jpg',
+    '/uploads/../x.jpg',
+    'data:image/png;base64,AAAA',
+  ])('rejects invalid avatarUrl %s with BAD_REQUEST', async (avatarUrl) => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
 
-      await expect(caller.update({ avatarUrl })).rejects.toMatchObject({
-        code: 'BAD_REQUEST',
-      } satisfies Partial<TRPCError>);
-    },
-  );
+    await expect(caller.update({ avatarUrl })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    } satisfies Partial<TRPCError>);
+  });
 });

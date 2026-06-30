@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '../utils/cn';
 
 export type ProofUploaderProps = {
@@ -32,6 +32,13 @@ export function ProofUploader({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(value ?? null);
+
+  // Keep the preview in sync when the controlled value changes externally
+  // (e.g. parent clears it after a Remove, or sets a new one), so a stale
+  // image and "Replace photo" label don't linger.
+  useEffect(() => {
+    setPreview(value ?? null);
+  }, [value]);
 
   async function handleFile(file: File) {
     if (!authToken) {

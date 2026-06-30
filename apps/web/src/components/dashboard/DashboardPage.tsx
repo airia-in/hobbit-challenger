@@ -14,6 +14,7 @@ import { AuthGateInner } from '../auth/AuthGate';
 import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
+import { verdictClass, verdictLabel } from '../../lib/ai-verdict';
 import { getToken } from '../../lib/auth';
 import { trpc } from '../../lib/trpc';
 import {
@@ -156,8 +157,8 @@ function ProofSection({
 }) {
   if (!activity.canAttachProof) return null;
 
+  const verdict = activity.log?.aiVerdict ?? null;
   const hasProof = Boolean(activity.log?.proofUrl);
-  const aiPending = hasProof && activity.log?.aiVerdict == null;
 
   return (
     <div className="mt-3 space-y-2">
@@ -170,13 +171,21 @@ function ProofSection({
         onUploaded={onAttach}
         buttonClassName="text-xs"
       />
-      {aiPending && (
+      {hasProof && verdict == null && (
         <p
           className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          AI bonus pending
+          AI check pending
         </p>
+      )}
+      {hasProof && verdict != null && (
+        <span
+          className={`rounded border px-2 py-0.5 text-[10px] uppercase tracking-wider ${verdictClass(verdict)}`}
+          style={{ fontFamily: 'var(--font-mono)' }}
+        >
+          {verdictLabel(verdict)}
+        </span>
       )}
     </div>
   );

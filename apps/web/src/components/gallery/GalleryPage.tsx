@@ -3,6 +3,7 @@ import { AuthGateInner } from '../auth/AuthGate';
 import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
+import { verdictClass } from '../../lib/ai-verdict';
 import { trpc } from '../../lib/trpc';
 
 const apiUrl = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -17,16 +18,6 @@ function formatDate(date: Date | string) {
     month: 'short',
     day: 'numeric',
   });
-}
-
-function verdictClass(verdict: string | null): string {
-  if (verdict === 'PASSED' || verdict === 'BONUS') {
-    return 'text-[var(--success)] border-[var(--success)]/30 bg-[var(--success)]/10';
-  }
-  if (verdict === 'FAILED') {
-    return 'text-[var(--accent-red)] border-[var(--accent-red)]/30 bg-[var(--accent-red)]/10';
-  }
-  return 'text-[var(--text-muted)] border-[var(--border)] bg-[var(--surface-raised)]';
 }
 
 type LightboxPhoto = {

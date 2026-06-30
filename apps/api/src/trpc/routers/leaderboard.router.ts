@@ -1,9 +1,13 @@
 import { z } from 'zod';
-import { getLeaderboard } from '../../services/leaderboard.service';
+import {
+  getLeaderboard,
+  getLeaderboardSeries,
+} from '../../services/leaderboard.service';
 import { protectedProcedure, router } from '../trpc';
 
 const windowSchema = z.enum(['today', 'week', 'total']);
 const sortBySchema = z.enum(['xp', 'streak', 'name', 'day', 'successRate']);
+const metricSchema = z.enum(['cumulative', 'daily']);
 
 export const leaderboardRouter = router({
   get: protectedProcedure
@@ -21,6 +25,22 @@ export const leaderboardRouter = router({
         ctx.user.id,
         input?.window ?? 'today',
         input?.sortBy ?? 'xp',
+      );
+    }),
+
+  series: protectedProcedure
+    .input(
+      z.object({
+        window: windowSchema.default('total'),
+        metric: metricSchema.default('cumulative'),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      return getLeaderboardSeries(
+        ctx.prisma,
+        ctx.user.id,
+        input.window,
+        input.metric,
       );
     }),
 });

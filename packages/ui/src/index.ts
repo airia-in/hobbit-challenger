@@ -14,6 +14,20 @@ export type {
   HeatmapGridProps,
 } from './components/HeatmapGrid';
 
+export { LineChart } from './components/LineChart';
+export type {
+  LineChartPoint,
+  LineChartProps,
+  LineChartSeries,
+} from './components/LineChart';
+
+export { CompletionHeatmap } from './components/CompletionHeatmap';
+export type {
+  CompletionHeatmapDay,
+  CompletionHeatmapDayState,
+  CompletionHeatmapProps,
+} from './components/CompletionHeatmap';
+
 export { LeaderboardTable } from './components/LeaderboardTable';
 export type {
   LeaderboardMember,

@@ -76,6 +76,11 @@ function formatDateKey(date: Date, timeZone: string): string {
   return date.toLocaleDateString('en-CA', { timeZone });
 }
 
+/** YYYY-MM-DD for a UTC instant in the user's timezone. */
+export function formatLocalDateKey(date: Date, timezone: string): string {
+  return formatDateKey(date, timezone);
+}
+
 function parseDateKey(
   dateKey: string,
 ): Omit<DateParts, 'hour' | 'minute' | 'second'> {

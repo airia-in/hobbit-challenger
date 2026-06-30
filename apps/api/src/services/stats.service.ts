@@ -1,9 +1,21 @@
 import { TRPCError } from '@trpc/server';
+import type { Activity } from '@workspace-starter/db';
 import type { PrismaService } from '../prisma/prisma.service';
 import { challengeDisplayOrderBy } from '../utils/challenge-query';
 import { isInterimDayCompleted } from '../utils/day-completion';
-import { addLocalDays, getUserLocalDate } from '../utils/day-window';
+import {
+  addLocalDays,
+  formatLocalDateKey,
+  getUserLocalDate,
+} from '../utils/day-window';
 import { getLiveStreak } from '../utils/live-streak';
+import {
+  clampDateRange,
+  shapeActivityCompletion,
+  shapeActivitySeries,
+  type ActivityCompletionResult,
+  type ActivitySeriesPoint,
+} from '../utils/stats-aggregation';
 
 export type DashboardStats = {
   totalXp: number;
@@ -99,4 +111,189 @@ export async function getDashboardStats(
     successRate,
     timesRestarted: 0,
   };
+}
+
+const COMPLETION_KINDS = new Set(['CHECKBOX', 'SUBPOINTS', 'TIERED']);
+
+async function assertActivityInScope(
+  activity: Activity,
+  userId: string,
+  groupId: string | null,
+): Promise<void> {
+  if (activity.isPersonal && activity.ownerUserId === userId) {
+    return;
+  }
+  if (activity.groupId && activity.groupId === groupId) {
+    return;
+  }
+  throw new TRPCError({
+    code: 'NOT_FOUND',
+    message: 'Activity not found',
+  });
+}
+
+function toActivityLogRows(
+  logs: {
+    date: Date;
+    value: number | null;
+    xpAwarded: number;
+    state: string | null;
+    tier: string | null;
+    subPoints: unknown;
+  }[],
+  timezone: string,
+) {
+  return logs.map((log) => ({
+    date: formatLocalDateKey(log.date, timezone),
+    value: log.value,
+    xpAwarded: log.xpAwarded,
+    state: log.state,
+    tier: log.tier,
+    subPoints: log.subPoints,
+  }));
+}
+
+export async function getActivitySeries(
+  prisma: PrismaService,
+  userId: string,
+  activityId: string,
+  from: Date,
+  to: Date,
+): Promise<ActivitySeriesPoint[]> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+  }
+
+  const activity = await prisma.activity.findUnique({
+    where: { id: activityId },
+  });
+  if (!activity) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Activity not found' });
+  }
+
+  await assertActivityInScope(activity, userId, user.groupId);
+
+  if (activity.kind !== 'NUMBER') {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Activity series is only available for NUMBER activities',
+    });
+  }
+
+  const fromKey = formatLocalDateKey(from, user.timezone);
+  const toKey = formatLocalDateKey(to, user.timezone);
+  const range = clampDateRange(fromKey, toKey);
+  if (range.to < range.from) return [];
+
+  const challenge = await prisma.challenge.findFirst({
+    where: { userId, isActive: true },
+    orderBy: challengeDisplayOrderBy,
+  });
+  if (!challenge) return [];
+
+  const logs = await prisma.activityLog.findMany({
+    where: {
+      userId,
+      activityId,
+      challengeId: challenge.id,
+      date: {
+        gte: from,
+        lte: to,
+      },
+    },
+    select: {
+      date: true,
+      value: true,
+      xpAwarded: true,
+      state: true,
+      tier: true,
+      subPoints: true,
+    },
+    orderBy: { date: 'asc' },
+  });
+
+  return shapeActivitySeries(
+    toActivityLogRows(logs, user.timezone),
+    range.from,
+    range.to,
+  );
+}
+
+export async function getActivityCompletion(
+  prisma: PrismaService,
+  userId: string,
+  activityId: string,
+  from: Date,
+  to: Date,
+): Promise<ActivityCompletionResult> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+  }
+
+  const activity = await prisma.activity.findUnique({
+    where: { id: activityId },
+  });
+  if (!activity) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Activity not found' });
+  }
+
+  await assertActivityInScope(activity, userId, user.groupId);
+
+  if (!COMPLETION_KINDS.has(activity.kind)) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message:
+        'Activity completion is only available for CHECKBOX, SUBPOINTS, or TIERED activities',
+    });
+  }
+
+  const fromKey = formatLocalDateKey(from, user.timezone);
+  const toKey = formatLocalDateKey(to, user.timezone);
+  const range = clampDateRange(fromKey, toKey);
+  if (range.to < range.from) {
+    return { rateByWeek: [], streak: 0, days: [] };
+  }
+
+  const challenge = await prisma.challenge.findFirst({
+    where: { userId, isActive: true },
+    orderBy: challengeDisplayOrderBy,
+  });
+  if (!challenge) {
+    return { rateByWeek: [], streak: 0, days: [] };
+  }
+
+  const logs = await prisma.activityLog.findMany({
+    where: {
+      userId,
+      activityId,
+      challengeId: challenge.id,
+      date: {
+        gte: from,
+        lte: to,
+      },
+    },
+    select: {
+      date: true,
+      value: true,
+      xpAwarded: true,
+      state: true,
+      tier: true,
+      subPoints: true,
+    },
+    orderBy: { date: 'asc' },
+  });
+
+  const todayKey = formatLocalDateKey(
+    getUserLocalDate(user.timezone),
+    user.timezone,
+  );
+
+  return shapeActivityCompletion(
+    toActivityLogRows(logs, user.timezone),
+    range.from,
+    range.to,
+    todayKey,
+  );
 }

@@ -2,9 +2,19 @@ import { TRPCError } from '@trpc/server';
 import type { PrismaService } from '../prisma/prisma.service';
 import { latestChallengeRelationArgs } from '../utils/challenge-query';
 import { isInterimDayCompleted } from '../utils/day-completion';
-import { getIsoWeekRange, getUserLocalDate } from '../utils/day-window';
+import {
+  formatLocalDateKey,
+  getIsoWeekRange,
+  getUserLocalDate,
+} from '../utils/day-window';
 import { getLiveStreak } from '../utils/live-streak';
 import { getMemberStatus } from '../utils/member-status';
+import {
+  assertLeaderboardSeriesPrivacy,
+  shapeLeaderboardSeries,
+  type LeaderboardSeriesMetric,
+  type LeaderboardSeriesResult,
+} from '../utils/stats-aggregation';
 
 export type LeaderboardWindow = 'today' | 'week' | 'total';
 export type LeaderboardSortBy =
@@ -185,4 +195,89 @@ export async function getLeaderboard(
     members: ranked,
     podium: ranked.slice(0, 3),
   };
+}
+
+function resolveSeriesDateRange(
+  window: LeaderboardWindow,
+  timezone: string,
+  challengeStart: Date | null,
+): { from: string; to: string } {
+  const today = getUserLocalDate(timezone);
+  const to = formatLocalDateKey(today, timezone);
+
+  if (window === 'today') {
+    return { from: to, to };
+  }
+
+  if (window === 'week') {
+    const { start, end } = getIsoWeekRange(timezone);
+    return {
+      from: formatLocalDateKey(start, timezone),
+      to: formatLocalDateKey(end, timezone),
+    };
+  }
+
+  const from = challengeStart
+    ? formatLocalDateKey(challengeStart, timezone)
+    : to;
+  return { from, to };
+}
+
+export async function getLeaderboardSeries(
+  prisma: PrismaService,
+  userId: string,
+  window: LeaderboardWindow = 'total',
+  metric: LeaderboardSeriesMetric = 'cumulative',
+): Promise<LeaderboardSeriesResult> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+
+  if (!user?.groupId) {
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: 'Join a group to view leaderboard series',
+    });
+  }
+
+  const members = await prisma.user.findMany({
+    where: { groupId: user.groupId },
+    select: {
+      id: true,
+      name: true,
+      timezone: true,
+      challenges: {
+        ...latestChallengeRelationArgs(),
+        select: {
+          startDate: true,
+          dayScores: {
+            select: { date: true, netXp: true },
+            orderBy: { date: 'asc' },
+          },
+        },
+      },
+    },
+  });
+
+  const callerChallenge = members.find((member) => member.id === userId)
+    ?.challenges[0];
+  const { from, to } = resolveSeriesDateRange(
+    window,
+    user.timezone,
+    callerChallenge?.startDate ?? null,
+  );
+
+  const memberInputs = members.map((member) => {
+    const challenge = member.challenges[0];
+    return {
+      id: member.id,
+      name: member.name,
+      dayScores: (challenge?.dayScores ?? []).map((score) => ({
+        date: formatLocalDateKey(score.date, member.timezone),
+        netXp: score.netXp,
+      })),
+    };
+  });
+
+  const result = shapeLeaderboardSeries(memberInputs, from, to, metric, userId);
+  assertLeaderboardSeriesPrivacy(result);
+  return result;
 }

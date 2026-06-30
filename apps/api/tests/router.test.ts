@@ -29,6 +29,11 @@ describe('appRouter', () => {
     expect(appRouter._def.procedures).toHaveProperty('activities.markActivity');
     expect(appRouter._def.procedures).toHaveProperty('guidance.ask');
     expect(appRouter._def.procedures).toHaveProperty('leaderboard.get');
+    expect(appRouter._def.procedures).toHaveProperty('leaderboard.series');
+    expect(appRouter._def.procedures).toHaveProperty('stats.activitySeries');
+    expect(appRouter._def.procedures).toHaveProperty(
+      'stats.activityCompletion',
+    );
   });
 
   it('rejects unauthenticated auth.me', async () => {

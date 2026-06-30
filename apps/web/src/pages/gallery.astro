@@ -1,0 +1,8 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { GalleryPage } from '../components/gallery/GalleryPage';
+---
+
+<BaseLayout title="DRCODE 75 HARD CHALLENGE — Gallery">
+  <GalleryPage client:load currentPath="/gallery" />
+</BaseLayout>

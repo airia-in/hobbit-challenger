@@ -34,6 +34,7 @@ describe('appRouter', () => {
     expect(appRouter._def.procedures).toHaveProperty(
       'stats.activityCompletion',
     );
+    expect(appRouter._def.procedures).toHaveProperty('gallery.list');
   });
 
   it('rejects unauthenticated auth.me', async () => {

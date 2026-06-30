@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊' },
   { href: '/progress', label: 'Progress', icon: '📈' },
+  { href: '/gallery', label: 'Gallery', icon: '🖼️' },
   { href: '/leaderboard', label: 'Leaderboard', icon: '🏆' },
   { href: '/history', label: 'History', icon: '📜' },
   { href: '/profile', label: 'Profile', icon: '👤' },

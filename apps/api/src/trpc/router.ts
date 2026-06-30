@@ -8,6 +8,7 @@ import { profileRouter } from './routers/profile.router';
 import { statsRouter } from './routers/stats.router';
 import { activitiesRouter } from './routers/activities.router';
 import { guidanceRouter } from './routers/guidance.router';
+import { galleryRouter } from './routers/gallery.router';
 
 export const appRouter = router({
   auth: authRouter,
@@ -18,6 +19,7 @@ export const appRouter = router({
   heatmap: heatmapRouter,
   leaderboard: leaderboardRouter,
   history: historyRouter,
+  gallery: galleryRouter,
   profile: profileRouter,
 });
 

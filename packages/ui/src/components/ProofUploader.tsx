@@ -30,14 +30,18 @@ export function ProofUploader({
 }: ProofUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(value ?? null);
 
   async function handleFile(file: File) {
     if (!authToken) {
-      onError?.('Not authenticated');
+      const message = 'Not authenticated';
+      setError(message);
+      onError?.(message);
       return;
     }
 
+    setError(null);
     setUploading(true);
     try {
       const formData = new FormData();
@@ -59,8 +63,10 @@ export function ProofUploader({
       const data = (await response.json()) as { url: string };
       setPreview(data.url);
       onUploaded(data.url);
-    } catch (error) {
-      onError?.(error instanceof Error ? error.message : 'Upload failed');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      setError(message);
+      onError?.(message);
     } finally {
       setUploading(false);
     }
@@ -108,6 +114,8 @@ export function ProofUploader({
             ? 'Replace photo'
             : 'Upload photo proof'}
       </button>
+
+      {error && <p className="text-sm text-[var(--accent-red)]">{error}</p>}
     </div>
   );
 }

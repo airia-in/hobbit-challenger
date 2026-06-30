@@ -115,4 +115,22 @@ describe('GalleryContent', () => {
       screen.queryByRole('dialog', { name: /photo preview/i }),
     ).not.toBeInTheDocument();
   });
+
+  it('shows error state with retry when query fails', async () => {
+    const refetch = vi.fn();
+    mockUseQuery.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: { message: 'Failed to load gallery' },
+      refetch,
+    });
+
+    render(<GalleryContent />);
+
+    expect(screen.getByText('Failed to load gallery')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
 });

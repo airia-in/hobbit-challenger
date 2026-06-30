@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AuthGateInner } from '../auth/AuthGate';
+import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
@@ -28,6 +29,7 @@ function HistoryContent() {
   const [taskType, setTaskType] = useState<TaskType | ''>('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const filters: {
     taskType?: TaskType;
@@ -51,9 +53,13 @@ function HistoryContent() {
   );
 
   function handleExport() {
+    setExportError(null);
     void exportCsv.refetch().then((result) => {
       const csv = result.data?.csv;
-      if (!csv) return;
+      if (!csv) {
+        setExportError('Export failed, please try again.');
+        return;
+      }
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -88,14 +94,19 @@ function HistoryContent() {
             Your challenge timeline
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={exportCsv.isFetching}
-          className="w-full rounded border border-[var(--border)] px-4 py-2 text-xs uppercase tracking-wider text-[var(--text-primary)] hover:border-[var(--accent-red)] disabled:opacity-50 sm:w-auto"
-        >
-          {exportCsv.isFetching ? 'Exporting...' : 'Export CSV'}
-        </button>
+        <div className="flex flex-col items-stretch gap-2 sm:items-end">
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exportCsv.isFetching}
+            className="w-full rounded border border-[var(--border)] px-4 py-2 text-xs uppercase tracking-wider text-[var(--text-primary)] hover:border-[var(--accent-red)] disabled:opacity-50 sm:w-auto"
+          >
+            {exportCsv.isFetching ? 'Exporting...' : 'Export CSV'}
+          </button>
+          {exportError && (
+            <p className="text-xs text-[var(--accent-red)]">{exportError}</p>
+          )}
+        </div>
       </header>
 
       <div className="grid grid-cols-1 gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 sm:grid-cols-2 lg:flex lg:flex-wrap">
@@ -130,6 +141,13 @@ function HistoryContent() {
         <p className="text-center text-sm text-[var(--text-muted)]">
           Loading history...
         </p>
+      )}
+
+      {history.isError && (
+        <QueryErrorState
+          message={history.error?.message}
+          onRetry={() => history.refetch()}
+        />
       )}
 
       <div className="space-y-4">
@@ -202,7 +220,7 @@ function HistoryContent() {
           );
         })}
 
-        {!history.isLoading && entries.length === 0 && (
+        {!history.isLoading && !history.isError && entries.length === 0 && (
           <p className="text-center text-sm text-[var(--text-muted)]">
             No history yet.
           </p>

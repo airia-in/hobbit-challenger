@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AuthGateInner } from '../auth/AuthGate';
+import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
 import { PersonalActivitiesSection } from '../activities/PersonalActivitiesSection';
@@ -21,6 +22,7 @@ function ProfileContent() {
   const [whatsappOptIn, setWhatsappOptIn] = useState(true);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const phoneInputRef = useRef<HTMLInputElement>(null);
 
   const utils = trpc.useUtils();
@@ -85,9 +87,13 @@ function ProfileContent() {
   }
 
   function handleExport() {
+    setExportError(null);
     void exportCsv.refetch().then((result) => {
       const csv = result.data?.csv;
-      if (!csv) return;
+      if (!csv) {
+        setExportError('Export failed, please try again.');
+        return;
+      }
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -104,6 +110,17 @@ function ProfileContent() {
         <p className="text-sm uppercase tracking-[0.3em] text-[var(--text-muted)]">
           Loading profile...
         </p>
+      </div>
+    );
+  }
+
+  if (profile.isError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <QueryErrorState
+          message={profile.error?.message}
+          onRetry={() => profile.refetch()}
+        />
       </div>
     );
   }
@@ -325,6 +342,10 @@ function ProfileContent() {
         >
           {exportCsv.isFetching ? 'Exporting...' : 'Export Data CSV'}
         </button>
+
+        {exportError && (
+          <p className="text-sm text-[var(--accent-red)]">{exportError}</p>
+        )}
 
         {data.groupId && !data.isGroupAdmin && (
           <button

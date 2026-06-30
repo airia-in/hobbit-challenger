@@ -11,6 +11,7 @@ import {
   type SubPointState,
 } from '@workspace-starter/ui';
 import { AuthGateInner } from '../auth/AuthGate';
+import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
 import { getToken } from '../../lib/auth';
@@ -268,6 +269,21 @@ function DashboardContent() {
         >
           Loading dashboard...
         </p>
+      </div>
+    );
+  }
+
+  if (activitiesQuery.isError || statsQuery.isError) {
+    const errorQuery = activitiesQuery.isError ? activitiesQuery : statsQuery;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-black)] px-4">
+        <QueryErrorState
+          message={errorQuery.error?.message}
+          onRetry={() => {
+            if (activitiesQuery.isError) void activitiesQuery.refetch();
+            if (statsQuery.isError) void statsQuery.refetch();
+          }}
+        />
       </div>
     );
   }

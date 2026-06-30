@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AuthGateInner } from '../auth/AuthGate';
+import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
@@ -171,6 +172,13 @@ export function GalleryContent() {
         </p>
       )}
 
+      {gallery.isError && (
+        <QueryErrorState
+          message={gallery.error?.message}
+          onRetry={() => gallery.refetch()}
+        />
+      )}
+
       <div className="space-y-4">
         {days.map((day) => {
           const dateLabel = formatDate(day.date);
@@ -234,7 +242,7 @@ export function GalleryContent() {
           );
         })}
 
-        {!gallery.isLoading && days.length === 0 && (
+        {!gallery.isLoading && !gallery.isError && days.length === 0 && (
           <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-8 text-center">
             <p className="text-sm text-[var(--text-muted)]">
               No proof photos yet. Complete today&apos;s tasks and attach proof

@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
-import { setToken } from '../../lib/auth';
+import { getToken, setToken } from '../../lib/auth';
 import { formatRegisterPhonePreview } from '../../lib/phone-preview';
 
 type Tab = 'signin' | 'register';
@@ -26,6 +26,18 @@ function LoginFormInner() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  const hasToken = typeof window !== 'undefined' && Boolean(getToken());
+  const me = trpc.auth.me.useQuery(undefined, {
+    enabled: hasToken,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (me.data) {
+      routeAfterAuth(me.data.user.groupId);
+    }
+  }, [me.data]);
 
   const login = trpc.auth.login.useMutation({
     onSuccess: (data) => {
@@ -57,6 +69,21 @@ function LoginFormInner() {
     }
 
     register.mutate({ name, phone, password });
+  }
+
+  // Hold the checking state while verifying AND once a valid session is found,
+  // so the login form never flashes before the redirect effect navigates away.
+  if (hasToken && (me.isLoading || me.data)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-black)]">
+        <p
+          className="text-sm uppercase tracking-[0.3em] text-[var(--text-muted)]"
+          style={{ fontFamily: 'var(--font-mono)' }}
+        >
+          Checking session…
+        </p>
+      </div>
+    );
   }
 
   return (

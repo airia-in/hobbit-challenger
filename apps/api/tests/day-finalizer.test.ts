@@ -390,7 +390,23 @@ type CronFakeSeed = {
   dayScores?: DayScore[];
 };
 
-function createCronFakePrisma(seed: CronFakeSeed) {
+type CronFakeOptions = {
+  /** Override outer dayScore.findFirst (pre-transaction guard read). */
+  dayScoreFindFirstOverride?: (where: {
+    challengeId: string;
+    date: Date;
+  }) => DayScore | null | Promise<DayScore | null>;
+  /** Override tx.dayScore.findUnique (in-transaction authoritative read). */
+  txDayScoreFindUniqueOverride?: (
+    where: { challengeId_date: { challengeId: string; date: Date } },
+    select?: { finalized?: boolean },
+  ) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>;
+};
+
+function createCronFakePrisma(
+  seed: CronFakeSeed,
+  options: CronFakeOptions = {},
+) {
   const users = [...seed.users];
   const challenges = new Map(
     seed.challenges.map((challenge) => [challenge.id, { ...challenge }]),
@@ -456,7 +472,14 @@ function createCronFakePrisma(seed: CronFakeSeed) {
         where,
       }: {
         where: { challengeId: string; date: Date };
-      }) => dayScores.get(dayScoreKey(where.challengeId, where.date)) ?? null,
+      }) => {
+        if (options.dayScoreFindFirstOverride) {
+          return options.dayScoreFindFirstOverride(where);
+        }
+        return (
+          dayScores.get(dayScoreKey(where.challengeId, where.date)) ?? null
+        );
+      },
       findUnique: async ({
         where,
         select,
@@ -501,6 +524,9 @@ function createCronFakePrisma(seed: CronFakeSeed) {
             where: { challengeId_date: { challengeId: string; date: Date } };
             select?: { finalized?: boolean };
           }) => {
+            if (options.txDayScoreFindUniqueOverride) {
+              return options.txDayScoreFindUniqueOverride(where, select);
+            }
             const score =
               dayScores.get(
                 dayScoreKey(
@@ -769,7 +795,9 @@ describe('DayEvaluatorService — cron guards', () => {
     expect(challenge?.totalXp).toBe(200);
   });
 
-  it('is idempotent — running twice does not double-increment totalXp', async () => {
+  // Exercises the pre-transaction findFirst guard (day-evaluator.service.ts:86-95).
+  // The second evaluateDays() sees finalized:true from the first run and returns before $transaction.
+  it('is idempotent via outer guard — second sequential run does not double-increment totalXp', async () => {
     const { prisma, transactionOps, challenges, dayScores } =
       createCronFakePrisma({
         users: [
@@ -832,6 +860,88 @@ describe('DayEvaluatorService — cron guards', () => {
     expect(challenge?.currentDay).toBe(6);
     expect(challenge?.currentStreak).toBe(2);
     expect(score?.finalized).toBe(true);
+  });
+
+  // Exercises the in-transaction findUnique guard (day-evaluator.service.ts:123-134).
+  // Models a race: outer findFirst sees stale finalized:false, but another writer
+  // committed finalized:true before our transaction runs.
+  it('skips finalize when in-transaction guard sees finalized:true (race snapshot)', async () => {
+    const staleScore: DayScore = {
+      id: 'ds-stale',
+      challengeId: 'ch-1',
+      userId: 'user-1',
+      date: previousDay,
+      dayNumber: 4,
+      xpEarned: 200,
+      xpDeducted: 0,
+      netXp: 200,
+      personalXp: 0,
+      breakdown: { allScoredLogged: true, entries: [] },
+      finalized: false,
+    };
+
+    const { prisma, transactionOps, challenges } = createCronFakePrisma(
+      {
+        users: [
+          {
+            id: 'user-1',
+            phone: null,
+            email: 'a@b.com',
+            passwordHash: 'x',
+            name: 'User',
+            timezone,
+            groupId: 'group-1',
+            createdAt: new Date(),
+            avatarUrl: null,
+            reminderTime: null,
+          },
+        ],
+        challenges: [
+          {
+            id: 'ch-1',
+            userId: 'user-1',
+            groupId: 'group-1',
+            startDate,
+            endDate: null,
+            lengthDays: 30,
+            currentDay: 6,
+            isActive: true,
+            totalXp: 200,
+            currentStreak: 2,
+            longestStreak: 2,
+          },
+        ],
+        activities: [makeActivity({ id: 'act-1', groupId: 'group-1' })],
+        activityLogs: [
+          {
+            id: 'log-1',
+            challengeId: 'ch-1',
+            userId: 'user-1',
+            activityId: 'act-1',
+            date: previousDay,
+            value: null,
+            tier: null,
+            subPoints: null,
+            state: 'DONE',
+            xpAwarded: 200,
+            proofUrl: null,
+            aiVerdict: null,
+          },
+        ],
+      },
+      {
+        dayScoreFindFirstOverride: () => staleScore,
+        txDayScoreFindUniqueOverride: () => ({ finalized: true }),
+      },
+    );
+
+    const service = new DayEvaluatorService(prisma as never);
+    await service.evaluateDays();
+
+    const challenge = challenges.get('ch-1');
+    expect(transactionOps).toHaveLength(0);
+    expect(challenge?.totalXp).toBe(200);
+    expect(challenge?.currentDay).toBe(6);
   });
 
   afterEach(() => {

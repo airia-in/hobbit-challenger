@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">DRCODE 75 Hard</string>
-    <string name="title_activity_main">DRCODE 75 Hard</string>
+    <string name="app_name">DRCODE</string>
+    <string name="title_activity_main">DRCODE</string>
     <string name="package_name">com.drcode.hard75</string>
     <string name="custom_url_scheme">com.drcode.hard75</string>
 </resources>

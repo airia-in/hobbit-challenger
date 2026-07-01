@@ -371,7 +371,7 @@ describe('query error surfaces', () => {
     render(<AdminGroupContent />);
 
     expect(screen.getByText('Iron Will Crew')).toBeInTheDocument();
-    expect(screen.getByText('75-Day Heatmap')).toBeInTheDocument();
+    expect(screen.getByText('Challenge Heatmap')).toBeInTheDocument();
     expect(screen.getByText('Unable to load heatmap')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));

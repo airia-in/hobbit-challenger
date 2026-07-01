@@ -1,8 +1,9 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { ProfilePage } from '../components/profile/ProfilePage';
+import { formatPageTitle } from '../lib/brand';
 ---
 
-<BaseLayout title="DRCODE 75 HARD CHALLENGE — Profile">
+<BaseLayout title={formatPageTitle('Profile')}>
   <ProfilePage client:load currentPath="/profile" />
 </BaseLayout>

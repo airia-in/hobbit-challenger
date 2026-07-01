@@ -1,8 +1,9 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { ProgressPage } from '../components/progress/ProgressPage';
+import { formatPageTitle } from '../lib/brand';
 ---
 
-<BaseLayout title="DRCODE 75 HARD CHALLENGE — Progress">
+<BaseLayout title={formatPageTitle('Progress')}>
   <ProgressPage client:load currentPath="/progress" />
 </BaseLayout>

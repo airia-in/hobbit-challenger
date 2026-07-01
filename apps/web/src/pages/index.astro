@@ -1,8 +1,9 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { LoginForm } from '../components/auth/LoginForm';
+import { formatPageTitle } from '../lib/brand';
 ---
 
-<BaseLayout title="DRCODE 75 HARD CHALLENGE — Sign In">
+<BaseLayout title={formatPageTitle('Sign In')}>
   <LoginForm client:load />
 </BaseLayout>

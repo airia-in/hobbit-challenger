@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.drcode.hard75',
-  appName: 'DRCODE 75 Hard',
+  appName: 'DRCODE',
   webDir: 'www',
   server: {
     androidScheme: 'https',

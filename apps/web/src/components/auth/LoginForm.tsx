@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
 import { getToken, setToken } from '../../lib/auth';
+import { BRAND_NAME, BRAND_SUBTITLE, BRAND_TAGLINE } from '../../lib/brand';
 import { formatRegisterPhonePreview } from '../../lib/phone-preview';
 
 type Tab = 'signin' | 'register';
@@ -93,13 +94,13 @@ function LoginFormInner() {
           className="text-5xl leading-none tracking-wide text-[var(--accent-red)] sm:text-6xl"
           style={{ fontFamily: 'var(--font-display)' }}
         >
-          DRCODE
+          {BRAND_NAME}
         </h1>
         <p
-          className="mt-2 text-lg tracking-[0.35em] text-[var(--text-primary)] sm:text-xl"
+          className="mt-2 text-lg uppercase tracking-[0.35em] text-[var(--text-primary)] sm:text-xl"
           style={{ fontFamily: 'var(--font-display)' }}
         >
-          75 HARD CHALLENGE
+          {BRAND_SUBTITLE}
         </p>
       </div>
 
@@ -209,7 +210,7 @@ function LoginFormInner() {
       </div>
 
       <p className="mt-10 text-center text-sm text-[var(--text-muted)]">
-        75 days. 5 tasks. No exceptions.
+        {BRAND_TAGLINE}
       </p>
     </div>
   );

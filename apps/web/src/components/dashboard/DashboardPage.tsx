@@ -13,6 +13,7 @@ import {
 import { AuthGateInner } from '../auth/AuthGate';
 import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
+import { BRAND_NAME, BRAND_SUBTITLE } from '../../lib/brand';
 import { TrpcProvider } from '../TrpcProvider';
 import { verdictClass, verdictLabel } from '../../lib/ai-verdict';
 import { getToken } from '../../lib/auth';
@@ -315,10 +316,10 @@ export function DashboardContent() {
               className="text-2xl text-[var(--accent-red)]"
               style={{ fontFamily: 'var(--font-display)' }}
             >
-              DRCODE
+              {BRAND_NAME}
             </p>
             <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">
-              Discipline Challenge
+              {BRAND_SUBTITLE}
             </p>
           </div>
           {stats && (

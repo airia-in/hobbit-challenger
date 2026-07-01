@@ -1,15 +1,14 @@
 ---
 import '../styles/global.css';
+import { BRAND_DEFAULT_DESCRIPTION, BRAND_DEFAULT_TITLE } from '../lib/brand';
 
 export interface Props {
   title?: string;
   description?: string;
 }
 
-const {
-  title = 'DRCODE 75 HARD CHALLENGE',
-  description = '75 days. 5 tasks. No exceptions.',
-} = Astro.props;
+const { title = BRAND_DEFAULT_TITLE, description = BRAND_DEFAULT_DESCRIPTION } =
+  Astro.props;
 ---
 
 <!doctype html>

@@ -1,8 +1,9 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { HistoryPage } from '../components/history/HistoryPage';
+import { formatPageTitle } from '../lib/brand';
 ---
 
-<BaseLayout title="DRCODE 75 HARD CHALLENGE — History">
+<BaseLayout title={formatPageTitle('History')}>
   <HistoryPage client:load currentPath="/history" />
 </BaseLayout>

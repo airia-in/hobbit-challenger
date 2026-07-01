@@ -1,8 +1,9 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { DashboardPage } from '../components/dashboard/DashboardPage';
+import { formatPageTitle } from '../lib/brand';
 ---
 
-<BaseLayout title="DRCODE 75 HARD CHALLENGE — Dashboard">
+<BaseLayout title={formatPageTitle('Dashboard')}>
   <DashboardPage client:load currentPath="/dashboard" />
 </BaseLayout>

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { BRAND_NAME, BRAND_SUBTITLE } from '../../lib/brand';
 import { trpc } from '../../lib/trpc';
 
 const NAV_ITEMS = [
@@ -69,10 +70,10 @@ export function AppNav({ currentPath = '' }: AppNavProps) {
             className="text-2xl text-[var(--accent-red)]"
             style={{ fontFamily: 'var(--font-display)' }}
           >
-            DRCODE
+            {BRAND_NAME}
           </p>
           <p className="text-[10px] uppercase tracking-[0.3em] text-[var(--text-muted)]">
-            75 Hard
+            {BRAND_SUBTITLE}
           </p>
         </div>
         <div className="flex flex-1 flex-col gap-1">

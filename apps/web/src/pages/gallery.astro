@@ -1,8 +1,9 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { GalleryPage } from '../components/gallery/GalleryPage';
+import { formatPageTitle } from '../lib/brand';
 ---
 
-<BaseLayout title="DRCODE 75 HARD CHALLENGE — Gallery">
+<BaseLayout title={formatPageTitle('Gallery')}>
   <GalleryPage client:load currentPath="/gallery" />
 </BaseLayout>

@@ -73,7 +73,7 @@ model Challenge {
   startDate     DateTime
   endDate       DateTime?
   // Legacy fallback only — the API always sets this explicitly to
-  // DEFAULT_CHALLENGE_LENGTH_DAYS (75) on create. See utils/challenge-query.ts.
+  // DEFAULT_CHALLENGE_LENGTH_DAYS on create. See utils/challenge-query.ts.
   lengthDays    Int           @default(30)
   currentDay    Int           @default(1)
   isActive      Boolean       @default(true)

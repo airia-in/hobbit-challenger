@@ -1,8 +1,9 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { AdminActivitiesPage } from '../../components/admin/AdminActivitiesPage';
+import { formatPageTitle } from '../../lib/brand';
 ---
 
-<BaseLayout title="DRCODE 75 HARD CHALLENGE — Group Activities">
+<BaseLayout title={formatPageTitle('Group Activities')}>
   <AdminActivitiesPage client:load currentPath="/admin/activities" />
 </BaseLayout>

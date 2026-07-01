@@ -115,7 +115,7 @@ export function AdminGroupContent() {
             className="text-lg uppercase tracking-wider text-[var(--text-muted)]"
             style={{ fontFamily: 'var(--font-mono)' }}
           >
-            75-Day Heatmap
+            Challenge Heatmap
           </h2>
           <button
             type="button"

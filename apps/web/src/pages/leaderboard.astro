@@ -1,8 +1,9 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { LeaderboardPage } from '../components/leaderboard/LeaderboardPage';
+import { formatPageTitle } from '../lib/brand';
 ---
 
-<BaseLayout title="DRCODE 75 HARD CHALLENGE — Leaderboard">
+<BaseLayout title={formatPageTitle('Leaderboard')}>
   <LeaderboardPage client:load currentPath="/leaderboard" />
 </BaseLayout>

@@ -1,6 +1,6 @@
 import type { Prisma } from '@workspace-starter/db';
 
-/** Product default: 75 Hard is a 75-day challenge. */
+/** Product default challenge length in days. */
 export const DEFAULT_CHALLENGE_LENGTH_DAYS = 75;
 
 export const challengeDisplayOrderBy: Prisma.ChallengeOrderByWithRelationInput[] =

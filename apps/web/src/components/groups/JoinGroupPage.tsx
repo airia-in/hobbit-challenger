@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
+import { BRAND_NAME, BRAND_SUBTITLE, BRAND_TAGLINE } from '../../lib/brand';
+import { getToken } from '../../lib/auth';
 import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
-import { getToken } from '../../lib/auth';
 
 type JoinGroupPageProps = {
   token?: string;
@@ -86,10 +87,10 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
           className="text-3xl text-[var(--accent-red)] sm:text-4xl"
           style={{ fontFamily: 'var(--font-display)' }}
         >
-          DRCODE
+          {BRAND_NAME}
         </h1>
         <p className="text-xs tracking-[0.25em] text-[var(--text-muted)] sm:text-sm sm:tracking-[0.3em]">
-          75 HARD CHALLENGE
+          {BRAND_SUBTITLE}
         </p>
       </div>
 
@@ -154,9 +155,7 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
         )}
       </div>
 
-      <p className="mt-10 text-sm text-[var(--text-muted)]">
-        75 days. 5 tasks. No exceptions.
-      </p>
+      <p className="mt-10 text-sm text-[var(--text-muted)]">{BRAND_TAGLINE}</p>
     </div>
   );
 }

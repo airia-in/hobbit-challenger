@@ -1,8 +1,8 @@
-# DRCODE 75 Hard Challenge
+# DRCODE Discipline Challenge
 
-Group accountability tracker for the [75 Hard](https://75hard.com/) mental toughness program. Users join groups via invite links, complete six daily tasks with proof submissions, and compete on a shared leaderboard over 75 days. Miss one task and you restart from Day 1.
+Group accountability tracker for discipline and habit challenges. Users join groups via invite links, complete daily tasks with proof submissions, and compete on a shared leaderboard. Miss one task and you restart from Day 1.
 
-**Tagline:** _No shortcuts. No excuses. No cheat days._
+**Tagline:** _Daily tasks. Proof required. No exceptions._
 
 ## What's Inside
 
@@ -106,7 +106,7 @@ pnpm hooks:install
 
 ## Guides
 
-- [Implementation plan](./docs/drcode-75-hard-challenge-plan.md)
+- [Implementation plan (historical)](./docs/drcode-75-hard-challenge-plan.md)
 - [PNPM workspace guide](./docs/guides/pnpm-workspace.md)
 - [Turborepo guide](./docs/guides/turborepo.md)
 - [Workspace guide](./docs/guides/workspace-guide.md)

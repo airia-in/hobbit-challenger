@@ -34,7 +34,10 @@ function taskCard(page: Page, title: string) {
 
 async function expandTask(page: Page, title: string) {
   const card = taskCard(page, title);
-  await card.getByRole('button', { name: 'Expand' }).click();
+  const expandButton = card.getByRole('button', { name: 'Expand' });
+  if (await expandButton.isVisible().catch(() => false)) {
+    await expandButton.click();
+  }
   return card;
 }
 
@@ -156,9 +159,12 @@ test.describe('production start flows', () => {
     await progressPhoto
       .getByRole('button', { name: /Progress photo/i })
       .click();
-    await progressPhoto.getByRole('button', { name: 'Expand' }).click();
+    await expect(progressPhoto.locator('input[type="file"]')).toHaveAttribute(
+      'capture',
+      'environment',
+    );
     await expect(
-      progressPhoto.getByRole('button', { name: /Upload photo proof/i }),
+      progressPhoto.getByRole('button', { name: /Capture proof/i }),
     ).toBeVisible();
     await progressPhoto.locator('input[type="file"]').setInputFiles({
       name: 'proof.png',
@@ -166,7 +172,7 @@ test.describe('production start flows', () => {
       buffer: tinyPng,
     });
     await expect(
-      progressPhoto.getByRole('button', { name: /Replace photo/i }),
+      progressPhoto.getByRole('button', { name: /Retake proof/i }),
     ).toBeVisible();
   });
 

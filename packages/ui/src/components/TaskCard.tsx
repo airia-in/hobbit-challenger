@@ -73,6 +73,7 @@ export type TaskCardProps = {
   onTierSelect?: (tierKey: string) => void;
   onSubPointChange?: (states: Record<string, SubPointState>) => void;
   expandedContent?: ReactNode;
+  defaultExpanded?: boolean;
   guidance?: TaskGuidance;
   onAskGuidance?: (params: {
     question: string;
@@ -374,17 +375,18 @@ export function TaskCard({
   onTierSelect,
   onSubPointChange,
   expandedContent,
+  defaultExpanded = false,
   guidance,
   onAskGuidance,
   disabled = false,
   className,
 }: TaskCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const showExpand = hasExpandableContent(kind, expandedContent);
+  const [expanded, setExpanded] = useState(() => defaultExpanded && showExpand);
   const [guidanceOpen, setGuidanceOpen] = useState(false);
   const status = deriveStatus(kind, log, canEdit);
   const xpAwarded = log?.xpAwarded ?? 0;
   const isComplete = status === 'COMPLETED';
-  const showExpand = hasExpandableContent(kind, expandedContent);
   const canBodyTap = bodyTapEnabled(kind) && canEdit && !disabled;
 
   function handleBodyTap() {

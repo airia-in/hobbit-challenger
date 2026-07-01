@@ -8,6 +8,57 @@ afterEach(() => {
 });
 
 describe('ProofUploader', () => {
+  it('keeps the default upload label and file picker behavior', () => {
+    render(
+      <ProofUploader
+        uploadUrl="http://localhost:3001/api/uploads"
+        authToken="test-token"
+        onUploaded={vi.fn()}
+      />,
+    );
+
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    expect(input).not.toHaveAttribute('capture');
+    expect(
+      screen.getByRole('button', { name: 'Upload photo proof' }),
+    ).toBeInTheDocument();
+  });
+
+  it('uses camera capture labels when capture mode is enabled', () => {
+    const { rerender } = render(
+      <ProofUploader
+        uploadUrl="http://localhost:3001/api/uploads"
+        authToken="test-token"
+        capture="environment"
+        onUploaded={vi.fn()}
+      />,
+    );
+
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    expect(input).toHaveAttribute('capture', 'environment');
+    expect(
+      screen.getByRole('button', { name: 'Capture proof' }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <ProofUploader
+        uploadUrl="http://localhost:3001/api/uploads"
+        authToken="test-token"
+        capture="environment"
+        value="https://cdn.example.com/proof.jpg"
+        onUploaded={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Retake proof' }),
+    ).toBeInTheDocument();
+  });
+
   it('shows inline error when upload fails', async () => {
     const onError = vi.fn();
     vi.stubGlobal(

@@ -79,6 +79,29 @@ describe('TaskCard', () => {
     expect(screen.getByText('No junk')).toBeInTheDocument();
   });
 
+  it('can render expandable activity controls open by default', async () => {
+    render(
+      <TaskCard
+        icon="💧"
+        title="Water"
+        kind="NUMBER"
+        log={null}
+        canEdit
+        unitLabel="L"
+        xpPerUnit={25}
+        xpCap={100}
+        onNumberCommit={vi.fn()}
+        defaultExpanded
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Collapse' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: '+1 L' })).toBeInTheDocument();
+  });
+
   it('calls onSubPointChange when sub-point Done is toggled', async () => {
     const onSubPointChange = vi.fn();
     render(

@@ -7,6 +7,7 @@ export type ProofUploaderProps = {
   authToken: string | null;
   value?: string | null;
   accept?: string;
+  capture?: 'environment' | 'user';
   onUploaded: (url: string) => void;
   onError?: (message: string) => void;
   className?: string;
@@ -21,6 +22,7 @@ export function ProofUploader({
   authToken,
   value,
   accept = 'image/jpeg,image/png,image/webp',
+  capture,
   onUploaded,
   onError,
   className,
@@ -33,6 +35,13 @@ export function ProofUploader({
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(value ?? null);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const buttonLabel = capture
+    ? preview
+      ? 'Retake proof'
+      : 'Capture proof'
+    : preview
+      ? 'Replace photo'
+      : 'Upload photo proof';
 
   const base = apiBaseUrl ?? uploadUrl.replace(/\/api\/uploads$/, '');
 
@@ -150,6 +159,7 @@ export function ProofUploader({
         ref={inputRef}
         type="file"
         accept={accept}
+        capture={capture}
         className="hidden"
         disabled={disabled || uploading}
         onChange={(event) => {
@@ -167,11 +177,7 @@ export function ProofUploader({
           buttonClassName,
         )}
       >
-        {uploading
-          ? 'Uploading...'
-          : preview
-            ? 'Replace photo'
-            : 'Upload photo proof'}
+        {uploading ? 'Uploading...' : buttonLabel}
       </button>
 
       {error && (

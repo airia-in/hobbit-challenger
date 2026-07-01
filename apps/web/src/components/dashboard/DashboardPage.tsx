@@ -168,6 +168,7 @@ function ProofSection({
         apiBaseUrl={apiUrl}
         authToken={getToken()}
         value={activity.log?.proofUrl}
+        capture="environment"
         disabled={!canEdit}
         onUploaded={onAttach}
         buttonClassName="text-xs"
@@ -228,6 +229,7 @@ function ActivityCard({
       xpCap={activity.xpCap}
       subPoints={activity.subPoints}
       tiers={activity.tiers}
+      defaultExpanded
       disabled={isPending}
       className={variant === 'personal' ? 'border-dashed' : undefined}
       onMarkDone={() => markActivity.mutate({ activityId: activity.id })}

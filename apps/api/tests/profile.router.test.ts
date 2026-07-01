@@ -348,6 +348,12 @@ function createLeaveGroupContext(stores: {
           return updated;
         },
       ),
+      count: vi.fn(
+        async ({ where }: { where: { groupId: string } }) =>
+          [...stores.users.values()].filter(
+            (user) => user.groupId === where.groupId,
+          ).length,
+      ),
     },
     group: {
       update: vi.fn(
@@ -365,6 +371,19 @@ function createLeaveGroupContext(stores: {
           return updated;
         },
       ),
+      delete: vi.fn(async ({ where }: { where: { id: string } }) => {
+        const deleted = stores.groups.delete(where.id);
+        if (!deleted) throw new Error('Group not found');
+
+        for (const key of [...stores.groupAdmins.keys()]) {
+          if (key.startsWith(`${where.id}:`)) stores.groupAdmins.delete(key);
+        }
+
+        return { id: where.id };
+      }),
+    },
+    dayLabel: {
+      deleteMany: vi.fn(async () => ({ count: 0 })),
     },
     groupAdmin: {
       findMany: vi.fn(
@@ -561,8 +580,43 @@ describe('profileRouter leaveGroup', () => {
     } satisfies Partial<TRPCError>);
   });
 
-  it('rejects leaveGroup when caller is the last group admin', async () => {
+  it('dissolves the group when caller is the last admin and only member', async () => {
     const stores = memberLeaveStores();
+    stores.groups.get(GROUP_ID)!.adminUserId = USER_ID;
+    stores.groupAdmins.clear();
+    stores.groupAdmins.set(`${GROUP_ID}:${USER_ID}`, {
+      groupId: GROUP_ID,
+      userId: USER_ID,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    const caller = profileRouter.createCaller(createLeaveGroupContext(stores));
+
+    const result = await caller.leaveGroup();
+
+    expect(result).toEqual({ success: true, dissolved: true });
+    expect(stores.users.get(USER_ID)?.groupId).toBeNull();
+    expect(stores.groups.has(GROUP_ID)).toBe(false);
+    expect(stores.groupAdmins.has(`${GROUP_ID}:${USER_ID}`)).toBe(false);
+    expect(stores.challenges.get(CHALLENGE_ID)?.isActive).toBe(false);
+    expect(stores.challenges.get(CHALLENGE_ID)?.stoppedAt).toBeDefined();
+  });
+
+  it('rejects leaveGroup when caller is the last admin and other members remain', async () => {
+    const stores = memberLeaveStores();
+    const otherMember: StoredUser = {
+      id: OTHER_ID,
+      name: 'Other Member',
+      phone: null,
+      email: 'other-member@example.com',
+      passwordHash: 'hash',
+      timezone: 'UTC',
+      avatarUrl: null,
+      groupId: GROUP_ID,
+      reminderTime: null,
+      whatsappOptIn: true,
+    };
+    stores.users.set(OTHER_ID, otherMember);
+    stores.usersByEmail.set('other-member@example.com', otherMember);
     stores.groups.get(GROUP_ID)!.adminUserId = USER_ID;
     stores.groupAdmins.clear();
     stores.groupAdmins.set(`${GROUP_ID}:${USER_ID}`, {
@@ -576,6 +630,9 @@ describe('profileRouter leaveGroup', () => {
       code: 'BAD_REQUEST',
       message: 'Promote another admin before leaving the group',
     } satisfies Partial<TRPCError>);
+    expect(stores.users.get(USER_ID)?.groupId).toBe(GROUP_ID);
+    expect(stores.groups.has(GROUP_ID)).toBe(true);
+    expect(stores.challenges.get(CHALLENGE_ID)?.isActive).toBe(true);
   });
 
   it('lets a secondary admin leave and removes their admin grant', async () => {

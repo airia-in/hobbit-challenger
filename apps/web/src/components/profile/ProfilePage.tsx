@@ -28,7 +28,24 @@ function getTimezoneOptions(currentTimezone: string): string[] {
   return supported;
 }
 
-function ProfileContent() {
+type LeaveGroupProfile = {
+  groupId: string | null;
+  groupName: string | null;
+  isGroupAdmin: boolean;
+  groupMemberCount: number;
+  groupAdminCount: number;
+};
+
+type LeaveGroupMode = 'none' | 'leave' | 'dissolve' | 'blocked';
+
+function getLeaveGroupMode(profile: LeaveGroupProfile): LeaveGroupMode {
+  if (!profile.groupId) return 'none';
+  if (!profile.isGroupAdmin || profile.groupAdminCount > 1) return 'leave';
+  if (profile.groupMemberCount <= 1) return 'dissolve';
+  return 'blocked';
+}
+
+export function ProfileContent() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -51,10 +68,16 @@ function ProfileContent() {
     },
   });
   const leaveGroup = trpc.profile.leaveGroup.useMutation({
-    onSuccess: () => {
+    onSuccess: (result) => {
       void utils.profile.get.invalidate();
+      void utils.auth.me.invalidate();
+      void utils.groups.getMine.invalidate();
       setShowLeaveModal(false);
-      setMessage('You have left the group');
+      setMessage(
+        'dissolved' in result && result.dissolved
+          ? 'Group dissolved'
+          : 'You have left the group',
+      );
     },
   });
   const logout = trpc.auth.logout.useMutation({
@@ -144,6 +167,20 @@ function ProfileContent() {
 
   const data = profile.data!;
   const timezoneOptions = getTimezoneOptions(data.timezone);
+  const leaveGroupMode = getLeaveGroupMode(data);
+  const leaveGroupName = data.groupName ?? 'this group';
+  const leaveModalTitle =
+    leaveGroupMode === 'dissolve'
+      ? `Dissolve ${leaveGroupName}?`
+      : leaveGroupMode === 'blocked'
+        ? 'Transfer admin access first'
+        : 'Leave group?';
+  const leaveModalBody =
+    leaveGroupMode === 'dissolve'
+      ? `This will permanently remove ${leaveGroupName}, including group admin settings and day labels. Your current attempt will be archived.`
+      : leaveGroupMode === 'blocked'
+        ? 'Promote another member to admin before leaving so the group still has someone who can manage it.'
+        : `Your current attempt will be archived and you will be removed from ${leaveGroupName}.`;
 
   return (
     <div className="mx-auto max-w-lg space-y-8 px-4 py-8">
@@ -447,13 +484,13 @@ function ProfileContent() {
           <p className="text-sm text-[var(--accent-red)]">{exportError}</p>
         )}
 
-        {data.groupId && (
+        {leaveGroupMode !== 'none' && (
           <button
             type="button"
             onClick={() => setShowLeaveModal(true)}
             className="w-full rounded border border-[var(--accent-red)] py-3 text-sm uppercase tracking-wider text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10"
           >
-            Leave Group
+            {leaveGroupMode === 'dissolve' ? 'Dissolve Group' : 'Leave Group'}
           </button>
         )}
 
@@ -471,10 +508,11 @@ function ProfileContent() {
       {showLeaveModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
           <div className="w-full max-w-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-            <h3 className="text-lg text-[var(--text-primary)]">Leave group?</h3>
+            <h3 className="text-lg text-[var(--text-primary)]">
+              {leaveModalTitle}
+            </h3>
             <p className="mt-2 text-sm text-[var(--text-muted)]">
-              Your current attempt will be archived and you will be removed from{' '}
-              {data.groupName}.
+              {leaveModalBody}
             </p>
             {leaveGroup.error && (
               <p className="mt-2 text-sm text-[var(--accent-red)]">
@@ -489,14 +527,29 @@ function ProfileContent() {
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                onClick={() => leaveGroup.mutate()}
-                disabled={leaveGroup.isPending}
-                className="flex-1 rounded bg-[var(--accent-red)] py-2 text-sm font-bold text-white disabled:opacity-50"
-              >
-                {leaveGroup.isPending ? 'Leaving...' : 'Leave'}
-              </button>
+              {leaveGroupMode === 'blocked' ? (
+                <a
+                  href="/join"
+                  className="flex-1 rounded bg-[var(--accent-red)] py-2 text-center text-sm font-bold text-white"
+                >
+                  Manage admins
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => leaveGroup.mutate()}
+                  disabled={leaveGroup.isPending}
+                  className="flex-1 rounded bg-[var(--accent-red)] py-2 text-sm font-bold text-white disabled:opacity-50"
+                >
+                  {leaveGroup.isPending
+                    ? leaveGroupMode === 'dissolve'
+                      ? 'Dissolving...'
+                      : 'Leaving...'
+                    : leaveGroupMode === 'dissolve'
+                      ? 'Dissolve'
+                      : 'Leave'}
+                </button>
+              )}
             </div>
           </div>
         </div>

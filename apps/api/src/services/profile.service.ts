@@ -22,7 +22,12 @@ export type ProfileData = {
   groupId: string | null;
   groupName: string | null;
   isGroupAdmin: boolean;
+  groupMemberCount: number;
+  groupAdminCount: number;
 };
+
+const PROMOTE_ANOTHER_ADMIN_MESSAGE =
+  'Promote another admin before leaving the group';
 
 export async function getProfile(
   prisma: PrismaService,
@@ -39,6 +44,9 @@ export async function getProfile(
           admins: {
             select: { userId: true },
             orderBy: { createdAt: 'asc' },
+          },
+          _count: {
+            select: { members: true },
           },
         },
       },
@@ -67,6 +75,8 @@ export async function getProfile(
     groupId: user.groupId,
     groupName: user.group?.name ?? null,
     isGroupAdmin: adminUserIds.includes(userId),
+    groupMemberCount: user.group?._count.members ?? 0,
+    groupAdminCount: adminUserIds.length,
   };
 }
 
@@ -439,12 +449,56 @@ export async function leaveGroup(prisma: PrismaService, userId: string) {
     user.group?.adminUserId,
   );
   const isAdmin = adminUserIds.includes(userId);
-  if (isAdmin && adminUserIds.length <= 1) {
+  const isLastAdmin = isAdmin && adminUserIds.length <= 1;
+  const groupMemberCount = await prisma.user.count({
+    where: { groupId: user.groupId },
+  });
+
+  if (isLastAdmin && groupMemberCount > 1) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
-      message: 'Promote another admin before leaving the group',
+      message: PROMOTE_ANOTHER_ADMIN_MESSAGE,
     });
   }
+
+  if (isLastAdmin) {
+    await prisma.$transaction(async (tx) => {
+      const transactionMemberCount = await tx.user.count({
+        where: { groupId: user.groupId! },
+      });
+
+      if (transactionMemberCount > 1) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: PROMOTE_ANOTHER_ADMIN_MESSAGE,
+        });
+      }
+
+      const activeChallenge = user.challenges[0];
+      if (activeChallenge) {
+        await tx.challenge.update({
+          where: { id: activeChallenge.id },
+          data: { isActive: false, stoppedAt: new Date() },
+        });
+      }
+
+      await tx.user.update({
+        where: { id: userId },
+        data: { groupId: null },
+      });
+
+      await tx.dayLabel.deleteMany({
+        where: { groupId: user.groupId! },
+      });
+
+      await tx.group.delete({
+        where: { id: user.groupId! },
+      });
+    });
+
+    return { success: true, dissolved: true };
+  }
+
   const replacementAdminId = isAdmin
     ? (adminUserIds.find((adminId) => adminId !== userId) ??
       (await getReplacementAdminId(prisma, user.groupId, userId)))

@@ -73,7 +73,7 @@ export function LeaderboardContent() {
       </header>
 
       <div
-        className="flex gap-2"
+        className="grid grid-cols-3 gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1 md:flex md:gap-2 md:rounded-none md:border-0 md:bg-transparent md:p-0"
         role="tablist"
         aria-label="Leaderboard time window"
       >
@@ -86,8 +86,8 @@ export function LeaderboardContent() {
             onClick={() => setWindow(option.value)}
             className={
               window === option.value
-                ? 'rounded-full border border-[var(--accent-red)] bg-[var(--accent-red)]/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--accent-red)]'
-                : 'rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] transition hover:border-[var(--accent-red)]/50 hover:text-[var(--text-primary)]'
+                ? 'min-w-0 rounded-md border border-[var(--accent-red)] bg-[var(--accent-red)]/10 px-2 py-1.5 text-center text-[10px] font-semibold uppercase leading-tight tracking-wider text-[var(--accent-red)] md:rounded-full md:px-4 md:text-xs'
+                : 'min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1.5 text-center text-[10px] font-semibold uppercase leading-tight tracking-wider text-[var(--text-muted)] transition hover:border-[var(--accent-red)]/50 hover:text-[var(--text-primary)] md:rounded-full md:border-[var(--border)] md:bg-[var(--surface)] md:px-4 md:text-xs'
             }
             style={{ fontFamily: 'var(--font-mono)' }}
           >

@@ -178,6 +178,32 @@ test.describe('production start flows', () => {
     await expect(admin.page.getByText(adminName).first()).toBeVisible();
     await expect(admin.page.getByText(memberName).first()).toBeVisible();
 
+    for (const width of [320, 375, 390, 430]) {
+      await admin.page.setViewportSize({ width, height: 720 });
+      await admin.page.goto('/leaderboard');
+      await expect(
+        admin.page.getByTestId('leaderboard-mobile-list'),
+      ).toBeVisible();
+      await expect(admin.page.getByText(/\d+%/).first()).toBeVisible();
+      await expect(
+        admin.page.getByRole('tab', { name: 'This week' }),
+      ).toHaveAttribute('aria-selected', 'false');
+      await admin.page.getByRole('tab', { name: 'This week' }).click();
+      await expect(
+        admin.page.getByRole('tab', { name: 'This week' }),
+      ).toHaveAttribute('aria-selected', 'true');
+      const hasHorizontalOverflow = await admin.page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth + 1,
+      );
+      expect(hasHorizontalOverflow).toBe(false);
+    }
+
+    await admin.page.setViewportSize({ width: 1280, height: 720 });
+    await admin.page.goto('/leaderboard');
+    await expect(
+      admin.page.getByRole('columnheader', { name: 'Success' }),
+    ).toBeVisible();
+
     await admin.page.goto('/progress');
     await expect(
       admin.page.getByRole('heading', { name: 'Progress' }),

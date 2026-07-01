@@ -45,10 +45,8 @@ function splitCredentials(url: string): SplitCredentials {
   }
   const [, prefix, userinfo, rest] = match;
   const separator = userinfo.indexOf(':');
-  const username =
-    separator === -1 ? userinfo : userinfo.slice(0, separator);
-  const password =
-    separator === -1 ? undefined : userinfo.slice(separator + 1);
+  const username = separator === -1 ? userinfo : userinfo.slice(0, separator);
+  const password = separator === -1 ? undefined : userinfo.slice(separator + 1);
   return {
     cleanUrl: `${prefix}${rest}`,
     username: decodeURIComponent(username),

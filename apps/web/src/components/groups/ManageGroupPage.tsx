@@ -8,7 +8,6 @@ import { trpc } from '../../lib/trpc';
 
 const statusColors: Record<string, string> = {
   ACTIVE: 'text-[var(--success)]',
-  ELIMINATED: 'text-[var(--accent-red)]',
   COMPLETED: 'text-[var(--gold)]',
 };
 

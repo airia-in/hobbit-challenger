@@ -1,9 +1,4 @@
-export {
-  PrismaClient,
-  Prisma,
-  ActivityKind,
-  MemberStatus,
-} from '@prisma/client';
+export { PrismaClient, Prisma, ActivityKind } from '@prisma/client';
 export type * from '@prisma/client';
 export {
   buildLibsqlConfig,

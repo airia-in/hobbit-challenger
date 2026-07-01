@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import * as publicExports from '../src/index';
 import {
   buildLibsqlConfig,
   createPrismaClient,
@@ -84,5 +85,11 @@ describe('createPrismaClient', () => {
     expect(typeof client.$connect).toBe('function');
     expect(typeof client.$disconnect).toBe('function');
     expect(typeof client.user.findMany).toBe('function');
+  });
+});
+
+describe('public exports', () => {
+  it('does not expose the removed MemberStatus enum at runtime', () => {
+    expect('MemberStatus' in publicExports).toBe(false);
   });
 });

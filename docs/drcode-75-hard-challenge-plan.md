@@ -303,7 +303,7 @@ Admin can set group-wide day labels (tooltip on hover). Edit mode toggle for gro
 - Top-3 podium + full table scoped to user's group.
 - Sort: current day (default) · success rate · streak · alphabetical.
 - Expand row → last 7 days mini-heatmap + yesterday proof thumbnails.
-- Status badges: `ACTIVE` | `ELIMINATED` | `COMPLETED`.
+- Status badges: `ACTIVE` | `COMPLETED`.
 - Auto-refresh every 60s.
 
 **tRPC:** `leaderboard.get`
@@ -428,7 +428,6 @@ enum TaskType {
 
 enum MemberStatus {
   ACTIVE
-  ELIMINATED
   COMPLETED
 }
 

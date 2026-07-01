@@ -57,6 +57,9 @@ function LoginFormInner() {
   });
 
   const isPending = login.isPending || register.isPending;
+  const showPhonePrefix =
+    tab === 'register' ||
+    (tab === 'signin' && !phone.includes('@') && !phone.trim().startsWith('+'));
   const phonePreview =
     tab === 'register' ? formatRegisterPhonePreview(phone) : null;
 
@@ -147,7 +150,7 @@ function LoginFormInner() {
               {tab === 'signin' ? 'Phone or email' : 'Phone'}
             </label>
             <div className="flex">
-              {tab === 'register' && (
+              {showPhonePrefix && (
                 <span className="inline-flex items-center rounded-l border border-r-0 border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm text-[var(--text-muted)]">
                   +91
                 </span>
@@ -158,7 +161,7 @@ function LoginFormInner() {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 className={`w-full border border-[var(--border)] bg-[var(--surface-raised)] px-4 py-3 text-[var(--text-primary)] outline-none focus:border-[var(--accent-red)] ${
-                  tab === 'register' ? 'rounded-r' : 'rounded'
+                  showPhonePrefix ? 'rounded-r' : 'rounded'
                 }`}
                 placeholder={
                   tab === 'signin'

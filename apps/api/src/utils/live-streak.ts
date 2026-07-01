@@ -12,25 +12,44 @@ type LiveStreakParams = {
 
 /**
  * Live streak for display: the finalizer only updates `Challenge.currentStreak`
- * after local midnight, so a user who has already logged every scored activity
- * today should optimistically see streak + 1 until the day is finalized. Returns
- * the stored streak unchanged when the day is not yet fully logged (the day is
- * not over, so it is never reset here — the finalizer owns resets).
+ * after local midnight, so a user who has already logged every gating activity
+ * today should optimistically see streak + 1 until the day is finalized. Grouped
+ * users gate on scored group activities; groupless users gate on their personal
+ * activities. Returns the stored streak unchanged when the day is not yet fully
+ * logged (the day is not over, so it is never reset here — the finalizer owns
+ * resets).
  */
 export async function getLiveStreak(
   prisma: PrismaService,
   { challengeId, userId, groupId, timezone, storedStreak }: LiveStreakParams,
 ): Promise<number> {
-  if (!groupId) {
-    return storedStreak;
+  const orConditions: Array<Record<string, unknown>> = [
+    { ownerUserId: userId, isPersonal: true, active: true },
+  ];
+  if (groupId) {
+    orConditions.unshift({ groupId, active: true, scored: true });
   }
 
-  const scoredActivities = await prisma.activity.findMany({
-    where: { groupId, active: true, scored: true },
-    select: { id: true },
+  const activities = await prisma.activity.findMany({
+    where: { OR: orConditions },
+    select: { id: true, scored: true, isPersonal: true },
   });
 
-  if (scoredActivities.length === 0) {
+  const scoredActivities = activities.filter(
+    (activity) => activity.scored && !activity.isPersonal,
+  );
+  const personalActivities = activities.filter(
+    (activity) => activity.isPersonal,
+  );
+
+  const gatingIds =
+    scoredActivities.length > 0
+      ? scoredActivities.map((activity) => activity.id)
+      : groupId
+        ? []
+        : personalActivities.map((activity) => activity.id);
+
+  if (gatingIds.length === 0) {
     return storedStreak;
   }
 
@@ -46,9 +65,5 @@ export async function getLiveStreak(
     },
   });
 
-  return computeCurrentStreak(
-    storedStreak,
-    todayLogs,
-    scoredActivities.map((activity) => activity.id),
-  );
+  return computeCurrentStreak(storedStreak, todayLogs, gatingIds);
 }

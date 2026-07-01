@@ -62,6 +62,12 @@ export function isPassingAiVerdict(aiVerdict: string | null): boolean {
   return aiVerdict !== 'FAILED' && aiVerdict !== 'ERROR';
 }
 
+export function resolveDayFailReason(groupId: string | null): string {
+  return groupId
+    ? 'Not all scored activities were logged'
+    : 'Not all personal activities were logged';
+}
+
 export async function listHistory(
   prisma: PrismaService,
   userId: string,
@@ -138,7 +144,7 @@ export async function listHistory(
       dayNumber: day.dayNumber,
       completed: isInterimDayCompleted(day),
       failReason: isInterimDayFailed(day)
-        ? 'Not all scored activities were logged'
+        ? resolveDayFailReason(user.groupId)
         : null,
       attemptNumber: 1,
     });

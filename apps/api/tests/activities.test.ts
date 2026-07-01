@@ -811,6 +811,34 @@ describe('activities service', () => {
     expect(fake.stores.activityLogs.size).toBe(0);
   });
 
+  it('attachProof stores ERROR aiVerdict for configured verifier failures', async () => {
+    service = new ActivitiesService({
+      verifyProof: async () => ({
+        passed: false,
+        confidence: 0,
+        reason: 'ERROR',
+      }),
+    } as unknown as ProofVerifierService);
+
+    await service.attachProof(
+      fake.prisma,
+      USER_ID,
+      CHECKBOX_ACTIVITY_ID,
+      '/uploads/abc-def_123.jpg',
+    );
+    await Promise.resolve();
+
+    const today = getUserLocalDate('UTC');
+    const log = await fake.prisma.activityLog.findFirst({
+      where: {
+        challengeId: CHALLENGE_ID,
+        activityId: CHECKBOX_ACTIVITY_ID,
+        date: today,
+      },
+    });
+    expect(log?.aiVerdict).toBe('ERROR');
+  });
+
   it('personal activity xp is excluded from netXp', async () => {
     await service.markActivity(fake.prisma, USER_ID, PERSONAL_ACTIVITY_ID);
 

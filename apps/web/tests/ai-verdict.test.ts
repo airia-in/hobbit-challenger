@@ -9,10 +9,11 @@ describe('verdictClass', () => {
     expect(verdictClass('BONUS')).toBe(success);
   });
 
-  it('returns red styling for FAILED', () => {
-    expect(verdictClass('FAILED')).toBe(
-      'text-[var(--accent-red)] border-[var(--accent-red)]/30 bg-[var(--accent-red)]/10',
-    );
+  it('returns red styling for FAILED and ERROR', () => {
+    const danger =
+      'text-[var(--accent-red)] border-[var(--accent-red)]/30 bg-[var(--accent-red)]/10';
+    expect(verdictClass('FAILED')).toBe(danger);
+    expect(verdictClass('ERROR')).toBe(danger);
   });
 
   it('returns muted styling for SKIPPED, null, and unknown verdicts', () => {
@@ -36,6 +37,10 @@ describe('verdictLabel', () => {
 
   it('maps SKIPPED to Not checked', () => {
     expect(verdictLabel('SKIPPED')).toBe('Not checked');
+  });
+
+  it('maps ERROR to Verification error', () => {
+    expect(verdictLabel('ERROR')).toBe('Verification error');
   });
 
   it('returns empty string for null and raw string for unknown verdicts', () => {

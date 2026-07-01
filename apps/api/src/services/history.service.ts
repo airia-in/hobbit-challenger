@@ -58,6 +58,10 @@ const TASK_TYPE_TO_SEED_KEY: Partial<Record<LegacyTaskType, string>> = {
   NO_SOCIAL: 'NO_SOCIAL',
 };
 
+export function isPassingAiVerdict(aiVerdict: string | null): boolean {
+  return aiVerdict !== 'FAILED' && aiVerdict !== 'ERROR';
+}
+
 export async function listHistory(
   prisma: PrismaService,
   userId: string,
@@ -121,7 +125,7 @@ export async function listHistory(
       completedAt: log.state === 'DONE' ? log.date : null,
       proofUrl: log.proofUrl,
       aiVerdict: log.aiVerdict,
-      isValid: log.state === 'DONE' && log.aiVerdict !== 'FAILED',
+      isValid: log.state === 'DONE' && isPassingAiVerdict(log.aiVerdict),
       attemptNumber: 1,
     });
   }

@@ -2,7 +2,7 @@ export function verdictClass(verdict: string | null): string {
   if (verdict === 'PASSED' || verdict === 'BONUS') {
     return 'text-[var(--success)] border-[var(--success)]/30 bg-[var(--success)]/10';
   }
-  if (verdict === 'FAILED') {
+  if (verdict === 'FAILED' || verdict === 'ERROR') {
     return 'text-[var(--accent-red)] border-[var(--accent-red)]/30 bg-[var(--accent-red)]/10';
   }
   return 'text-[var(--text-muted)] border-[var(--border)] bg-[var(--surface-raised)]';
@@ -14,6 +14,9 @@ export function verdictLabel(verdict: string | null): string {
   }
   if (verdict === 'FAILED') {
     return 'Not verified';
+  }
+  if (verdict === 'ERROR') {
+    return 'Verification error';
   }
   if (verdict === 'SKIPPED') {
     return 'Not checked';

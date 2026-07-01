@@ -887,9 +887,11 @@ export class ActivitiesService {
           const aiVerdict =
             result.reason === 'SKIPPED'
               ? 'SKIPPED'
-              : result.passed
-                ? 'PASSED'
-                : 'FAILED';
+              : result.reason === 'ERROR'
+                ? 'ERROR'
+                : result.passed
+                  ? 'PASSED'
+                  : 'FAILED';
           await prisma.activityLog.update({
             where: { id: log.id },
             data: { aiVerdict },

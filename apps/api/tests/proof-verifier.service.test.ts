@@ -1,6 +1,10 @@
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { resolveUploadFilePath } from '../src/services/proof-verifier.service';
+import { describe, expect, it, vi } from 'vitest';
+import type { ConfigService } from '@nestjs/config';
+import {
+  ProofVerifierService,
+  resolveUploadFilePath,
+} from '../src/services/proof-verifier.service';
 
 const uploadDir = path.resolve('/var/app/data/uploads');
 
@@ -40,5 +44,53 @@ describe('resolveUploadFilePath', () => {
     expect(() =>
       resolveUploadFilePath(siblingUploadDir, '../uploads-evil/secret.jpg'),
     ).toThrow(/escapes upload directory/);
+  });
+});
+
+describe('ProofVerifierService verifyProof fallback behavior', () => {
+  function createConfig(values: Record<string, string | undefined>) {
+    return {
+      get: (key: string) => values[key],
+    } as ConfigService;
+  }
+
+  it('keeps honor-system SKIPPED behavior when OpenAI is unconfigured', async () => {
+    const service = new ProofVerifierService(createConfig({}));
+
+    await expect(
+      service.verifyProof('PROGRESS_PHOTO', '/uploads/missing.jpg'),
+    ).resolves.toEqual({
+      passed: true,
+      confidence: 0,
+      reason: 'SKIPPED',
+    });
+  });
+
+  it('returns non-passing ERROR when OpenAI is configured but verification fails', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const service = new ProofVerifierService(
+      createConfig({
+        OPENAI_API_KEY: 'test-key',
+        UPLOAD_DIR: uploadDir,
+      }),
+    );
+
+    try {
+      await expect(
+        service.verifyProof('PROGRESS_PHOTO', '/uploads/missing.jpg'),
+      ).resolves.toEqual({
+        passed: false,
+        confidence: 0,
+        reason: 'ERROR',
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        'Proof verification failed:',
+        expect.any(Error),
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

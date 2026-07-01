@@ -97,7 +97,7 @@ export class ProofVerifierService {
       };
     } catch (error) {
       console.error('Proof verification failed:', error);
-      return { passed: true, confidence: 0, reason: 'SKIPPED' };
+      return { passed: false, confidence: 0, reason: 'ERROR' };
     }
   }
 

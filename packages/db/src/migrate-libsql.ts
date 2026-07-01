@@ -60,10 +60,7 @@ export async function applyLibsqlMigrations(
     );
     const finishedByName = new Map<string, boolean>();
     for (const row of recorded.rows) {
-      finishedByName.set(
-        String(row.migration_name),
-        row.finished_at !== null,
-      );
+      finishedByName.set(String(row.migration_name), row.finished_at !== null);
     }
 
     let appliedCount = 0;

@@ -106,4 +106,20 @@ describe('JoinGroupPage', () => {
       enabled: true,
     });
   });
+
+  it('shows a disabled checking state while membership is loading', () => {
+    mockMeUseQuery.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    });
+
+    render(<JoinGroupPage token="invite-token" />);
+
+    const checking = screen.getByRole('button', { name: 'Checking...' });
+    expect(checking).toBeDisabled();
+    expect(
+      screen.queryByRole('button', { name: 'Join Group' }),
+    ).not.toBeInTheDocument();
+  });
 });

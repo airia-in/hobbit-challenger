@@ -117,7 +117,17 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
           </p>
         )}
 
-        {me.data?.user.groupId ? (
+        {me.isLoading ? (
+          // Signed-in members hit this while membership loads; avoid flashing a
+          // Join button (which the API would reject) before we know their group.
+          <button
+            type="button"
+            disabled
+            className="w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-white opacity-50"
+          >
+            Checking...
+          </button>
+        ) : me.data?.user.groupId ? (
           <div className="rounded border border-[var(--border)] bg-[var(--bg-black)]/40 px-4 py-5">
             <p className="text-sm text-[var(--text-primary)]">
               You&apos;re already in a group

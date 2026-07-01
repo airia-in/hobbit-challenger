@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
-import { getUserLocalDate, isLocalTimeMatch } from '../utils/day-window';
+import {
+  getDatePartsInTimezone,
+  getUserLocalDate,
+  isLocalTimeMatch,
+} from '../utils/day-window';
 import { EvolutionApiClient } from '../whatsapp/evolution.client';
 import {
   hasEveningReminderEligibility,
@@ -14,6 +18,7 @@ import {
 
 const DEFAULT_MORNING_TIME = '08:00';
 const EVENING_TIME = '21:00';
+const FAILED_RETRY_WINDOW_MINUTES = 15;
 
 type ReminderStatus = 'SENT' | 'FAILED' | 'SKIPPED_OPTOUT';
 
@@ -83,11 +88,29 @@ export class ReminderService {
     const localDate = getUserLocalDate(user.timezone);
     const morningTime = user.reminderTime ?? DEFAULT_MORNING_TIME;
 
-    if (isLocalTimeMatch(user.timezone, morningTime)) {
+    if (
+      isLocalTimeMatch(user.timezone, morningTime) ||
+      (await this.shouldRetryFailedReminder(
+        user.id,
+        localDate,
+        'MORNING',
+        user.timezone,
+        morningTime,
+      ))
+    ) {
       await this.trySendReminder(user, localDate, 'MORNING');
     }
 
-    if (isLocalTimeMatch(user.timezone, EVENING_TIME)) {
+    if (
+      isLocalTimeMatch(user.timezone, EVENING_TIME) ||
+      (await this.shouldRetryFailedReminder(
+        user.id,
+        localDate,
+        'EVENING',
+        user.timezone,
+        EVENING_TIME,
+      ))
+    ) {
       const context = await this.contextService.buildContext(
         this.prisma,
         user.id,
@@ -97,6 +120,30 @@ export class ReminderService {
         await this.trySendReminder(user, localDate, 'EVENING', context);
       }
     }
+  }
+
+  private async shouldRetryFailedReminder(
+    userId: string,
+    localDate: Date,
+    kind: ReminderKind,
+    timezone: string,
+    reminderTime: string,
+  ): Promise<boolean> {
+    if (!isWithinLocalRetryWindow(timezone, reminderTime)) {
+      return false;
+    }
+
+    const existing = await this.prisma.reminderLog.findUnique({
+      where: {
+        userId_date_kind: {
+          userId,
+          date: localDate,
+          kind,
+        },
+      },
+    });
+
+    return existing?.status === 'FAILED';
   }
 
   private async trySendReminder(
@@ -183,4 +230,30 @@ export class ReminderService {
       },
     });
   }
+}
+
+export function isWithinLocalRetryWindow(
+  timezone: string,
+  targetHHMM: string,
+  now = new Date(),
+  windowMinutes = FAILED_RETRY_WINDOW_MINUTES,
+): boolean {
+  const [targetHour, targetMinute] = targetHHMM.split(':').map(Number);
+  if (
+    Number.isNaN(targetHour) ||
+    Number.isNaN(targetMinute) ||
+    targetHour < 0 ||
+    targetHour > 23 ||
+    targetMinute < 0 ||
+    targetMinute > 59
+  ) {
+    return false;
+  }
+
+  const { hour, minute } = getDatePartsInTimezone(now, timezone);
+  const currentMinutes = hour * 60 + minute;
+  const targetMinutes = targetHour * 60 + targetMinute;
+  const elapsedMinutes = currentMinutes - targetMinutes;
+
+  return elapsedMinutes > 0 && elapsedMinutes <= windowMinutes;
 }

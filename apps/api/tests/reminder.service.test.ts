@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ReminderService } from '../src/cron/reminder.service';
+import {
+  isWithinLocalRetryWindow,
+  ReminderService,
+} from '../src/cron/reminder.service';
 import type { ReminderContext } from '../src/whatsapp/reminder-context.service';
 
 type ReminderLogRow = {
@@ -294,10 +297,72 @@ describe('ReminderService', () => {
     );
 
     await service.processReminders();
+    vi.setSystemTime(new Date('2026-06-15T08:03:00.000Z'));
     await service.processReminders();
 
     expect(sendText).toHaveBeenCalledTimes(2);
     const log = [...reminderLogs.values()].find((l) => l.kind === 'MORNING');
     expect(log?.status).toBe('SENT');
+  });
+
+  it('does not retry SENT morning reminder later in the retry window', async () => {
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Good morning!');
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          whatsappOptIn: true,
+        },
+      ],
+    });
+
+    const service = new ReminderService(
+      prisma as never,
+      { isConfigured: () => true, sendText } as never,
+      { buildContext: vi.fn().mockResolvedValue(defaultContext) } as never,
+      { compose } as never,
+    );
+
+    await service.processReminders();
+    vi.setSystemTime(new Date('2026-06-15T08:03:00.000Z'));
+    await service.processReminders();
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(compose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('isWithinLocalRetryWindow', () => {
+  it('matches only after the target minute and inside the configured window', () => {
+    expect(
+      isWithinLocalRetryWindow(
+        'UTC',
+        '08:00',
+        new Date('2026-06-15T08:00:00.000Z'),
+        15,
+      ),
+    ).toBe(false);
+    expect(
+      isWithinLocalRetryWindow(
+        'UTC',
+        '08:00',
+        new Date('2026-06-15T08:15:00.000Z'),
+        15,
+      ),
+    ).toBe(true);
+    expect(
+      isWithinLocalRetryWindow(
+        'UTC',
+        '08:00',
+        new Date('2026-06-15T08:16:00.000Z'),
+        15,
+      ),
+    ).toBe(false);
   });
 });

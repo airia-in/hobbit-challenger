@@ -42,6 +42,12 @@ COPY --from=build --chown=node:node /repo/apps/api/docker-entrypoint.sh /app/doc
 
 RUN chmod +x /app/docker-entrypoint.sh
 
+# Create the data/uploads dir owned by node so the named volume mounted at
+# /app/data inherits node ownership on first initialization (Docker copies the
+# image dir's ownership into an empty named volume). Without this the volume is
+# root-owned and the non-root node user cannot mkdir /app/data/uploads.
+RUN mkdir -p /app/data/uploads && chown -R node:node /app/data
+
 USER node
 
 EXPOSE 3001

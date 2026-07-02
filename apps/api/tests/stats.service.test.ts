@@ -25,6 +25,10 @@ type FakePrismaSeed = {
   activities: Activity[];
   activityLogs: ActivityLog[];
   dayScores?: DayScore[];
+  milestones?: Array<{
+    milestoneKey: string;
+    unlockedAt: Date;
+  }>;
 };
 
 function sortChallenges(
@@ -53,6 +57,7 @@ function createFakePrisma(seed: FakePrismaSeed) {
   );
   const activityLogs = [...seed.activityLogs.map((log) => ({ ...log }))];
   const dayScores = [...(seed.dayScores ?? []).map((day) => ({ ...day }))];
+  const milestones = [...(seed.milestones ?? [])];
 
   const prisma = {
     user: {
@@ -182,6 +187,14 @@ function createFakePrisma(seed: FakePrismaSeed) {
           subPoints: log.subPoints,
         }));
       },
+      count: async ({ where }: { where: { userId?: string } }) => {
+        return activityLogs.filter((log) => {
+          if (where.userId !== undefined && log.userId !== where.userId) {
+            return false;
+          }
+          return true;
+        }).length;
+      },
     },
     dayScore: {
       findMany: async ({
@@ -248,6 +261,22 @@ function createFakePrisma(seed: FakePrismaSeed) {
         return match
           ? { netXp: match.netXp, finalized: match.finalized }
           : null;
+      },
+    },
+    userMilestone: {
+      findMany: async ({
+        orderBy,
+      }: {
+        where: { userId?: string };
+        orderBy?: { unlockedAt: 'asc' | 'desc' };
+      }) => {
+        let result = [...milestones];
+        if (orderBy?.unlockedAt === 'desc') {
+          result = [...result].sort(
+            (a, b) => b.unlockedAt.getTime() - a.unlockedAt.getTime(),
+          );
+        }
+        return result;
       },
     },
   };
@@ -532,6 +561,33 @@ describe('stats.service', () => {
 
       expect(result.streakFreezesAvailable).toBe(1);
       expect(result.streakFreezesUsed).toBe(2);
+    });
+
+    it('exposes earned milestones on dashboard stats', async () => {
+      const challengeId = 'challenge-milestones';
+      const unlockedAt = new Date('2026-07-01T00:00:00.000Z');
+      const prisma = createFakePrisma({
+        users: [makeUser()],
+        challenges: [makeChallenge(challengeId, { isActive: true })],
+        activities: [],
+        activityLogs: [],
+        dayScores: [],
+        milestones: [
+          { milestoneKey: 'streak_7', unlockedAt },
+          {
+            milestoneKey: 'streak_21',
+            unlockedAt: new Date('2026-06-20T00:00:00.000Z'),
+          },
+        ],
+      });
+
+      const result = await getDashboardStats(prisma, USER_ID);
+
+      expect(result.milestones.earned).toHaveLength(2);
+      expect(result.milestones.latestUnlock?.key).toBe('streak_7');
+      expect(result.milestones.latestUnlock?.title).toBe(
+        'First week on the trail',
+      );
     });
 
     it('suppresses streak break when latest day was freeze-absorbed', async () => {

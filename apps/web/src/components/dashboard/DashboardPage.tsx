@@ -54,6 +54,11 @@ import {
 import { PerfectDayBanner } from './PerfectDayBanner';
 import { PerfectDayCelebration } from './PerfectDayCelebration';
 import { StreakRecoveryBanner } from './StreakRecoveryBanner';
+import { MilestoneUnlockToast } from './MilestoneUnlockToast';
+import {
+  dismissMilestoneToast,
+  isMilestoneToastDismissed,
+} from '../../lib/milestone-toast-storage';
 
 const apiUrl = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -356,6 +361,7 @@ export function DashboardContent() {
   const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(
     null,
   );
+  const [milestoneToastDismissed, setMilestoneToastDismissed] = useState(false);
   const confettiTriggeredRef = useRef(false);
   const prevAllScoredCompleteRef = useRef<boolean | null>(null);
   const queryInput = viewedDateKey ? { date: viewedDateKey } : undefined;
@@ -455,6 +461,19 @@ export function DashboardContent() {
     !recoveryDismissedSession &&
     !recoveryDismissedStorage &&
     !allScoredComplete;
+
+  const latestMilestone = stats?.milestones?.latestUnlock ?? null;
+  const showMilestoneToast =
+    latestMilestone != null &&
+    !milestoneToastDismissed &&
+    !isMilestoneToastDismissed(latestMilestone.key);
+
+  const handleMilestoneToastDismiss = useCallback(() => {
+    if (latestMilestone) {
+      dismissMilestoneToast(latestMilestone.key);
+    }
+    setMilestoneToastDismissed(true);
+  }, [latestMilestone]);
 
   if (activitiesQuery.isLoading || statsQuery.isLoading) {
     return (
@@ -714,6 +733,13 @@ export function DashboardContent() {
           active={confettiActive}
           onDone={handleConfettiDone}
         />
+
+        {showMilestoneToast && latestMilestone ? (
+          <MilestoneUnlockToast
+            milestone={latestMilestone}
+            onDismiss={handleMilestoneToastDismiss}
+          />
+        ) : null}
       </div>
     </div>
   );

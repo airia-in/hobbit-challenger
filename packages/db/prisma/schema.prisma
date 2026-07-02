@@ -31,6 +31,7 @@ model User {
   challenges     Challenge[]
   activityLogs   ActivityLog[]
   reminderLogs   ReminderLog[]
+  milestones     UserMilestone[]
   primaryAdminOf Group[]       @relation("GroupPrimaryAdmin")
   groupAdminOf   GroupAdmin[]
 }
@@ -97,6 +98,7 @@ model Challenge {
   lastStreakFreezeGrantedAt DateTime?
   activityLogs  ActivityLog[]
   dayScores     DayScore[]
+  milestones    UserMilestone[]
 }
 
 model Activity {
@@ -168,6 +170,21 @@ model DayScore {
 
   @@unique([challengeId, date])
   @@index([userId, date])
+}
+
+/// Curated achievement unlocks. All milestone keys are user-scoped (unique per user);
+/// challengeId is optional metadata for the challenge active at unlock time.
+model UserMilestone {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  challengeId  String?
+  challenge    Challenge? @relation(fields: [challengeId], references: [id])
+  milestoneKey String
+  unlockedAt   DateTime   @default(now())
+
+  @@unique([userId, milestoneKey])
+  @@index([userId, unlockedAt])
 }
 
 model DayLabel {

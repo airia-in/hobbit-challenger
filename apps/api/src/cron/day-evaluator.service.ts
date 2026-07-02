@@ -6,10 +6,12 @@ import {
   mapLogToInput,
 } from '../services/activities.service';
 import { evaluateDayRollover } from '../services/day-finalizer';
+import { evaluateAndUnlockMilestones } from '../services/milestones.service';
 import { activeChallengeRelationArgs } from '../utils/challenge-query';
 import { fallbackScheduledEnd } from '../utils/challenge-range';
 import { isFreezeAbsorbed } from '../utils/day-completion';
 import { addLocalDays, getUserLocalDate } from '../utils/day-window';
+import { MilestoneMessageService } from '../whatsapp/milestone-message.service';
 import { StreakFreezeMessageService } from '../whatsapp/streak-freeze-message.service';
 
 @Injectable()
@@ -20,6 +22,8 @@ export class DayEvaluatorService {
     private readonly prisma: PrismaService,
     @Optional()
     private readonly streakFreezeMessage?: StreakFreezeMessageService,
+    @Optional()
+    private readonly milestoneMessage?: MilestoneMessageService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -278,6 +282,22 @@ export class DayEvaluatorService {
     });
 
     if (finalized) {
+      await this.maybeEvaluateMilestones({
+        userId,
+        userName,
+        userPhone,
+        whatsappOptIn,
+        groupId,
+        challengeId: challenge.id,
+        evaluationDay,
+        challengeTimezone,
+        reminderTime,
+        newStreak: result.challengeUpdate.currentStreak,
+        dayCounted: result.dayScore.breakdown.allScoredLogged,
+        allScoredLogged: result.dayScore.breakdown.allScoredLogged,
+        freezeConsumed: result.flags.freezeConsumed,
+        challengeActive: !result.challengeUpdate.completed,
+      });
       await this.maybeSendStreakFreezeConsumeMessage({
         userId,
         userName,
@@ -304,6 +324,71 @@ export class DayEvaluatorService {
         reminderTime,
         challengeActive: !result.challengeUpdate.completed,
       });
+    }
+  }
+
+  private async maybeEvaluateMilestones(input: {
+    userId: string;
+    userName: string;
+    userPhone: string | null;
+    whatsappOptIn: boolean;
+    groupId: string | null;
+    challengeId: string;
+    evaluationDay: Date;
+    challengeTimezone: string;
+    reminderTime: string | null;
+    newStreak: number;
+    dayCounted: boolean;
+    allScoredLogged: boolean;
+    freezeConsumed: boolean;
+    challengeActive: boolean;
+  }): Promise<void> {
+    try {
+      const { newlyUnlocked } = await evaluateAndUnlockMilestones(this.prisma, {
+        userId: input.userId,
+        challengeId: input.challengeId,
+        groupId: input.groupId,
+        evaluationDay: input.evaluationDay,
+        timezone: input.challengeTimezone,
+        newStreak: input.newStreak,
+        dayCounted: input.dayCounted,
+        allScoredLogged: input.allScoredLogged,
+        freezeConsumed: input.freezeConsumed,
+      });
+
+      if (
+        !this.milestoneMessage ||
+        !input.userPhone ||
+        !input.whatsappOptIn ||
+        !input.challengeActive
+      ) {
+        return;
+      }
+
+      for (const milestoneKey of newlyUnlocked) {
+        try {
+          await this.milestoneMessage.trySendUnlockMessage({
+            prisma: this.prisma,
+            userId: input.userId,
+            userName: input.userName,
+            phone: input.userPhone,
+            evaluationDay: input.evaluationDay,
+            milestoneKey,
+            timezone: input.challengeTimezone,
+            morningTime: input.reminderTime ?? undefined,
+          });
+        } catch (error) {
+          this.logger.error(
+            `Milestone message failed for user ${input.userId} (${milestoneKey}):`,
+            error,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `Milestone evaluation failed for user ${input.userId}:`,
+        error,
+      );
     }
   }
 

@@ -277,6 +277,10 @@ const dashboardStats = {
     brokeOnDate: null,
     daysSinceBreak: 0,
   },
+  milestones: {
+    earned: [],
+    latestUnlock: null,
+  },
 };
 
 const emptyToday = {

@@ -518,6 +518,9 @@ describe('reminder-context helpers', () => {
       activityLog: {
         findMany: async () => [],
       },
+      userMilestone: {
+        findMany: async () => [],
+      },
     };
 
     const activitiesService = {

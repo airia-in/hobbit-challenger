@@ -9,6 +9,8 @@ export type BuiltinActivitySeed = {
   scored: boolean;
   isPersonal: boolean;
   deductMultiplier: number;
+  allowsProof: boolean;
+  autoCompleteOnProof: boolean;
   xpComplete?: number;
   xpMiss?: number;
   unitLabel?: string;
@@ -18,6 +20,19 @@ export type BuiltinActivitySeed = {
   subPoints?: Prisma.InputJsonValue;
   tiers?: Prisma.InputJsonValue;
 };
+
+function builtinProofRules(seedKey: string): {
+  allowsProof: boolean;
+  autoCompleteOnProof: boolean;
+} {
+  if (seedKey === 'DIET') {
+    return { allowsProof: false, autoCompleteOnProof: false };
+  }
+  if (seedKey === 'PROGRESS_PHOTO') {
+    return { allowsProof: true, autoCompleteOnProof: true };
+  }
+  return { allowsProof: true, autoCompleteOnProof: false };
+}
 
 export const BUILTIN_ACTIVITIES: BuiltinActivitySeed[] = [
   {
@@ -29,6 +44,7 @@ export const BUILTIN_ACTIVITIES: BuiltinActivitySeed[] = [
     scored: true,
     isPersonal: false,
     deductMultiplier: 3,
+    ...builtinProofRules('DIET'),
     subPoints: [
       { key: 'HEALTHY', label: 'Healthy', xp: 60 },
       { key: 'NO_JUNK', label: 'No junk', xp: 70 },
@@ -44,6 +60,7 @@ export const BUILTIN_ACTIVITIES: BuiltinActivitySeed[] = [
     scored: true,
     isPersonal: false,
     deductMultiplier: 3,
+    ...builtinProofRules('ACTIVITY'),
     subPoints: [
       { key: 'MIN_45', label: '45 min', xp: 200 },
       { key: 'OUTSIDE', label: 'Outside', xp: 50 },
@@ -58,6 +75,7 @@ export const BUILTIN_ACTIVITIES: BuiltinActivitySeed[] = [
     scored: true,
     isPersonal: false,
     deductMultiplier: 2,
+    ...builtinProofRules('WATER'),
     unitLabel: 'L',
     xpPerUnit: 26.3,
     xpCap: 100,
@@ -72,6 +90,7 @@ export const BUILTIN_ACTIVITIES: BuiltinActivitySeed[] = [
     scored: true,
     isPersonal: false,
     deductMultiplier: 2,
+    ...builtinProofRules('READING'),
     subPoints: [
       { key: 'PAGES_10', label: '10 pages', xp: 100 },
       { key: 'NON_FICTION', label: 'Non-fiction', xp: 50 },
@@ -86,6 +105,7 @@ export const BUILTIN_ACTIVITIES: BuiltinActivitySeed[] = [
     scored: true,
     isPersonal: false,
     deductMultiplier: 2,
+    ...builtinProofRules('PROGRESS_PHOTO'),
     xpComplete: 200,
     xpMiss: -200,
   },
@@ -98,6 +118,7 @@ export const BUILTIN_ACTIVITIES: BuiltinActivitySeed[] = [
     scored: true,
     isPersonal: false,
     deductMultiplier: 2,
+    ...builtinProofRules('NO_REELS'),
     tiers: [
       { key: 'NONE', label: '0 min', maxMinutes: 0, xp: 250 },
       { key: 'UNDER_30', label: '<=30 min', maxMinutes: 30, xp: 150 },
@@ -114,6 +135,7 @@ export const BUILTIN_ACTIVITIES: BuiltinActivitySeed[] = [
     scored: true,
     isPersonal: false,
     deductMultiplier: 2,
+    ...builtinProofRules('NO_SOCIAL'),
     tiers: [
       { key: 'NONE', label: '0 min', maxMinutes: 0, xp: 250 },
       { key: 'UNDER_30', label: '<=30 min', maxMinutes: 30, xp: 150 },
@@ -146,6 +168,8 @@ export async function seedGroupActivities(
         scored: activity.scored,
         isPersonal: activity.isPersonal,
         deductMultiplier: activity.deductMultiplier,
+        allowsProof: activity.allowsProof,
+        autoCompleteOnProof: activity.autoCompleteOnProof,
         sortOrder: activity.sortOrder,
         xpComplete: activity.xpComplete,
         xpMiss: activity.xpMiss,
@@ -163,6 +187,8 @@ export async function seedGroupActivities(
         scored: activity.scored,
         isPersonal: activity.isPersonal,
         deductMultiplier: activity.deductMultiplier,
+        allowsProof: activity.allowsProof,
+        autoCompleteOnProof: activity.autoCompleteOnProof,
         sortOrder: activity.sortOrder,
         xpComplete: activity.xpComplete,
         xpMiss: activity.xpMiss,

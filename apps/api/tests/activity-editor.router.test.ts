@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { TRPCError } from '@trpc/server';
 import {
   ActivityKind,
@@ -284,6 +284,8 @@ function groupCheckboxActivity(id: string, overrides: Partial<Activity> = {}) {
     subPoints: null,
     tiers: null,
     deductMultiplier: 2,
+    allowsProof: false,
+    autoCompleteOnProof: false,
     sortOrder: 10,
     active: true,
     createdAt: new Date(),
@@ -314,6 +316,8 @@ function personalCheckboxActivity(
     subPoints: null,
     tiers: null,
     deductMultiplier: 2,
+    allowsProof: false,
+    autoCompleteOnProof: false,
     sortOrder: 0,
     active: true,
     createdAt: new Date(),
@@ -322,9 +326,7 @@ function personalCheckboxActivity(
 }
 
 function createActivitiesService() {
-  return new ActivitiesService({
-    verifyProof: vi.fn(),
-  } as never);
+  return new ActivitiesService();
 }
 
 function createRouterContext(

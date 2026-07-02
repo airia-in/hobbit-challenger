@@ -44,7 +44,10 @@ import type {
   SetActivityActiveInput,
   UpdateActivityInput,
 } from '@workspace-starter/types';
-import { ProofVerifierService } from './proof-verifier.service';
+import {
+  canAttachProofToActivity,
+  shouldAutoCompleteOnProof,
+} from '../utils/proof-completion';
 
 export const LEGACY_TASK_TYPES = [
   'DIET',
@@ -58,16 +61,6 @@ export const LEGACY_TASK_TYPES = [
 ] as const;
 
 export type LegacyTaskType = (typeof LEGACY_TASK_TYPES)[number];
-
-const SEED_KEY_TO_LEGACY_TASK: Record<string, LegacyTaskType> = {
-  DIET: 'DIET',
-  ACTIVITY: 'OUTDOOR_WORKOUT',
-  WATER: 'WATER',
-  READING: 'READING',
-  PROGRESS_PHOTO: 'PROGRESS_PHOTO',
-  NO_REELS: 'NO_REELS',
-  NO_SOCIAL: 'NO_SOCIAL',
-};
 
 export type DayTotals = {
   netXp: number;
@@ -104,6 +97,8 @@ export type TodayActivity = {
   subPoints?: SubPointConfig[];
   tiers?: TierConfig[];
   deductMultiplier: number;
+  allowsProof: boolean;
+  autoCompleteOnProof: boolean;
   log: TodayActivityLog | null;
   canAttachProof: boolean;
   canEdit: boolean;
@@ -187,6 +182,8 @@ function mapActivityToToday(
     subPoints: scored.subPoints,
     tiers: scored.tiers,
     deductMultiplier: activity.deductMultiplier,
+    allowsProof: activity.allowsProof,
+    autoCompleteOnProof: activity.autoCompleteOnProof,
     log: log
       ? {
           id: log.id,
@@ -200,7 +197,7 @@ function mapActivityToToday(
           aiVerdict: log.aiVerdict,
         }
       : null,
-    canAttachProof: activity.seedKey !== 'DIET',
+    canAttachProof: canAttachProofToActivity(activity),
     canEdit,
     ...(currentStreak === undefined ? {} : { currentStreak }),
   };
@@ -317,6 +314,8 @@ export function mapActivityToEditorRow(activity: Activity): ActivityEditorRow {
     subPoints: (activity.subPoints ?? null) as ActivityEditorRow['subPoints'],
     tiers: (activity.tiers ?? null) as ActivityEditorRow['tiers'],
     deductMultiplier: activity.deductMultiplier,
+    allowsProof: activity.allowsProof,
+    autoCompleteOnProof: activity.autoCompleteOnProof,
     sortOrder: activity.sortOrder,
     active: activity.active,
   };
@@ -339,6 +338,8 @@ function buildCreateActivityData(input: CreateCustomActivityInput) {
     emoji: input.emoji ?? null,
     kind: input.kind,
     deductMultiplier: input.deductMultiplier,
+    allowsProof: input.allowsProof,
+    autoCompleteOnProof: input.autoCompleteOnProof,
     sortOrder: input.sortOrder,
     seedKey: null,
     active: true,
@@ -421,11 +422,32 @@ function assertKindSpecificUpdateFields(
   }
 }
 
+function assertProofRuleUpdate(activity: Activity, input: UpdateActivityInput) {
+  const nextAllowsProof = input.allowsProof ?? activity.allowsProof;
+  const nextAutoComplete =
+    input.autoCompleteOnProof ?? activity.autoCompleteOnProof;
+
+  if (nextAutoComplete && !nextAllowsProof) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'autoCompleteOnProof requires allowsProof',
+    });
+  }
+
+  if (nextAutoComplete && activity.kind !== 'CHECKBOX') {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'autoCompleteOnProof is only supported for CHECKBOX activities',
+    });
+  }
+}
+
 function buildUpdateActivityData(
   activity: Activity,
   input: UpdateActivityInput,
 ): Prisma.ActivityUpdateInput {
   assertKindSpecificUpdateFields(activity, input);
+  assertProofRuleUpdate(activity, input);
 
   const data: Prisma.ActivityUpdateInput = {};
 
@@ -435,6 +457,13 @@ function buildUpdateActivityData(
     data.deductMultiplier = input.deductMultiplier;
   }
   if (input.sortOrder !== undefined) data.sortOrder = input.sortOrder;
+  if (input.allowsProof !== undefined) data.allowsProof = input.allowsProof;
+  if (input.autoCompleteOnProof !== undefined) {
+    data.autoCompleteOnProof = input.autoCompleteOnProof;
+  }
+  if (input.allowsProof === false) {
+    data.autoCompleteOnProof = false;
+  }
 
   if (activity.kind === 'CHECKBOX') {
     if (input.xpComplete !== undefined) data.xpComplete = input.xpComplete;
@@ -830,17 +859,8 @@ function computeXpAwarded(
   return earned - deducted;
 }
 
-function seedKeyToLegacyTask(seedKey: string | null): LegacyTaskType | null {
-  if (!seedKey) {
-    return null;
-  }
-  return SEED_KEY_TO_LEGACY_TASK[seedKey] ?? null;
-}
-
 @Injectable()
 export class ActivitiesService {
-  constructor(private readonly proofVerifier: ProofVerifierService) {}
-
   async getToday(
     prisma: PrismaService,
     userId: string,
@@ -1175,13 +1195,13 @@ export class ActivitiesService {
     activityId: string,
     proofUrl: string,
     dateKey?: string,
-  ): Promise<{ log: ActivityLog }> {
+  ): Promise<MutationResult> {
     const ctx = await this.loadMutationContext(prisma, userId, activityId);
 
-    if (ctx.activity.seedKey === 'DIET') {
+    if (!canAttachProofToActivity(ctx.activity)) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
-        message: 'Photo proof is not allowed for diet',
+        message: 'Photo proof is not allowed for this activity',
       });
     }
 
@@ -1194,55 +1214,90 @@ export class ActivitiesService {
       activityId,
     );
 
-    const existing = await prisma.activityLog.findFirst({
-      where: {
-        challengeId: ctx.challenge.id,
-        activityId,
-        date: viewedDate,
-      },
-    });
+    const scored = mapActivityToScored(ctx.activity);
+    const autoComplete = shouldAutoCompleteOnProof(ctx.activity, proofUrl);
+    const completionPayload = autoComplete
+      ? buildMarkActivityPayload(scored)
+      : null;
 
-    const log = await prisma.activityLog.upsert({
-      where: {
-        challengeId_activityId_date: {
+    return prisma.$transaction(async (tx) => {
+      const existing = await tx.activityLog.findFirst({
+        where: {
           challengeId: ctx.challenge.id,
           activityId,
           date: viewedDate,
         },
-      },
-      create: {
-        challengeId: ctx.challenge.id,
-        userId,
+      });
+
+      const state = autoComplete
+        ? (completionPayload?.state ?? null)
+        : (existing?.state ?? null);
+      const value = autoComplete
+        ? (completionPayload?.value ?? null)
+        : (existing?.value ?? null);
+      const tier = autoComplete
+        ? (completionPayload?.tier ?? null)
+        : (existing?.tier ?? null);
+      const subPoints = autoComplete
+        ? (completionPayload?.subPoints ?? null)
+        : ((existing?.subPoints as Record<string, ActivityLogState> | null) ??
+          null);
+
+      const logInput: ActivityLogInput = {
         activityId,
-        date: viewedDate,
-        proofUrl,
-        xpAwarded: 0,
-      },
-      update: { proofUrl },
-    });
+        state: state as ActivityLogState | null | undefined,
+        value,
+        tier,
+        subPoints: subPoints ?? undefined,
+      };
+      const xpAwarded = autoComplete
+        ? computeXpAwarded(scored, logInput)
+        : (existing?.xpAwarded ?? 0);
 
-    const legacyTask = seedKeyToLegacyTask(ctx.activity.seedKey);
-    if (legacyTask && proofUrl !== existing?.proofUrl) {
-      void this.proofVerifier.verifyProof(legacyTask, proofUrl).then(
-        async (result) => {
-          const aiVerdict =
-            result.reason === 'SKIPPED'
-              ? 'SKIPPED'
-              : result.reason === 'ERROR'
-                ? 'ERROR'
-                : result.passed
-                  ? 'PASSED'
-                  : 'FAILED';
-          await prisma.activityLog.update({
-            where: { id: log.id },
-            data: { aiVerdict },
-          });
+      const log = await tx.activityLog.upsert({
+        where: {
+          challengeId_activityId_date: {
+            challengeId: ctx.challenge.id,
+            activityId,
+            date: viewedDate,
+          },
         },
-        () => {},
-      );
-    }
+        create: {
+          challengeId: ctx.challenge.id,
+          userId,
+          activityId,
+          date: viewedDate,
+          proofUrl,
+          state,
+          value,
+          tier,
+          subPoints: subPoints ?? undefined,
+          xpAwarded,
+        },
+        update: {
+          proofUrl,
+          ...(autoComplete
+            ? {
+                state,
+                value,
+                tier,
+                subPoints: subPoints ?? undefined,
+                xpAwarded,
+              }
+            : {}),
+        },
+      });
 
-    return { log };
+      const dayTotals = await recomputeLiveDayScore(tx, {
+        challenge: ctx.challenge,
+        userId,
+        timezone: ctx.user.timezone,
+        groupId: ctx.user.groupId,
+        date: viewedDate,
+      });
+
+      return { log, dayTotals };
+    });
   }
 
   private async loadMutationContext(

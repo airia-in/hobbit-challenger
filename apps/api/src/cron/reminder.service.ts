@@ -5,12 +5,15 @@ import {
   getDatePartsInTimezone,
   getUserLocalDate,
   isLocalTimeMatch,
+  isWithinLocalCatchUpWindow,
+  parseLocalDateKey,
 } from '../utils/day-window';
 import { EvolutionApiClient } from '../whatsapp/evolution.client';
 import {
   hasEveningReminderEligibility,
   hasRecoveryReminderEligibility,
   hasStreakAtRiskReminderEligibility,
+  ReminderContext,
   ReminderContextService,
   shouldDeferEveningToStreakAtRisk,
 } from '../whatsapp/reminder-context.service';
@@ -23,6 +26,10 @@ const DEFAULT_MORNING_TIME = '08:00';
 const STREAK_AT_RISK_TIME = '18:00';
 const EVENING_TIME = '21:00';
 const FAILED_RETRY_WINDOW_MINUTES = 15;
+const FIRST_SEND_CATCH_UP_MINUTES = 15;
+/** 18:00–20:59; 21:00 evening block owns final catch-up + EVENING fallback. */
+const STREAK_AT_RISK_SLOT_CATCH_UP_MINUTES = 179;
+const STREAK_AT_RISK_RETRY_MINUTES = 180;
 
 type ReminderStatus = 'SENT' | 'FAILED' | 'SKIPPED_OPTOUT';
 
@@ -62,6 +69,7 @@ export class ReminderService {
         timezone: true,
         reminderTime: true,
         whatsappOptIn: true,
+        group: { select: { challengeTimezone: true } },
       },
     });
 
@@ -81,9 +89,12 @@ export class ReminderService {
     timezone: string;
     reminderTime: string | null;
     whatsappOptIn: boolean;
+    group: { challengeTimezone: string | null } | null;
   }): Promise<void> {
+    const reminderTimezone = user.group?.challengeTimezone ?? user.timezone;
+
     if (!user.phone || !user.whatsappOptIn) {
-      const localDate = getUserLocalDate(user.timezone);
+      const localDate = getUserLocalDate(reminderTimezone);
       await this.recordSkippedOptout(user.id, localDate, 'MORNING');
       await this.recordSkippedOptout(user.id, localDate, 'RECOVERY');
       await this.recordSkippedOptout(user.id, localDate, 'STREAK_AT_RISK');
@@ -91,48 +102,88 @@ export class ReminderService {
       return;
     }
 
-    const localDate = getUserLocalDate(user.timezone);
+    const localDate = getUserLocalDate(reminderTimezone);
     const morningTime = user.reminderTime ?? DEFAULT_MORNING_TIME;
-
-    if (
-      isLocalTimeMatch(user.timezone, morningTime) ||
+    const morningWindowActive =
+      isLocalTimeMatch(reminderTimezone, morningTime) ||
+      isWithinLocalCatchUpWindow(
+        reminderTimezone,
+        morningTime,
+        new Date(),
+        FIRST_SEND_CATCH_UP_MINUTES,
+      ) ||
       (await this.shouldRetryFailedReminder(
         user.id,
         localDate,
         'MORNING',
-        user.timezone,
+        reminderTimezone,
         morningTime,
-      )) ||
-      (await this.shouldRetryFailedReminder(
-        user.id,
-        localDate,
-        'RECOVERY',
-        user.timezone,
-        morningTime,
-      ))
-    ) {
+      ));
+
+    if (morningWindowActive) {
       const context = await this.contextService.buildContext(
         this.prisma,
         user.id,
         user.name,
       );
       if (hasRecoveryReminderEligibility(context)) {
-        await this.trySendReminder(user, localDate, 'RECOVERY', context);
-      } else {
+        const recoveryDate = parseLocalDateKey(
+          context.recoveryBreakDate!,
+          reminderTimezone,
+        );
+        const recoveryDue =
+          isLocalTimeMatch(reminderTimezone, morningTime) ||
+          isWithinLocalCatchUpWindow(
+            reminderTimezone,
+            morningTime,
+            new Date(),
+            FIRST_SEND_CATCH_UP_MINUTES,
+          ) ||
+          (await this.shouldRetryFailedReminder(
+            user.id,
+            recoveryDate,
+            'RECOVERY',
+            reminderTimezone,
+            morningTime,
+          ));
+        if (recoveryDue) {
+          await this.trySendReminder(user, recoveryDate, 'RECOVERY', context);
+        }
+      } else if (morningWindowActive) {
         await this.trySendReminder(user, localDate, 'MORNING', context);
       }
     }
 
-    if (
-      isLocalTimeMatch(user.timezone, STREAK_AT_RISK_TIME) ||
-      (await this.shouldRetryFailedReminder(
+    const morningSlotBlocksStreakAtRisk =
+      morningTime === STREAK_AT_RISK_TIME &&
+      (isLocalTimeMatch(reminderTimezone, morningTime) ||
+        isWithinLocalCatchUpWindow(
+          reminderTimezone,
+          morningTime,
+          new Date(),
+          FIRST_SEND_CATCH_UP_MINUTES,
+        ) ||
+        (await this.shouldRetryFailedReminder(
+          user.id,
+          localDate,
+          'MORNING',
+          reminderTimezone,
+          morningTime,
+        )));
+
+    const streakAtRiskSlotDue =
+      !morningSlotBlocksStreakAtRisk &&
+      (await this.shouldProcessReminderSlot(
         user.id,
         localDate,
-        'STREAK_AT_RISK',
-        user.timezone,
+        reminderTimezone,
         STREAK_AT_RISK_TIME,
-      ))
-    ) {
+        ['STREAK_AT_RISK'],
+        STREAK_AT_RISK_SLOT_CATCH_UP_MINUTES,
+        STREAK_AT_RISK_RETRY_MINUTES,
+      ));
+
+    if (streakAtRiskSlotDue) {
       const context = await this.contextService.buildContext(
         this.prisma,
         user.id,
@@ -143,28 +194,101 @@ export class ReminderService {
       }
     }
 
-    if (
-      isLocalTimeMatch(user.timezone, EVENING_TIME) ||
-      (await this.shouldRetryFailedReminder(
-        user.id,
-        localDate,
-        'EVENING',
-        user.timezone,
-        EVENING_TIME,
-      ))
-    ) {
+    const eveningSlotDue = await this.shouldProcessReminderSlot(
+      user.id,
+      localDate,
+      reminderTimezone,
+      EVENING_TIME,
+      ['EVENING'],
+      FIRST_SEND_CATCH_UP_MINUTES,
+    );
+
+    if (eveningSlotDue) {
       const context = await this.contextService.buildContext(
         this.prisma,
         user.id,
         user.name,
       );
+      const streakAtRiskSent = await this.hasSentReminder(
+        user.id,
+        localDate,
+        'STREAK_AT_RISK',
+      );
+
+      if (hasStreakAtRiskReminderEligibility(context) && !streakAtRiskSent) {
+        await this.trySendReminder(user, localDate, 'STREAK_AT_RISK', context);
+      }
+
+      const streakAtRiskSentAfterCatchUp = await this.hasSentReminder(
+        user.id,
+        localDate,
+        'STREAK_AT_RISK',
+      );
+
       if (
         hasEveningReminderEligibility(context) &&
-        !shouldDeferEveningToStreakAtRisk(context)
+        !shouldDeferEveningToStreakAtRisk(context, streakAtRiskSentAfterCatchUp)
       ) {
         await this.trySendReminder(user, localDate, 'EVENING', context);
       }
     }
+  }
+
+  private async shouldProcessReminderSlot(
+    userId: string,
+    localDate: Date,
+    timezone: string,
+    targetTime: string,
+    kinds: ReminderKind[],
+    catchUpWindowMinutes: number,
+    failedRetryWindowMinutes = FAILED_RETRY_WINDOW_MINUTES,
+  ): Promise<boolean> {
+    if (isLocalTimeMatch(timezone, targetTime)) {
+      return true;
+    }
+
+    for (const kind of kinds) {
+      if (
+        await this.shouldRetryFailedReminder(
+          userId,
+          localDate,
+          kind,
+          timezone,
+          targetTime,
+          failedRetryWindowMinutes,
+        )
+      ) {
+        return true;
+      }
+    }
+
+    if (
+      !isWithinLocalCatchUpWindow(
+        timezone,
+        targetTime,
+        new Date(),
+        catchUpWindowMinutes,
+      )
+    ) {
+      return false;
+    }
+
+    for (const kind of kinds) {
+      const existing = await this.prisma.reminderLog.findUnique({
+        where: {
+          userId_date_kind: {
+            userId,
+            date: localDate,
+            kind,
+          },
+        },
+      });
+      if (!existing) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private async shouldRetryFailedReminder(
@@ -173,8 +297,16 @@ export class ReminderService {
     kind: ReminderKind,
     timezone: string,
     reminderTime: string,
+    retryWindowMinutes = FAILED_RETRY_WINDOW_MINUTES,
   ): Promise<boolean> {
-    if (!isWithinLocalRetryWindow(timezone, reminderTime)) {
+    if (
+      !isWithinLocalRetryWindow(
+        timezone,
+        reminderTime,
+        new Date(),
+        retryWindowMinutes,
+      )
+    ) {
       return false;
     }
 
@@ -191,6 +323,23 @@ export class ReminderService {
     return existing?.status === 'FAILED';
   }
 
+  private async hasSentReminder(
+    userId: string,
+    localDate: Date,
+    kind: ReminderKind,
+  ): Promise<boolean> {
+    const existing = await this.prisma.reminderLog.findUnique({
+      where: {
+        userId_date_kind: {
+          userId,
+          date: localDate,
+          kind,
+        },
+      },
+    });
+    return existing?.status === 'SENT';
+  }
+
   private async trySendReminder(
     user: {
       id: string;
@@ -200,9 +349,7 @@ export class ReminderService {
     },
     localDate: Date,
     kind: ReminderKind,
-    prebuiltContext?: Awaited<
-      ReturnType<ReminderContextService['buildContext']>
-    >,
+    prebuiltContext?: ReminderContext,
   ): Promise<void> {
     const existing = await this.prisma.reminderLog.findUnique({
       where: {

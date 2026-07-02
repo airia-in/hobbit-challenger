@@ -865,6 +865,7 @@ export class ActivitiesService {
     prisma: PrismaService,
     userId: string,
     dateKey?: string,
+    options?: { timezone?: string },
   ): Promise<GetTodayResult> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -874,12 +875,13 @@ export class ActivitiesService {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
     }
 
+    const timezone = options?.timezone ?? user.timezone;
     const { viewedDate, viewedKey, todayKey } = resolveViewedDateKey(
       dateKey,
-      user.timezone,
+      timezone,
     );
     const isViewingToday = viewedKey === todayKey;
-    const todayWindowOpen = isBeforeMidnight(user.timezone);
+    const todayWindowOpen = isBeforeMidnight(timezone);
 
     const challenge = await findActiveChallenge(prisma, userId);
     if (!challenge) {

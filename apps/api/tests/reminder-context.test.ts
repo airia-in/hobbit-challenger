@@ -15,6 +15,7 @@ import {
   pickTopActivityStreak,
   ReminderContextService,
   resolveJourneyMilestone,
+  resolveRecoveryEligibility,
   shouldDeferEveningToStreakAtRisk,
   STREAK_AT_RISK_MIN,
 } from '../src/whatsapp/reminder-context.service';
@@ -189,6 +190,8 @@ describe('reminder-context helpers', () => {
       longestStreak: 12,
       rank: 2,
       missedYesterday: true,
+      recoveryEligible: true,
+      recoveryBreakDate: '2026-06-14',
     });
 
     expect(context).toEqual({
@@ -204,6 +207,9 @@ describe('reminder-context helpers', () => {
       topActivityName: 'Water',
       unloggedHabitNames: ['Diet', 'Walk'],
       missedYesterday: true,
+      recoveryEligible: true,
+      recoveryBreakDate: '2026-06-14',
+      challengeInRange: true,
       streakAtRisk: true,
       journeyMilestone: 7,
       currentStreak: STREAK_AT_RISK_MIN,
@@ -245,6 +251,9 @@ describe('reminder-context helpers', () => {
         topActivityName: null,
         unloggedHabitNames: [],
         missedYesterday: false,
+        recoveryEligible: false,
+        recoveryBreakDate: null,
+        challengeInRange: true,
         streakAtRisk: false,
         journeyMilestone: null,
         currentStreak: 0,
@@ -267,6 +276,9 @@ describe('reminder-context helpers', () => {
         topActivityName: null,
         unloggedHabitNames: [],
         missedYesterday: false,
+        recoveryEligible: false,
+        recoveryBreakDate: null,
+        challengeInRange: true,
         streakAtRisk: true,
         journeyMilestone: null,
         currentStreak: 5,
@@ -276,18 +288,64 @@ describe('reminder-context helpers', () => {
     ).toBe(true);
   });
 
-  it('recovery eligibility tracks missedYesterday only', () => {
+  it('recovery eligibility requires first morning after break while challenge active', () => {
     const base = buildReminderContextFromFixture({
       name: 'A',
       today: emptyToday(),
       todayNetXp: 0,
       totalXp: 0,
       missedYesterday: false,
+      recoveryEligible: false,
     });
     expect(hasRecoveryReminderEligibility(base)).toBe(false);
     expect(
-      hasRecoveryReminderEligibility({ ...base, missedYesterday: true }),
+      hasRecoveryReminderEligibility({
+        ...base,
+        missedYesterday: true,
+        recoveryEligible: true,
+        recoveryBreakDate: '2026-06-14',
+      }),
     ).toBe(true);
+    expect(
+      hasRecoveryReminderEligibility({
+        ...base,
+        missedYesterday: true,
+        recoveryEligible: false,
+        challengeInRange: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('resolveRecoveryEligibility rejects repeat misses and ended challenges', () => {
+    expect(
+      resolveRecoveryEligibility({
+        missedYesterday: true,
+        challengeInRange: true,
+        dayBeforeYesterdayFailed: true,
+        brokeOnDate: '2026-06-14',
+      }),
+    ).toEqual({ recoveryEligible: false, recoveryBreakDate: null });
+
+    expect(
+      resolveRecoveryEligibility({
+        missedYesterday: true,
+        challengeInRange: false,
+        dayBeforeYesterdayFailed: false,
+        brokeOnDate: '2026-06-14',
+      }),
+    ).toEqual({ recoveryEligible: false, recoveryBreakDate: null });
+
+    expect(
+      resolveRecoveryEligibility({
+        missedYesterday: true,
+        challengeInRange: true,
+        dayBeforeYesterdayFailed: false,
+        brokeOnDate: '2026-06-14',
+      }),
+    ).toEqual({
+      recoveryEligible: true,
+      recoveryBreakDate: '2026-06-14',
+    });
   });
 
   it('streak-at-risk eligibility requires streak threshold and open tasks', () => {
@@ -317,7 +375,7 @@ describe('reminder-context helpers', () => {
     ).toBe(false);
   });
 
-  it('defers generic evening when streak-at-risk applies', () => {
+  it('defers generic evening only when STREAK_AT_RISK was sent', () => {
     const atRisk = buildReminderContextFromFixture({
       name: 'A',
       today: emptyToday({
@@ -327,13 +385,17 @@ describe('reminder-context helpers', () => {
       totalXp: 0,
       currentStreak: 5,
     });
-    expect(shouldDeferEveningToStreakAtRisk(atRisk)).toBe(true);
+    expect(shouldDeferEveningToStreakAtRisk(atRisk, true)).toBe(true);
+    expect(shouldDeferEveningToStreakAtRisk(atRisk, false)).toBe(false);
     expect(
-      shouldDeferEveningToStreakAtRisk({
-        ...atRisk,
-        currentStreak: 1,
-        streakAtRisk: false,
-      }),
+      shouldDeferEveningToStreakAtRisk(
+        {
+          ...atRisk,
+          currentStreak: 1,
+          streakAtRisk: false,
+        },
+        true,
+      ),
     ).toBe(false);
   });
 

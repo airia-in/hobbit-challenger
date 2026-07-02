@@ -4,6 +4,7 @@ import {
   ReminderService,
 } from '../src/cron/reminder.service';
 import type { ReminderContext } from '../src/whatsapp/reminder-context.service';
+import { parseLocalDateKey } from '../src/utils/day-window';
 
 type ReminderLogRow = {
   id: string;
@@ -118,6 +119,9 @@ const defaultContext: ReminderContext = {
   topActivityName: null,
   unloggedHabitNames: [],
   missedYesterday: false,
+  recoveryEligible: false,
+  recoveryBreakDate: null,
+  challengeInRange: true,
   streakAtRisk: false,
   journeyMilestone: null,
   currentStreak: 0,
@@ -274,7 +278,13 @@ describe('ReminderService', () => {
     const skipped = [...reminderLogs.values()].filter(
       (l) => l.status === 'SKIPPED_OPTOUT',
     );
-    expect(skipped.length).toBeGreaterThanOrEqual(1);
+    expect(skipped.length).toBe(4);
+    expect(skipped.map((l) => l.kind).sort()).toEqual([
+      'EVENING',
+      'MORNING',
+      'RECOVERY',
+      'STREAK_AT_RISK',
+    ]);
   });
 
   it('retries FAILED morning reminder on next tick within window', async () => {
@@ -351,6 +361,8 @@ describe('ReminderService', () => {
     const buildContext = vi.fn().mockResolvedValue({
       ...defaultContext,
       missedYesterday: true,
+      recoveryEligible: true,
+      recoveryBreakDate: '2026-06-14',
     });
 
     const { prisma, reminderLogs } = createReminderFakePrisma({
@@ -516,12 +528,14 @@ describe('ReminderService', () => {
     );
   });
 
-  it('dedupes RECOVERY to one send per local day', async () => {
+  it('dedupes RECOVERY to one send per break occurrence', async () => {
     const sendText = vi.fn().mockResolvedValue({ ok: true });
     const compose = vi.fn().mockResolvedValue('Recovery');
     const buildContext = vi.fn().mockResolvedValue({
       ...defaultContext,
       missedYesterday: true,
+      recoveryEligible: true,
+      recoveryBreakDate: '2026-06-14',
     });
 
     const { prisma } = createReminderFakePrisma({
@@ -549,6 +563,225 @@ describe('ReminderService', () => {
 
     expect(sendText).toHaveBeenCalledTimes(1);
     expect(compose).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends STREAK_AT_RISK catch-up at 21:00 when 18:00 was missed', async () => {
+    vi.setSystemTime(new Date('2026-06-15T21:00:00.000Z'));
+
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('At risk catch-up');
+    const atRiskContext: ReminderContext = {
+      ...defaultContext,
+      streakAtRisk: true,
+      currentStreak: 5,
+      tasksRemaining: 2,
+      xpAtRisk: 40,
+    };
+    const buildContext = vi.fn().mockResolvedValue(atRiskContext);
+
+    const { prisma, reminderLogs } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          whatsappOptIn: true,
+        },
+      ],
+    });
+
+    const service = new ReminderService(
+      prisma as never,
+      { isConfigured: () => true, sendText } as never,
+      { buildContext } as never,
+      { compose } as never,
+    );
+
+    await service.processReminders();
+
+    expect(compose).toHaveBeenCalledWith('STREAK_AT_RISK', atRiskContext);
+    expect(compose).not.toHaveBeenCalledWith('EVENING', expect.any(Object));
+    expect(
+      [...reminderLogs.values()].find((l) => l.kind === 'STREAK_AT_RISK')
+        ?.status,
+    ).toBe('SENT');
+  });
+
+  it('sends generic EVENING at 21:00 when STREAK_AT_RISK catch-up fails', async () => {
+    vi.setSystemTime(new Date('2026-06-15T21:00:00.000Z'));
+
+    const sendText = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, error: 'down' })
+      .mockResolvedValueOnce({ ok: true });
+    const compose = vi
+      .fn()
+      .mockResolvedValueOnce('At risk failed')
+      .mockResolvedValueOnce('Evening backup');
+    const atRiskContext: ReminderContext = {
+      ...defaultContext,
+      streakAtRisk: true,
+      currentStreak: 5,
+      tasksRemaining: 2,
+      xpAtRisk: 40,
+    };
+    const buildContext = vi.fn().mockResolvedValue(atRiskContext);
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          whatsappOptIn: true,
+        },
+      ],
+    });
+
+    const service = new ReminderService(
+      prisma as never,
+      { isConfigured: () => true, sendText } as never,
+      { buildContext } as never,
+      { compose } as never,
+    );
+
+    await service.processReminders();
+
+    expect(compose).toHaveBeenCalledWith('STREAK_AT_RISK', atRiskContext);
+    expect(compose).toHaveBeenCalledWith('EVENING', atRiskContext);
+    expect(sendText).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not double-send when reminderTime is 18:00', async () => {
+    vi.setSystemTime(new Date('2026-06-15T18:00:00.000Z'));
+
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Morning at 18');
+    const buildContext = vi.fn().mockResolvedValue({
+      ...defaultContext,
+      streakAtRisk: true,
+      currentStreak: 5,
+      tasksRemaining: 2,
+    });
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '18:00',
+          whatsappOptIn: true,
+        },
+      ],
+    });
+
+    const service = new ReminderService(
+      prisma as never,
+      { isConfigured: () => true, sendText } as never,
+      { buildContext } as never,
+      { compose } as never,
+    );
+
+    await service.processReminders();
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(compose).toHaveBeenCalledWith('MORNING', expect.any(Object));
+    expect(compose).not.toHaveBeenCalledWith(
+      'STREAK_AT_RISK',
+      expect.any(Object),
+    );
+  });
+
+  it('sends generic EVENING for XP-only users at 21:00 with streak >= 3', async () => {
+    vi.setSystemTime(new Date('2026-06-15T21:00:00.000Z'));
+
+    const compose = vi.fn().mockResolvedValue('Evening xp');
+    const buildContext = vi.fn().mockResolvedValue({
+      ...defaultContext,
+      streakAtRisk: false,
+      currentStreak: 5,
+      tasksRemaining: 0,
+      xpAtRisk: 30,
+    });
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          whatsappOptIn: true,
+        },
+      ],
+    });
+
+    const service = new ReminderService(
+      prisma as never,
+      {
+        isConfigured: () => true,
+        sendText: vi.fn().mockResolvedValue({ ok: true }),
+      } as never,
+      { buildContext } as never,
+      { compose } as never,
+    );
+
+    await service.processReminders();
+
+    expect(compose).toHaveBeenCalledWith('EVENING', expect.any(Object));
+    expect(compose).not.toHaveBeenCalledWith(
+      'STREAK_AT_RISK',
+      expect.any(Object),
+    );
+  });
+
+  it('keys RECOVERY ReminderLog on brokeOnDate', async () => {
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Recovery');
+    const recoveryBreakDate = '2026-06-14';
+    const buildContext = vi.fn().mockResolvedValue({
+      ...defaultContext,
+      missedYesterday: true,
+      recoveryEligible: true,
+      recoveryBreakDate,
+    });
+
+    const { prisma, reminderLogs } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          whatsappOptIn: true,
+        },
+      ],
+    });
+
+    const service = new ReminderService(
+      prisma as never,
+      { isConfigured: () => true, sendText } as never,
+      { buildContext } as never,
+      { compose } as never,
+    );
+
+    await service.processReminders();
+
+    const recoveryLog = [...reminderLogs.values()].find(
+      (l) => l.kind === 'RECOVERY',
+    );
+    expect(recoveryLog?.status).toBe('SENT');
+    expect(recoveryLog?.date.getTime()).toBe(
+      parseLocalDateKey(recoveryBreakDate, timezone).getTime(),
+    );
   });
 });
 

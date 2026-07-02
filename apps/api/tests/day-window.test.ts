@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isLocalTimeMatch, isValidTimeZone } from '../src/utils/day-window';
+import {
+  getLocalMinutesSinceTarget,
+  isLocalTimeMatch,
+  isValidTimeZone,
+  isWithinLocalCatchUpWindow,
+} from '../src/utils/day-window';
 
 describe('isValidTimeZone', () => {
   it('returns true for known IANA zones', () => {
@@ -47,5 +52,54 @@ describe('isLocalTimeMatch', () => {
     expect(isLocalTimeMatch('UTC', 'invalid', now)).toBe(false);
     expect(isLocalTimeMatch('UTC', '25:00', now)).toBe(false);
     expect(isLocalTimeMatch('UTC', '08:60', now)).toBe(false);
+  });
+});
+
+describe('isWithinLocalCatchUpWindow', () => {
+  it('includes the target minute and subsequent minutes within the window', () => {
+    expect(
+      isWithinLocalCatchUpWindow(
+        'UTC',
+        '08:00',
+        new Date('2026-06-15T08:00:00.000Z'),
+        15,
+      ),
+    ).toBe(true);
+    expect(
+      isWithinLocalCatchUpWindow(
+        'UTC',
+        '08:00',
+        new Date('2026-06-15T08:15:00.000Z'),
+        15,
+      ),
+    ).toBe(true);
+    expect(
+      isWithinLocalCatchUpWindow(
+        'UTC',
+        '08:00',
+        new Date('2026-06-15T08:16:00.000Z'),
+        15,
+      ),
+    ).toBe(false);
+    expect(
+      isWithinLocalCatchUpWindow(
+        'UTC',
+        '08:00',
+        new Date('2026-06-15T07:59:00.000Z'),
+        15,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('getLocalMinutesSinceTarget', () => {
+  it('returns elapsed minutes after the target time', () => {
+    expect(
+      getLocalMinutesSinceTarget(
+        'UTC',
+        '18:00',
+        new Date('2026-06-15T21:00:00.000Z'),
+      ),
+    ).toBe(180);
   });
 });

@@ -119,12 +119,10 @@ function addDaysToDateKey(dateKey: string, days: number): string {
   return utc.toISOString().slice(0, 10);
 }
 
-/** True when the user's local hour:minute equals targetHHMM (for EVERY_MINUTE cron). */
-export function isLocalTimeMatch(
-  timezone: string,
-  targetHHMM: string,
-  now = new Date(),
-): boolean {
+function parseTargetHHMM(targetHHMM: string): {
+  targetHour: number;
+  targetMinute: number;
+} | null {
   const [targetHour, targetMinute] = targetHHMM.split(':').map(Number);
   if (
     Number.isNaN(targetHour) ||
@@ -134,11 +132,48 @@ export function isLocalTimeMatch(
     targetMinute < 0 ||
     targetMinute > 59
   ) {
-    return false;
+    return null;
+  }
+  return { targetHour, targetMinute };
+}
+
+/** Minutes elapsed since targetHHMM in timezone; null when local time is before target. */
+export function getLocalMinutesSinceTarget(
+  timezone: string,
+  targetHHMM: string,
+  now = new Date(),
+): number | null {
+  const parsed = parseTargetHHMM(targetHHMM);
+  if (!parsed) {
+    return null;
   }
 
   const { hour, minute } = getDatePartsInTimezone(now, timezone);
-  return hour === targetHour && minute === targetMinute;
+  const currentMinutes = hour * 60 + minute;
+  const targetMinutes = parsed.targetHour * 60 + parsed.targetMinute;
+  const elapsedMinutes = currentMinutes - targetMinutes;
+  return elapsedMinutes >= 0 ? elapsedMinutes : null;
+}
+
+/** True when the user's local hour:minute equals targetHHMM (for EVERY_MINUTE cron). */
+export function isLocalTimeMatch(
+  timezone: string,
+  targetHHMM: string,
+  now = new Date(),
+): boolean {
+  const elapsed = getLocalMinutesSinceTarget(timezone, targetHHMM, now);
+  return elapsed === 0;
+}
+
+/** True from targetHHMM through targetHHMM + windowMinutes (inclusive) in timezone. */
+export function isWithinLocalCatchUpWindow(
+  timezone: string,
+  targetHHMM: string,
+  now = new Date(),
+  windowMinutes = 15,
+): boolean {
+  const elapsed = getLocalMinutesSinceTarget(timezone, targetHHMM, now);
+  return elapsed !== null && elapsed <= windowMinutes;
 }
 
 /** Returns UTC instant for midnight of the user's current local calendar day. */

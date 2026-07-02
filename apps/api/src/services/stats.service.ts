@@ -122,7 +122,7 @@ export async function getDashboardStats(
         where: { challengeId: challenge.id, finalized: true },
         select: { date: true, breakdown: true, finalized: true },
         orderBy: { date: 'desc' },
-        take: 60,
+        take: lengthDays,
       })
     : [];
 

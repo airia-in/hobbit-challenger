@@ -72,4 +72,18 @@ describe('PerfectDayCelebration', () => {
       expect(onDone).toHaveBeenCalledOnce();
     });
   });
+
+  it('dismisses confetti early on Enter when overlay is focused', async () => {
+    const onDone = vi.fn();
+    mockMatchMedia(false);
+
+    render(<PerfectDayCelebration active onDone={onDone} />);
+    const overlay = screen.getByTestId('perfect-day-confetti');
+    overlay.focus();
+    fireEvent.keyDown(overlay, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(onDone).toHaveBeenCalledOnce();
+    });
+  });
 });

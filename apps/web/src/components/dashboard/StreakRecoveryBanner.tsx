@@ -33,7 +33,13 @@ export function StreakRecoveryBanner({
       data-variant={daysSinceBreak <= 1 ? 'fresh-break' : 'never-miss-twice'}
     >
       <div className="min-w-0 flex-1 space-y-3">
-        <p className="text-sm text-[var(--text-primary)]">{message}</p>
+        <p
+          className="text-sm text-[var(--text-primary)]"
+          role="status"
+          aria-live="polite"
+        >
+          {message}
+        </p>
         <button
           type="button"
           onClick={onScrollToTasks}

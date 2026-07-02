@@ -395,7 +395,6 @@ export function DashboardContent() {
     : "See today's habits";
 
   useEffect(() => {
-    setPerfectDayBannerDismissed(false);
     confettiTriggeredRef.current = false;
     prevAllScoredCompleteRef.current = null;
   }, [today?.dateKey]);
@@ -411,6 +410,7 @@ export function DashboardContent() {
     if (prev === true && !allScoredComplete) {
       clearPerfectDayCelebrated(today.dateKey);
       confettiTriggeredRef.current = false;
+      setPerfectDayBannerDismissed(false);
     }
   }, [today, allScoredComplete]);
 

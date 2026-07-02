@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StreakRecoveryBanner } from '../src/components/dashboard/StreakRecoveryBanner';
 import { DashboardContent } from '../src/components/dashboard/DashboardPage';
 import {
@@ -146,6 +146,26 @@ describe('getStreakRecoveryMessage', () => {
     expect(message).toMatch(/best run 12/i);
   });
 
+  it('uses today wording when daysSinceBreak is 0', () => {
+    const message = getStreakRecoveryMessage({
+      previousStreak: 5,
+      longestStreak: 12,
+      daysSinceBreak: 0,
+    });
+    expect(message).toMatch(/rainy day on the trail today/i);
+    expect(message).not.toMatch(/yesterday/i);
+  });
+
+  it('omits paused-at-0 phrasing when previousStreak is 0', () => {
+    const message = getStreakRecoveryMessage({
+      previousStreak: 0,
+      longestStreak: 0,
+      daysSinceBreak: 1,
+    });
+    expect(message).not.toMatch(/paused at 0/i);
+    expect(message).toMatch(/rainy day on the trail yesterday/i);
+  });
+
   it('uses the day-2+ never-miss-twice variant', () => {
     const message = getStreakRecoveryMessage({
       previousStreak: 5,
@@ -275,6 +295,23 @@ describe('StreakRecoveryBanner', () => {
 });
 
 describe('DashboardContent streak recovery', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
@@ -334,6 +371,44 @@ describe('DashboardContent streak recovery', () => {
     dismissStreakRecovery('2026-07-02');
 
     mockActivitiesGetToday.mockReturnValue(idleQuery(baseToday));
+    mockStatsGetDashboard.mockReturnValue(idleQuery(baseStats));
+    mockHeatmapGet.mockReturnValue(idleQuery({ cells: [] }));
+    mockProfileGet.mockReturnValue(idleQuery({ reminderTime: null }));
+
+    render(<DashboardContent />);
+
+    expect(
+      screen.queryByTestId('streak-recovery-banner'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('hides the banner when all scored habits are complete', () => {
+    mockActivitiesGetToday.mockReturnValue(
+      idleQuery({
+        ...baseToday,
+        scoredActivities: [
+          {
+            id: 'activity-1',
+            title: 'Water',
+            emoji: '💧',
+            kind: 'CHECKBOX' as const,
+            log: {
+              id: 'log-1',
+              state: 'DONE',
+              value: null,
+              tier: null,
+              subPoints: null,
+              xpAwarded: 100,
+              proofUrl: null,
+              aiVerdict: null,
+            },
+            canEdit: true,
+            seedKey: 'WATER',
+            canAttachProof: false,
+          },
+        ],
+      }),
+    );
     mockStatsGetDashboard.mockReturnValue(idleQuery(baseStats));
     mockHeatmapGet.mockReturnValue(idleQuery({ cells: [] }));
     mockProfileGet.mockReturnValue(idleQuery({ reminderTime: null }));

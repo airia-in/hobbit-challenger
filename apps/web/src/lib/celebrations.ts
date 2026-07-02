@@ -181,7 +181,17 @@ export function getStreakRecoveryMessage({
   longestStreak,
   daysSinceBreak,
 }: StreakRecoveryInput): string {
-  if (daysSinceBreak <= 1) {
+  if (daysSinceBreak === 0) {
+    if (previousStreak === 0) {
+      return 'Rainy day on the trail today — not forgotten. One rest day happens. Want a small win to get moving?';
+    }
+    return `Rainy day on the trail today — streak paused at ${previousStreak}, best run ${longestStreak} — not forgotten. One rest day happens. Want a small win to get moving?`;
+  }
+
+  if (daysSinceBreak === 1) {
+    if (previousStreak === 0) {
+      return 'Rainy day on the trail yesterday — not forgotten. One rest day happens. Want a small win to get moving?';
+    }
     return `Rainy day on the trail yesterday — streak paused at ${previousStreak}, best run ${longestStreak} — not forgotten. One rest day happens. Want a small win to get moving?`;
   }
 

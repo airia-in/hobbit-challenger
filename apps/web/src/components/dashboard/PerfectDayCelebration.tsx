@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const PARTICLE_COUNT = 24;
 const COLORS = [
@@ -24,6 +24,7 @@ export function PerfectDayCelebration({
   onDone,
 }: PerfectDayCelebrationProps) {
   const [visible, setVisible] = useState(false);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!active) {
@@ -59,6 +60,12 @@ export function PerfectDayCelebration({
     };
   }, [active, onDone]);
 
+  useEffect(() => {
+    if (visible) {
+      overlayRef.current?.focus();
+    }
+  }, [visible]);
+
   if (!visible) return null;
 
   function dismiss() {
@@ -68,9 +75,11 @@ export function PerfectDayCelebration({
 
   return (
     <div
+      ref={overlayRef}
       className="fixed inset-0 z-50 cursor-pointer overflow-hidden"
       data-testid="perfect-day-confetti"
       aria-hidden
+      tabIndex={-1}
       onClick={dismiss}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {

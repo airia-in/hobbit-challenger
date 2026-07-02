@@ -77,6 +77,8 @@ describe('ActivityForm', () => {
       xpMiss: -10,
       deductMultiplier: 3,
       sortOrder: 8,
+      allowsProof: false,
+      autoCompleteOnProof: false,
     });
   });
 
@@ -115,6 +117,8 @@ describe('ActivityForm', () => {
       xpCap: 50,
       missXp: -20,
       deductMultiplier: 2,
+      allowsProof: false,
+      autoCompleteOnProof: false,
     });
   });
 

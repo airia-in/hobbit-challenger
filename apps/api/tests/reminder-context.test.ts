@@ -10,9 +10,12 @@ import {
   countTasksFromToday,
   getChallengeYesterdayDate,
   hasEveningReminderEligibility,
+  hasRecoveryReminderEligibility,
+  hasStreakAtRiskReminderEligibility,
   pickTopActivityStreak,
   ReminderContextService,
   resolveJourneyMilestone,
+  shouldDeferEveningToStreakAtRisk,
   STREAK_AT_RISK_MIN,
 } from '../src/whatsapp/reminder-context.service';
 import { challengeDisplayOrderBy } from '../src/utils/challenge-query';
@@ -268,8 +271,70 @@ describe('reminder-context helpers', () => {
         journeyMilestone: null,
         currentStreak: 5,
         longestStreak: 5,
+        streakFreezesAvailable: 0,
       }),
     ).toBe(true);
+  });
+
+  it('recovery eligibility tracks missedYesterday only', () => {
+    const base = buildReminderContextFromFixture({
+      name: 'A',
+      today: emptyToday(),
+      todayNetXp: 0,
+      totalXp: 0,
+      missedYesterday: false,
+    });
+    expect(hasRecoveryReminderEligibility(base)).toBe(false);
+    expect(
+      hasRecoveryReminderEligibility({ ...base, missedYesterday: true }),
+    ).toBe(true);
+  });
+
+  it('streak-at-risk eligibility requires streak threshold and open tasks', () => {
+    const base = buildReminderContextFromFixture({
+      name: 'A',
+      today: emptyToday({
+        scoredActivities: [scoredActivity({ id: 'a1', log: null })],
+      }),
+      todayNetXp: 0,
+      totalXp: 0,
+      currentStreak: STREAK_AT_RISK_MIN,
+    });
+    expect(hasStreakAtRiskReminderEligibility(base)).toBe(true);
+    expect(
+      hasStreakAtRiskReminderEligibility({
+        ...base,
+        currentStreak: STREAK_AT_RISK_MIN - 1,
+        streakAtRisk: false,
+      }),
+    ).toBe(false);
+    expect(
+      hasStreakAtRiskReminderEligibility({
+        ...base,
+        tasksRemaining: 0,
+        streakAtRisk: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('defers generic evening when streak-at-risk applies', () => {
+    const atRisk = buildReminderContextFromFixture({
+      name: 'A',
+      today: emptyToday({
+        scoredActivities: [scoredActivity({ id: 'a1', log: null })],
+      }),
+      todayNetXp: 0,
+      totalXp: 0,
+      currentStreak: 5,
+    });
+    expect(shouldDeferEveningToStreakAtRisk(atRisk)).toBe(true);
+    expect(
+      shouldDeferEveningToStreakAtRisk({
+        ...atRisk,
+        currentStreak: 1,
+        streakAtRisk: false,
+      }),
+    ).toBe(false);
   });
 
   it('treats freeze-absorbed yesterday as not missed via buildContext', async () => {

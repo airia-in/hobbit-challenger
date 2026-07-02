@@ -222,6 +222,29 @@ export function hasEveningReminderEligibility(
   return context.tasksRemaining > 0 || context.xpAtRisk > 0;
 }
 
+/** True when yesterday finalized with a streak-breaking miss (not freeze-absorbed). */
+export function hasRecoveryReminderEligibility(
+  context: ReminderContext,
+): boolean {
+  return context.missedYesterday;
+}
+
+/** True when challenge streak >= 3 and scored tasks remain unlogged today. */
+export function hasStreakAtRiskReminderEligibility(
+  context: ReminderContext,
+): boolean {
+  return context.streakAtRisk;
+}
+
+/**
+ * When streak-at-risk applies, the dedicated STREAK_AT_RISK kind replaces generic EVENING.
+ */
+export function shouldDeferEveningToStreakAtRisk(
+  context: ReminderContext,
+): boolean {
+  return context.streakAtRisk;
+}
+
 @Injectable()
 export class ReminderContextService {
   constructor(private readonly activitiesService: ActivitiesService) {}

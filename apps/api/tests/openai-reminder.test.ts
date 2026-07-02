@@ -143,6 +143,14 @@ describe('buildReminderCopyLines', () => {
     expect(lines.streakAtRiskLine).toContain('8-day streak');
     expect(lines.unloggedHabitsLine).toContain('Diet');
   });
+
+  it('builds recovery line when yesterday was a streak break', () => {
+    const lines = buildReminderCopyLines({
+      ...baseContext,
+      missedYesterday: true,
+    });
+    expect(lines.recoveryLine).toContain('never miss twice');
+  });
 });
 
 describe('buildFallbackMessage', () => {
@@ -201,5 +209,55 @@ describe('buildFallbackMessage', () => {
         expect(message).toContain(messaging.dashboardUrl);
       }
     }
+  });
+
+  it('recovery fallback uses never-miss-twice voice and always links dashboard', () => {
+    const message = buildFallbackMessage(
+      'RECOVERY',
+      { ...baseContext, missedYesterday: true },
+      messaging,
+    );
+    expect(message).toContain('never miss twice');
+    expect(message).toContain(messaging.dashboardUrl);
+  });
+
+  it('streak-at-risk kind fallback includes streak and dashboard URL', () => {
+    const message = buildFallbackMessage(
+      'STREAK_AT_RISK',
+      baseContext,
+      messaging,
+    );
+    expect(message).toContain(String(baseContext.currentStreak));
+    expect(message).toContain(messaging.dashboardUrl);
+  });
+
+  it('selects recovery and streak-at-risk fallbacks deterministically', () => {
+    const recoveryA = buildFallbackMessage(
+      'RECOVERY',
+      { ...baseContext, missedYesterday: true },
+      messaging,
+      0,
+    );
+    const recoveryB = buildFallbackMessage(
+      'RECOVERY',
+      { ...baseContext, missedYesterday: true },
+      messaging,
+      0,
+    );
+    expect(recoveryA).toBe(recoveryB);
+
+    const atRiskA = buildFallbackMessage(
+      'STREAK_AT_RISK',
+      baseContext,
+      messaging,
+      1,
+    );
+    const atRiskB = buildFallbackMessage(
+      'STREAK_AT_RISK',
+      baseContext,
+      messaging,
+      2,
+    );
+    expect(atRiskA).not.toBe(atRiskB);
   });
 });

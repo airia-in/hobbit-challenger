@@ -9,7 +9,10 @@ import {
 import { EvolutionApiClient } from '../whatsapp/evolution.client';
 import {
   hasEveningReminderEligibility,
+  hasRecoveryReminderEligibility,
+  hasStreakAtRiskReminderEligibility,
   ReminderContextService,
+  shouldDeferEveningToStreakAtRisk,
 } from '../whatsapp/reminder-context.service';
 import {
   OpenAiReminderService,
@@ -17,6 +20,7 @@ import {
 } from '../whatsapp/openai-reminder.service';
 
 const DEFAULT_MORNING_TIME = '08:00';
+const STREAK_AT_RISK_TIME = '18:00';
 const EVENING_TIME = '21:00';
 const FAILED_RETRY_WINDOW_MINUTES = 15;
 
@@ -81,6 +85,8 @@ export class ReminderService {
     if (!user.phone || !user.whatsappOptIn) {
       const localDate = getUserLocalDate(user.timezone);
       await this.recordSkippedOptout(user.id, localDate, 'MORNING');
+      await this.recordSkippedOptout(user.id, localDate, 'RECOVERY');
+      await this.recordSkippedOptout(user.id, localDate, 'STREAK_AT_RISK');
       await this.recordSkippedOptout(user.id, localDate, 'EVENING');
       return;
     }
@@ -96,9 +102,45 @@ export class ReminderService {
         'MORNING',
         user.timezone,
         morningTime,
+      )) ||
+      (await this.shouldRetryFailedReminder(
+        user.id,
+        localDate,
+        'RECOVERY',
+        user.timezone,
+        morningTime,
       ))
     ) {
-      await this.trySendReminder(user, localDate, 'MORNING');
+      const context = await this.contextService.buildContext(
+        this.prisma,
+        user.id,
+        user.name,
+      );
+      if (hasRecoveryReminderEligibility(context)) {
+        await this.trySendReminder(user, localDate, 'RECOVERY', context);
+      } else {
+        await this.trySendReminder(user, localDate, 'MORNING', context);
+      }
+    }
+
+    if (
+      isLocalTimeMatch(user.timezone, STREAK_AT_RISK_TIME) ||
+      (await this.shouldRetryFailedReminder(
+        user.id,
+        localDate,
+        'STREAK_AT_RISK',
+        user.timezone,
+        STREAK_AT_RISK_TIME,
+      ))
+    ) {
+      const context = await this.contextService.buildContext(
+        this.prisma,
+        user.id,
+        user.name,
+      );
+      if (hasStreakAtRiskReminderEligibility(context)) {
+        await this.trySendReminder(user, localDate, 'STREAK_AT_RISK', context);
+      }
     }
 
     if (
@@ -116,7 +158,10 @@ export class ReminderService {
         user.id,
         user.name,
       );
-      if (hasEveningReminderEligibility(context)) {
+      if (
+        hasEveningReminderEligibility(context) &&
+        !shouldDeferEveningToStreakAtRisk(context)
+      ) {
         await this.trySendReminder(user, localDate, 'EVENING', context);
       }
     }

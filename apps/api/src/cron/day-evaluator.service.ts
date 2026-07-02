@@ -124,6 +124,16 @@ export class DayEvaluatorService {
     });
 
     if (existingScore?.finalized) {
+      await this.maybeSendStreakFreezeGrantMessage({
+        userId,
+        userName,
+        userPhone,
+        whatsappOptIn,
+        evaluationDay,
+        currentStreak: challenge.currentStreak,
+        streakFreezesAvailable: challenge.streakFreezesAvailable,
+        lastStreakFreezeGrantedAt: challenge.lastStreakFreezeGrantedAt,
+      });
       if (previousDay.getTime() > challengeEndDay.getTime()) {
         await this.prisma.challenge.update({
           where: { id: challenge.id },
@@ -144,6 +154,7 @@ export class DayEvaluatorService {
             where: {
               challengeId: challenge.id,
               date: dayBeforeEvaluation,
+              finalized: true,
             },
             select: { breakdown: true, finalized: true },
           })
@@ -241,30 +252,63 @@ export class DayEvaluatorService {
       finalized = true;
     });
 
-    if (
-      finalized &&
-      result.flags.freezeGranted &&
-      this.streakFreezeMessage &&
-      userPhone &&
-      whatsappOptIn
-    ) {
-      try {
-        await this.streakFreezeMessage.trySendGrantMessage({
-          prisma: this.prisma,
-          userId,
-          userName,
-          phone: userPhone,
-          evaluationDay,
-          currentStreak: result.challengeUpdate.currentStreak,
-          streakFreezesAvailable:
-            result.challengeUpdate.streakFreezesAvailable ?? 0,
-        });
-      } catch (error) {
-        this.logger.error(
-          `Streak freeze grant message failed for user ${userId}:`,
-          error,
-        );
-      }
+    if (finalized) {
+      await this.maybeSendStreakFreezeGrantMessage({
+        userId,
+        userName,
+        userPhone,
+        whatsappOptIn,
+        evaluationDay,
+        currentStreak: result.challengeUpdate.currentStreak,
+        streakFreezesAvailable:
+          result.challengeUpdate.streakFreezesAvailable ?? 0,
+        lastStreakFreezeGrantedAt:
+          result.challengeUpdate.lastStreakFreezeGrantedAt ?? null,
+        grantAwardedThisRun: result.flags.freezeGranted,
+      });
+    }
+  }
+
+  private async maybeSendStreakFreezeGrantMessage(input: {
+    userId: string;
+    userName: string;
+    userPhone: string | null;
+    whatsappOptIn: boolean;
+    evaluationDay: Date;
+    currentStreak: number;
+    streakFreezesAvailable: number;
+    lastStreakFreezeGrantedAt: Date | null;
+    grantAwardedThisRun?: boolean;
+  }): Promise<void> {
+    if (!this.streakFreezeMessage || !input.userPhone || !input.whatsappOptIn) {
+      return;
+    }
+
+    const grantedOnEvaluationDay =
+      input.grantAwardedThisRun ||
+      (input.lastStreakFreezeGrantedAt !== null &&
+        input.lastStreakFreezeGrantedAt.getTime() ===
+          input.evaluationDay.getTime());
+
+    if (!grantedOnEvaluationDay) {
+      return;
+    }
+
+    try {
+      await this.streakFreezeMessage.trySendGrantMessage({
+        prisma: this.prisma,
+        userId: input.userId,
+        userName: input.userName,
+        phone: input.userPhone,
+        evaluationDay: input.evaluationDay,
+        currentStreak: input.currentStreak,
+        streakFreezesAvailable: input.streakFreezesAvailable,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Streak freeze grant message failed for user ${input.userId}:`,
+        error,
+      );
     }
   }
 }

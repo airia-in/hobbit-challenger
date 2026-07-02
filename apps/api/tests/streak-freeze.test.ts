@@ -3,6 +3,7 @@ import {
   canConsumeStreakFreeze,
   canGrantStreakFreeze,
   grantedThisIsoWeek,
+  priorDayAllowsFreezeConsume,
 } from '../src/utils/streak-freeze';
 import { parseLocalDateKey } from '../src/utils/day-window';
 
@@ -19,6 +20,32 @@ describe('streak-freeze helpers', () => {
     const lastWeek = parseLocalDateKey('2026-06-14', TZ);
     const thisWeek = parseLocalDateKey('2026-06-16', TZ);
     expect(grantedThisIsoWeek(lastWeek, thisWeek, TZ)).toBe(false);
+  });
+
+  it('keeps ISO-week dedupe stable across US DST transition weeks', () => {
+    const springMonday = parseLocalDateKey('2026-03-09', TZ);
+    const springGrantedAt = new Date(springMonday.getTime());
+    const springWednesday = parseLocalDateKey('2026-03-11', TZ);
+    expect(grantedThisIsoWeek(springGrantedAt, springWednesday, TZ)).toBe(true);
+
+    const fallMonday = parseLocalDateKey('2026-11-02', TZ);
+    const fallGrantedAt = new Date(fallMonday.getTime());
+    const fallThursday = parseLocalDateKey('2026-11-05', TZ);
+    expect(grantedThisIsoWeek(fallGrantedAt, fallThursday, TZ)).toBe(true);
+
+    const priorSpringWeek = parseLocalDateKey('2026-03-02', TZ);
+    expect(
+      grantedThisIsoWeek(new Date(priorSpringWeek.getTime()), springMonday, TZ),
+    ).toBe(false);
+  });
+
+  it('treats unfinalized prior day like missing for consume eligibility', () => {
+    expect(
+      priorDayAllowsFreezeConsume({
+        finalized: false,
+        breakdown: { allScoredLogged: false },
+      }),
+    ).toBe(true);
   });
 
   it('allows consume only for exactly-one-miss with inventory and streak', () => {
@@ -63,6 +90,17 @@ describe('streak-freeze helpers', () => {
         priorSuccess,
       ),
     ).toBe(false);
+
+    expect(
+      canConsumeStreakFreeze(
+        {
+          currentStreak: 1,
+          streakFreezesAvailable: 1,
+          lastStreakFreezeGrantedAt: null,
+        },
+        priorSuccess,
+      ),
+    ).toBe(true);
   });
 
   it('grants only at streak 7+ with empty inventory and weekly slot', () => {

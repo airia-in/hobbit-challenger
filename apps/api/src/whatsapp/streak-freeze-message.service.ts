@@ -13,6 +13,18 @@ import {
 /** ReminderLog kind for one-shot streak-freeze grant messages. */
 export const STREAK_FREEZE_GRANTED_KIND = 'STREAK_FREEZE_GRANTED';
 
+export type StreakFreezeGrantStatus = 'SENT' | 'FAILED' | 'SKIPPED_OPTOUT';
+
+/** Only a successful send records SENT; FAILED rows are retried on later cron ticks. */
+export function shouldRetryStreakFreezeGrant(
+  existing: { status: string } | null | undefined,
+): boolean {
+  if (!existing) {
+    return true;
+  }
+  return existing.status === 'FAILED';
+}
+
 const PROMPT_FILE = 'streak-freeze-granted.jinja';
 
 export type StreakFreezeGrantContext = {
@@ -125,21 +137,22 @@ export class StreakFreezeMessageService {
     currentStreak: number;
     streakFreezesAvailable: number;
   }): Promise<void> {
-    if (!this.evolution.isConfigured()) {
+    const logKey = {
+      userId: input.userId,
+      date: input.evaluationDay,
+      kind: STREAK_FREEZE_GRANTED_KIND,
+    };
+
+    const existing = await input.prisma.reminderLog.findUnique({
+      where: { userId_date_kind: logKey },
+    });
+
+    if (existing?.status === 'SENT' || existing?.status === 'SKIPPED_OPTOUT') {
       return;
     }
 
-    const existing = await input.prisma.reminderLog.findUnique({
-      where: {
-        userId_date_kind: {
-          userId: input.userId,
-          date: input.evaluationDay,
-          kind: STREAK_FREEZE_GRANTED_KIND,
-        },
-      },
-    });
-
-    if (existing?.status === 'SENT') {
+    if (!this.evolution.isConfigured()) {
+      await this.upsertGrantLog(input.prisma, logKey, 'FAILED');
       return;
     }
 
@@ -151,20 +164,22 @@ export class StreakFreezeMessageService {
 
     const text = await this.compose(context);
     const result = await this.evolution.sendText(input.phone, text);
-    const status = result.ok ? 'SENT' : 'FAILED';
+    const status: StreakFreezeGrantStatus = result.ok ? 'SENT' : 'FAILED';
 
-    await input.prisma.reminderLog.upsert({
-      where: {
-        userId_date_kind: {
-          userId: input.userId,
-          date: input.evaluationDay,
-          kind: STREAK_FREEZE_GRANTED_KIND,
-        },
-      },
+    await this.upsertGrantLog(input.prisma, logKey, status);
+  }
+
+  private async upsertGrantLog(
+    prisma: PrismaService,
+    logKey: { userId: string; date: Date; kind: string },
+    status: StreakFreezeGrantStatus,
+  ): Promise<void> {
+    await prisma.reminderLog.upsert({
+      where: { userId_date_kind: logKey },
       create: {
-        userId: input.userId,
-        date: input.evaluationDay,
-        kind: STREAK_FREEZE_GRANTED_KIND,
+        userId: logKey.userId,
+        date: logKey.date,
+        kind: logKey.kind,
         status,
       },
       update: {

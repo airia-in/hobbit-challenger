@@ -114,6 +114,7 @@ export function evaluateDayRollover(
 
   // Streak gating: scored activities when present, otherwise personal-only days
   // require all personal activities logged (avoids vacuous true when scored set is empty).
+  // Freeze consume applies only on scored days per #131 ("missed scored day").
   const dayCounted =
     scoredActivities.length > 0
       ? allScoredLogged
@@ -151,6 +152,7 @@ export function evaluateDayRollover(
       freezeGranted = true;
     }
   } else if (
+    scoredActivities.length > 0 &&
     canConsumeStreakFreeze(
       {
         currentStreak: challenge.currentStreak,

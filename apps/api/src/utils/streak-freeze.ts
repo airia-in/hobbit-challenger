@@ -30,9 +30,14 @@ export function grantedThisIsoWeek(
 export function priorDayAllowsFreezeConsume(
   previousDayScore: DayScoreCompletionInput | null | undefined,
 ): boolean {
-  if (!previousDayScore) {
+  // Missing or not-yet-finalized prior days are treated as a clean slate so a
+  // single miss can still consume inventory (operational gaps must not punish).
+  if (!previousDayScore || previousDayScore.finalized === false) {
     return true;
   }
+  // A prior success or a freeze-absorbed miss counts as "exactly one miss" for
+  // the current day. Freeze-absorbed allows another consume when max-held rises;
+  // with STREAK_FREEZE_MAX_HELD = 1 weekly grants prevent double-spend today.
   return (
     isInterimDayCompleted(previousDayScore) ||
     isFreezeAbsorbed(previousDayScore)
@@ -45,6 +50,8 @@ export function canConsumeStreakFreeze(
 ): boolean {
   return (
     challenge.streakFreezesAvailable > 0 &&
+    // User-generous: any positive streak may spend earned inventory, including
+    // post-break streak 1 when a cloak was granted before the break.
     challenge.currentStreak > 0 &&
     priorDayAllowsFreezeConsume(previousDayScore)
   );

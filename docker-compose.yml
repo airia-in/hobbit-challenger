@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: apps/web-host/Dockerfile
       args:
-        PUBLIC_API_URL: ${PUBLIC_API_URL:-https://hobbit-api.drcode.ai}
+        PUBLIC_API_URL: ${PUBLIC_API_URL:-https://${API_DOMAIN:-hobbit-api.drcode.ai}}
     environment:
       NODE_ENV: production
       PORT: 4321
@@ -23,7 +23,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      CORS_ORIGIN: ${CORS_ORIGIN:-https://hobbit.drcode.ai}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://${WEB_DOMAIN:-hobbit.drcode.ai}}
       DATABASE_URL: ${DATABASE_URL:-file:/app/data/prod.db}
       DATABASE_AUTH_TOKEN: ${DATABASE_AUTH_TOKEN:-}
       JWT_SECRET: ${JWT_SECRET:-change-me}
@@ -42,12 +42,15 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
+    environment:
+      WEB_DOMAIN: ${WEB_DOMAIN:-hobbit.drcode.ai}
+      API_DOMAIN: ${API_DOMAIN:-hobbit-api.drcode.ai}
     ports:
       - '80:80'
       - '443:443'
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/templates:/etc/nginx/templates:ro
       - ./nginx/snippets:/etc/nginx/snippets:ro
       - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:

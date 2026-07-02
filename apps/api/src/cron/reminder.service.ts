@@ -17,10 +17,12 @@ import {
   ReminderContextService,
   shouldDeferEveningToStreakAtRisk,
 } from '../whatsapp/reminder-context.service';
+import { WINBACK_KIND } from '../utils/winback-dormancy';
 import {
   OpenAiReminderService,
   type ReminderKind,
 } from '../whatsapp/openai-reminder.service';
+import { WinbackService } from './winback.service';
 
 const DEFAULT_MORNING_TIME = '08:00';
 const STREAK_AT_RISK_TIME = '18:00';
@@ -43,6 +45,7 @@ export class ReminderService {
     private readonly evolution: EvolutionApiClient,
     private readonly contextService: ReminderContextService,
     private readonly openAiReminder: OpenAiReminderService,
+    private readonly winbackService: WinbackService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -99,10 +102,15 @@ export class ReminderService {
       await this.recordSkippedOptout(user.id, localDate, 'RECOVERY');
       await this.recordSkippedOptout(user.id, localDate, 'STREAK_AT_RISK');
       await this.recordSkippedOptout(user.id, localDate, 'EVENING');
+      await this.recordSkippedOptout(user.id, localDate, WINBACK_KIND);
       return;
     }
 
     const localDate = getUserLocalDate(reminderTimezone);
+
+    if (await this.shouldDeferToWinback(user, reminderTimezone)) {
+      return;
+    }
     const morningTime = user.reminderTime ?? DEFAULT_MORNING_TIME;
     const morningWindowActive =
       isLocalTimeMatch(reminderTimezone, morningTime) ||
@@ -232,6 +240,53 @@ export class ReminderService {
         await this.trySendReminder(user, localDate, 'EVENING', context);
       }
     }
+  }
+
+  /**
+   * WINBACK takes the full local day when eligible (see winback-dormancy precedence).
+   * RECOVERY only fires on the first miss morning; WINBACK at 3+ dormant days.
+   */
+  private async shouldDeferToWinback(
+    user: {
+      id: string;
+      reminderTime: string | null;
+      group: { challengeTimezone: string | null } | null;
+      timezone: string;
+    },
+    reminderTimezone: string,
+  ): Promise<boolean> {
+    const challenge = await this.prisma.challenge.findFirst({
+      where: { userId: user.id, isActive: true, stoppedAt: null },
+      orderBy: { startDate: 'desc' },
+    });
+    if (!challenge) {
+      return false;
+    }
+
+    const [lastActivity, lastWinback] = await Promise.all([
+      this.prisma.activityLog.aggregate({
+        where: { challengeId: challenge.id },
+        _max: { date: true },
+      }),
+      this.prisma.reminderLog.findFirst({
+        where: {
+          userId: user.id,
+          kind: WINBACK_KIND,
+          status: 'SENT',
+        },
+        orderBy: { sentAt: 'desc' },
+        select: { sentAt: true },
+      }),
+    ]);
+
+    return this.winbackService.shouldDeferRemindersForUser({
+      userId: user.id,
+      challengeTimezone: reminderTimezone,
+      reminderTime: user.reminderTime,
+      challenge,
+      lastActivityDate: lastActivity._max.date,
+      lastWinbackSentAt: lastWinback?.sentAt ?? null,
+    });
   }
 
   private async shouldProcessReminderSlot(
@@ -379,7 +434,7 @@ export class ReminderService {
   private async recordSkippedOptout(
     userId: string,
     localDate: Date,
-    kind: ReminderKind,
+    kind: ReminderKind | typeof WINBACK_KIND,
   ): Promise<void> {
     const existing = await this.prisma.reminderLog.findUnique({
       where: {

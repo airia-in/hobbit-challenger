@@ -43,6 +43,7 @@ function createReminderFakePrisma(seed: {
       findMany: async () => users,
     },
     reminderLog: {
+      findFirst: async () => null,
       findUnique: async ({
         where,
       }: {
@@ -101,9 +102,39 @@ function createReminderFakePrisma(seed: {
         return row;
       },
     },
+    challenge: {
+      findFirst: async () => null,
+    },
+    activityLog: {
+      aggregate: async () => ({ _max: { date: null } }),
+    },
   };
 
   return { prisma, reminderLogs };
+}
+
+function createWinbackServiceMock(shouldDefer = false): {
+  shouldDeferRemindersForUser: ReturnType<typeof vi.fn>;
+} {
+  return {
+    shouldDeferRemindersForUser: vi.fn().mockResolvedValue(shouldDefer),
+  };
+}
+
+function createReminderService(
+  prisma: unknown,
+  evolution: unknown,
+  contextService: unknown,
+  openAiReminder: unknown,
+  winbackService?: { shouldDeferRemindersForUser: ReturnType<typeof vi.fn> },
+): ReminderService {
+  return new ReminderService(
+    prisma as never,
+    evolution as never,
+    contextService as never,
+    openAiReminder as never,
+    (winbackService ?? createWinbackServiceMock()) as never,
+  );
 }
 
 const defaultContext: ReminderContext = {
@@ -156,11 +187,11 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
-      evolution as never,
-      contextService as never,
-      openAiReminder as never,
+    const service = createReminderService(
+      prisma,
+      evolution,
+      contextService,
+      openAiReminder,
     );
 
     await service.processReminders();
@@ -192,11 +223,11 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
-      evolution as never,
-      { buildContext } as never,
-      { compose } as never,
+    const service = createReminderService(
+      prisma,
+      evolution,
+      { buildContext },
+      { compose },
     );
 
     await service.processReminders();
@@ -237,11 +268,11 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
-      evolution as never,
-      { buildContext } as never,
-      { compose } as never,
+    const service = createReminderService(
+      prisma,
+      evolution,
+      { buildContext },
+      { compose },
     );
 
     await service.processReminders();
@@ -265,11 +296,11 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
-      { isConfigured: () => true, sendText } as never,
-      { buildContext: vi.fn() } as never,
-      { compose: vi.fn() } as never,
+    const service = createReminderService(
+      prisma,
+      { isConfigured: () => true, sendText },
+      { buildContext: vi.fn() },
+      { compose: vi.fn() },
     );
 
     await service.processReminders();
@@ -278,12 +309,13 @@ describe('ReminderService', () => {
     const skipped = [...reminderLogs.values()].filter(
       (l) => l.status === 'SKIPPED_OPTOUT',
     );
-    expect(skipped.length).toBe(4);
+    expect(skipped.length).toBe(5);
     expect(skipped.map((l) => l.kind).sort()).toEqual([
       'EVENING',
       'MORNING',
       'RECOVERY',
       'STREAK_AT_RISK',
+      'WINBACK',
     ]);
   });
 
@@ -307,11 +339,11 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
-      { isConfigured: () => true, sendText } as never,
-      { buildContext: vi.fn().mockResolvedValue(defaultContext) } as never,
-      { compose } as never,
+    const service = createReminderService(
+      prisma,
+      { isConfigured: () => true, sendText },
+      { buildContext: vi.fn().mockResolvedValue(defaultContext) },
+      { compose },
     );
 
     await service.processReminders();
@@ -340,11 +372,11 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
-      { isConfigured: () => true, sendText } as never,
-      { buildContext: vi.fn().mockResolvedValue(defaultContext) } as never,
-      { compose } as never,
+    const service = createReminderService(
+      prisma,
+      { isConfigured: () => true, sendText },
+      { buildContext: vi.fn().mockResolvedValue(defaultContext) },
+      { compose },
     );
 
     await service.processReminders();
@@ -378,11 +410,11 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
-      { isConfigured: () => true, sendText } as never,
-      { buildContext } as never,
-      { compose } as never,
+    const service = createReminderService(
+      prisma,
+      { isConfigured: () => true, sendText },
+      { buildContext },
+      { compose },
     );
 
     await service.processReminders();
@@ -418,14 +450,14 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
+    const service = createReminderService(
+      prisma,
       {
         isConfigured: () => true,
         sendText: vi.fn().mockResolvedValue({ ok: true }),
-      } as never,
-      { buildContext } as never,
-      { compose } as never,
+      },
+      { buildContext },
+      { compose },
     );
 
     await service.processReminders();
@@ -461,11 +493,11 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
-      { isConfigured: () => true, sendText } as never,
-      { buildContext } as never,
-      { compose } as never,
+    const service = createReminderService(
+      prisma,
+      { isConfigured: () => true, sendText },
+      { buildContext },
+      { compose },
     );
 
     await service.processReminders();
@@ -509,14 +541,14 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
+    const service = createReminderService(
+      prisma,
       {
         isConfigured: () => true,
         sendText: vi.fn().mockResolvedValue({ ok: true }),
-      } as never,
-      { buildContext } as never,
-      { compose } as never,
+      },
+      { buildContext },
+      { compose },
     );
 
     await service.processReminders();
@@ -551,11 +583,11 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
-      { isConfigured: () => true, sendText } as never,
-      { buildContext } as never,
-      { compose } as never,
+    const service = createReminderService(
+      prisma,
+      { isConfigured: () => true, sendText },
+      { buildContext },
+      { compose },
     );
 
     await service.processReminders();
@@ -592,11 +624,11 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
-      { isConfigured: () => true, sendText } as never,
-      { buildContext } as never,
-      { compose } as never,
+    const service = createReminderService(
+      prisma,
+      { isConfigured: () => true, sendText },
+      { buildContext },
+      { compose },
     );
 
     await service.processReminders();
@@ -642,11 +674,11 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
-      { isConfigured: () => true, sendText } as never,
-      { buildContext } as never,
-      { compose } as never,
+    const service = createReminderService(
+      prisma,
+      { isConfigured: () => true, sendText },
+      { buildContext },
+      { compose },
     );
 
     await service.processReminders();
@@ -681,11 +713,11 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
-      { isConfigured: () => true, sendText } as never,
-      { buildContext } as never,
-      { compose } as never,
+    const service = createReminderService(
+      prisma,
+      { isConfigured: () => true, sendText },
+      { buildContext },
+      { compose },
     );
 
     await service.processReminders();
@@ -723,14 +755,14 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
+    const service = createReminderService(
+      prisma,
       {
         isConfigured: () => true,
         sendText: vi.fn().mockResolvedValue({ ok: true }),
-      } as never,
-      { buildContext } as never,
-      { compose } as never,
+      },
+      { buildContext },
+      { compose },
     );
 
     await service.processReminders();
@@ -766,11 +798,11 @@ describe('ReminderService', () => {
       ],
     });
 
-    const service = new ReminderService(
-      prisma as never,
-      { isConfigured: () => true, sendText } as never,
-      { buildContext } as never,
-      { compose } as never,
+    const service = createReminderService(
+      prisma,
+      { isConfigured: () => true, sendText },
+      { buildContext },
+      { compose },
     );
 
     await service.processReminders();
@@ -782,6 +814,54 @@ describe('ReminderService', () => {
     expect(recoveryLog?.date.getTime()).toBe(
       parseLocalDateKey(recoveryBreakDate, timezone).getTime(),
     );
+  });
+
+  it('defers all reminders when win-back owns the day', async () => {
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Should not send');
+    const buildContext = vi.fn().mockResolvedValue({
+      ...defaultContext,
+      missedYesterday: true,
+      recoveryEligible: true,
+      recoveryBreakDate: '2026-06-14',
+    });
+    const winbackService = createWinbackServiceMock(true);
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          whatsappOptIn: true,
+        },
+      ],
+    });
+    prisma.challenge.findFirst = async () => ({
+      id: 'c1',
+      startDate: new Date('2026-06-01T00:00:00.000Z'),
+      endDate: new Date('2026-06-30T00:00:00.000Z'),
+      lengthDays: 30,
+      currentDay: 15,
+      isActive: true,
+      stoppedAt: null,
+    });
+
+    const service = createReminderService(
+      prisma,
+      { isConfigured: () => true, sendText },
+      { buildContext },
+      { compose },
+      winbackService,
+    );
+
+    await service.processReminders();
+
+    expect(winbackService.shouldDeferRemindersForUser).toHaveBeenCalled();
+    expect(sendText).not.toHaveBeenCalled();
+    expect(compose).not.toHaveBeenCalled();
   });
 });
 

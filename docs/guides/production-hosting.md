@@ -6,20 +6,22 @@ stack: `nginx` on public ports 80/443, `web-host` on `:4321`, and `api` on
 
 ## Domains and routing
 
-| Hostname               | External ports | Upstream        |
-| ---------------------- | -------------- | --------------- |
-| `hobbit.drcode.ai`     | 80, 443        | `web-host:4321` |
-| `hobbit-api.drcode.ai` | 80, 443        | `api:3001`      |
+Hostnames are configured with `WEB_DOMAIN` and `API_DOMAIN` in `.env` (defaults
+shown below):
 
-HTTP requests redirect to HTTPS. TLS terminates at nginx.
+| Env var      | Default                | External ports | Upstream        |
+| ------------ | ---------------------- | -------------- | --------------- |
+| `WEB_DOMAIN` | `hobbit.drcode.ai`     | 80, 443        | `web-host:4321` |
+| `API_DOMAIN` | `hobbit-api.drcode.ai` | 80, 443        | `api:3001`      |
+
+HTTP requests redirect to HTTPS. TLS terminates at nginx. nginx reads
+`WEB_DOMAIN` / `API_DOMAIN` at container start via envsubst templates in
+`nginx/templates/`.
 
 ## DNS
 
 Create A (and optionally AAAA) records pointing both hostnames at the server's
-public IP:
-
-- `hobbit.drcode.ai`
-- `hobbit-api.drcode.ai`
+public IP. Use the same values you set for `WEB_DOMAIN` and `API_DOMAIN`.
 
 ## TLS certificates
 
@@ -34,8 +36,14 @@ nginx expects a certificate pair mounted at `nginx/certs/`:
 pnpm nginx:certs
 ```
 
-This creates a dev certificate with SANs for both hostnames. Browsers will warn
-until you replace the files with CA-issued certs.
+This creates a dev certificate with SANs for `WEB_DOMAIN` and `API_DOMAIN`.
+Override domains before running:
+
+```bash
+WEB_DOMAIN=staging.example.com API_DOMAIN=api-staging.example.com pnpm nginx:certs
+```
+
+Browsers will warn until you replace the files with CA-issued certs.
 
 ### Production (Let's Encrypt example)
 
@@ -51,14 +59,19 @@ your host's certificate manager and reload nginx after renewal.
 Copy `.env.example` to `.env` and set production values before building:
 
 ```env
+WEB_DOMAIN=hobbit.drcode.ai
+API_DOMAIN=hobbit-api.drcode.ai
 PUBLIC_API_URL=https://hobbit-api.drcode.ai
 CORS_ORIGIN=https://hobbit.drcode.ai
 JWT_SECRET=<strong-random-secret>
 DATABASE_URL=<production-database-url>
 ```
 
+`PUBLIC_API_URL` and `CORS_ORIGIN` default from `API_DOMAIN` / `WEB_DOMAIN` in
+compose when unset, but setting all four explicitly avoids surprises.
+
 `PUBLIC_API_URL` is baked into the `web-host` image at **build** time via
-compose `build.args`. Changing it requires rebuilding the `web-host` service.
+compose `build.args`. Changing `API_DOMAIN` requires rebuilding `web-host`.
 
 ## Start the stack
 
@@ -67,7 +80,7 @@ pnpm nginx:certs   # skip if real certs are already in nginx/certs/
 docker compose up --build -d
 ```
 
-Verify:
+Verify (substitute your domains):
 
 - `https://hobbit.drcode.ai` serves the web UI
 - `https://hobbit-api.drcode.ai/trpc` responds (health/tRPC from the API)
@@ -80,16 +93,17 @@ Verify:
 ```
 nginx/
 ├── nginx.conf
-├── conf.d/
-│   ├── hobbit-web.conf      # hobbit.drcode.ai → web-host:4321
-│   └── hobbit-api.conf      # hobbit-api.drcode.ai → api:3001
+├── templates/
+│   ├── web.conf.template    # ${WEB_DOMAIN} → web-host:4321
+│   └── api.conf.template    # ${API_DOMAIN} → api:3001
 ├── snippets/
 │   └── proxy-params.conf    # shared proxy headers + WebSocket upgrade
 └── certs/                   # TLS material (not committed)
 ```
 
 To change upload limits, align `client_max_body_size` in
-`nginx/conf.d/hobbit-api.conf` with `MAX_UPLOAD_BYTES` on the `api` service.
+`nginx/templates/api.conf.template` with `MAX_UPLOAD_BYTES` on the `api`
+service.
 
 ## Related
 

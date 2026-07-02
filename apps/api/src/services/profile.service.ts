@@ -19,6 +19,7 @@ export type ProfileData = {
   timezone: string;
   reminderTime: string | null;
   whatsappOptIn: boolean;
+  weeklyRecapOptIn: boolean;
   needsPhoneMigration: boolean;
   groupId: string | null;
   groupName: string | null;
@@ -73,6 +74,7 @@ export async function getProfile(
     timezone: user.timezone,
     reminderTime: user.reminderTime,
     whatsappOptIn: user.whatsappOptIn,
+    weeklyRecapOptIn: user.weeklyRecapOptIn,
     needsPhoneMigration:
       user.phone === null && (user.email !== null || user.whatsappOptIn),
     groupId: user.groupId,
@@ -90,6 +92,7 @@ export type UpdateProfileInput = {
   password?: string;
   reminderTime?: string | null;
   whatsappOptIn?: boolean;
+  weeklyRecapOptIn?: boolean;
   phone?: string;
   email?: string;
   timezone?: string;
@@ -107,6 +110,7 @@ export async function updateProfile(
     passwordHash?: string;
     reminderTime?: string | null;
     whatsappOptIn?: boolean;
+    weeklyRecapOptIn?: boolean;
     phone?: string;
     email?: string;
     timezone?: string;
@@ -195,6 +199,27 @@ export async function updateProfile(
     data.whatsappOptIn = input.whatsappOptIn;
   }
 
+  if (input.weeklyRecapOptIn !== undefined) {
+    if (input.weeklyRecapOptIn) {
+      const stored = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { phone: true, whatsappOptIn: true },
+      });
+      const effectivePhone = data.phone ?? stored?.phone;
+      const effectiveWhatsapp =
+        data.whatsappOptIn ?? stored?.whatsappOptIn ?? false;
+
+      if (!effectivePhone || !effectiveWhatsapp) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message:
+            'Add a phone number and enable WhatsApp reminders before enabling weekly recap',
+        });
+      }
+    }
+    data.weeklyRecapOptIn = input.weeklyRecapOptIn;
+  }
+
   if (input.email !== undefined) {
     const existingByEmail = await prisma.user.findUnique({
       where: { email: input.email },
@@ -249,6 +274,7 @@ export async function updateProfile(
     timezone: true,
     reminderTime: true,
     whatsappOptIn: true,
+    weeklyRecapOptIn: true,
     groupId: true,
   } as const;
 

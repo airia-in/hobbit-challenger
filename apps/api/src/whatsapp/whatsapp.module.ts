@@ -6,6 +6,7 @@ import { ReminderContextService } from './reminder-context.service';
 import { StreakFreezeMessageService } from './streak-freeze-message.service';
 import { MilestoneMessageService } from './milestone-message.service';
 import { WinbackMessageService } from './winback-message.service';
+import { WeeklyRecapMessageService } from './weekly-recap-message.service';
 
 @Module({
   imports: [ActivitiesModule],
@@ -16,6 +17,7 @@ import { WinbackMessageService } from './winback-message.service';
     StreakFreezeMessageService,
     MilestoneMessageService,
     WinbackMessageService,
+    WeeklyRecapMessageService,
   ],
   exports: [
     EvolutionApiClient,
@@ -24,6 +26,7 @@ import { WinbackMessageService } from './winback-message.service';
     StreakFreezeMessageService,
     MilestoneMessageService,
     WinbackMessageService,
+    WeeklyRecapMessageService,
   ],
 })
 export class WhatsappModule {}

@@ -26,7 +26,8 @@ model User {
   groupId        String?
   group          Group?        @relation(fields: [groupId], references: [id])
   reminderTime   String?
-  whatsappOptIn  Boolean       @default(true)
+  whatsappOptIn     Boolean       @default(true)
+  weeklyRecapOptIn  Boolean       @default(true)
   createdAt      DateTime      @default(now())
   challenges     Challenge[]
   activityLogs   ActivityLog[]

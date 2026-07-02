@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   GetTodayResult,
   TodayActivity,
@@ -11,9 +11,16 @@ import {
   getChallengeYesterdayDate,
   hasEveningReminderEligibility,
   pickTopActivityStreak,
+  ReminderContextService,
   resolveJourneyMilestone,
   STREAK_AT_RISK_MIN,
 } from '../src/whatsapp/reminder-context.service';
+import { challengeDisplayOrderBy } from '../src/utils/challenge-query';
+import {
+  type Challenge,
+  type DayScore,
+  type User,
+} from '@workspace-starter/db';
 import {
   addLocalDays,
   formatLocalDateKey,
@@ -60,6 +67,10 @@ function emptyToday(overrides: Partial<GetTodayResult> = {}): GetTodayResult {
 }
 
 describe('reminder-context helpers', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('counts done and remaining tasks', () => {
     const activities = [
       scoredActivity({
@@ -194,6 +205,7 @@ describe('reminder-context helpers', () => {
       journeyMilestone: 7,
       currentStreak: STREAK_AT_RISK_MIN,
       longestStreak: 12,
+      streakFreezesAvailable: 0,
     });
   });
 
@@ -234,6 +246,7 @@ describe('reminder-context helpers', () => {
         journeyMilestone: null,
         currentStreak: 0,
         longestStreak: 0,
+        streakFreezesAvailable: 0,
       }),
     ).toBe(false);
 
@@ -257,5 +270,145 @@ describe('reminder-context helpers', () => {
         longestStreak: 5,
       }),
     ).toBe(true);
+  });
+
+  it('treats freeze-absorbed yesterday as not missed via buildContext', async () => {
+    const timezone = 'America/New_York';
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-15T15:00:00.000Z'));
+    const yesterday = getChallengeYesterdayDate(timezone);
+
+    const user: User = {
+      id: 'user-1',
+      name: 'Alex',
+      phone: '+15551234567',
+      email: 'a@b.com',
+      passwordHash: 'x',
+      timezone,
+      groupId: 'group-1',
+      avatarUrl: null,
+      reminderTime: null,
+      whatsappOptIn: true,
+      createdAt: new Date(),
+    };
+    const challenge: Challenge = {
+      id: 'ch-1',
+      userId: user.id,
+      groupId: 'group-1',
+      startDate: new Date('2026-06-01T04:00:00.000Z'),
+      endDate: null,
+      lengthDays: 30,
+      currentDay: 15,
+      isActive: true,
+      totalXp: 1000,
+      currentStreak: 5,
+      longestStreak: 7,
+      streakFreezesAvailable: 0,
+      streakFreezesUsed: 1,
+      lastStreakFreezeGrantedAt: null,
+    };
+    const yesterdayScore: DayScore = {
+      id: 'ds-y',
+      challengeId: challenge.id,
+      userId: user.id,
+      date: yesterday,
+      dayNumber: 14,
+      xpEarned: 0,
+      xpDeducted: 100,
+      netXp: -100,
+      personalXp: 0,
+      breakdown: {
+        allScoredLogged: false,
+        freezeConsumed: true,
+        entries: [],
+      },
+      finalized: true,
+    };
+
+    const prisma = {
+      user: {
+        findUnique: async ({
+          include,
+        }: {
+          where: { id: string };
+          include?: { group?: { select: { challengeTimezone: true } } };
+        }) => {
+          if (!include?.group) return user;
+          return { ...user, group: { challengeTimezone: timezone } };
+        },
+      },
+      challenge: {
+        findFirst: async ({
+          where,
+          orderBy,
+        }: {
+          where: { userId?: string };
+          orderBy?: typeof challengeDisplayOrderBy;
+        }) => {
+          void orderBy;
+          return where.userId === user.id ? challenge : null;
+        },
+      },
+      dayScore: {
+        findMany: async ({
+          where,
+        }: {
+          where: { challenge?: { userId?: string }; challengeId?: string };
+        }) => {
+          if (where.challenge?.userId !== user.id) return [];
+          return [yesterdayScore].map((day) => ({
+            finalized: day.finalized,
+            breakdown: day.breakdown,
+            date: day.date,
+          }));
+        },
+        findFirst: async ({
+          where,
+        }: {
+          where: {
+            challengeId?: string;
+            date?: Date;
+            finalized?: boolean;
+          };
+        }) => {
+          if (
+            where.challengeId === challenge.id &&
+            where.date?.getTime() === yesterday.getTime()
+          ) {
+            if (where.finalized && !yesterdayScore.finalized) return null;
+            return {
+              netXp: yesterdayScore.netXp,
+              finalized: yesterdayScore.finalized,
+              breakdown: yesterdayScore.breakdown,
+            };
+          }
+          return null;
+        },
+      },
+      activity: {
+        findMany: async () => [],
+      },
+      activityLog: {
+        findMany: async () => [],
+      },
+    };
+
+    const activitiesService = {
+      getToday: vi.fn().mockResolvedValue(
+        emptyToday({
+          currentDay: challenge.currentDay,
+          date: getUserLocalDate(timezone),
+        }),
+      ),
+    };
+
+    const service = new ReminderContextService(activitiesService as never);
+    const context = await service.buildContext(
+      prisma as never,
+      user.id,
+      user.name,
+    );
+
+    expect(context.missedYesterday).toBe(false);
   });
 });

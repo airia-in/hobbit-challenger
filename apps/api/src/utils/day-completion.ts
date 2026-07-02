@@ -54,7 +54,7 @@ export function computeDayLoggingStatus(
   return { expectedCount, loggedActivityIds, allScoredLogged };
 }
 
-type DayScoreCompletionInput = {
+export type DayScoreCompletionInput = {
   finalized: boolean;
   breakdown: unknown;
 };
@@ -74,6 +74,17 @@ export function isInterimDayCompleted(score: DayScoreCompletionInput): boolean {
 
 export function isInterimDayFailed(score: DayScoreCompletionInput): boolean {
   return score.finalized && !isInterimDayCompleted(score);
+}
+
+export function isFreezeAbsorbed(score: DayScoreCompletionInput): boolean {
+  const breakdown = score.breakdown as { freezeConsumed?: boolean } | null;
+  return Boolean(breakdown?.freezeConsumed);
+}
+
+export function isStreakBreakingFailure(
+  score: DayScoreCompletionInput,
+): boolean {
+  return isInterimDayFailed(score) && !isFreezeAbsorbed(score);
 }
 
 export function computeCurrentStreak(

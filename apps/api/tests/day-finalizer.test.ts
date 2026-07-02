@@ -86,6 +86,9 @@ type EvaluateDayRolloverChallenge = {
   lengthDays: number;
   currentStreak: number;
   longestStreak: number;
+  streakFreezesAvailable?: number;
+  streakFreezesUsed?: number;
+  lastStreakFreezeGrantedAt?: Date | null;
 };
 
 describe('evaluateDayRollover — grace applied', () => {
@@ -411,6 +414,208 @@ describe('evaluateDayRollover — breakdown shape', () => {
   });
 });
 
+describe('evaluateDayRollover — streak freeze', () => {
+  const scoredSet = [checkboxActivity];
+
+  const priorSuccess = {
+    finalized: true,
+    breakdown: { allScoredLogged: true },
+  };
+
+  const priorFailed = {
+    finalized: true,
+    breakdown: { allScoredLogged: false },
+  };
+
+  it('consumes freeze on single miss with prior success', () => {
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 5,
+        longestStreak: 5,
+        streakFreezesAvailable: 1,
+        streakFreezesUsed: 0,
+      }),
+      scoredActivities: scoredSet,
+      previousDayLogs: [],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(5);
+    expect(result.challengeUpdate.streakFreezesAvailable).toBe(0);
+    expect(result.challengeUpdate.streakFreezesUsed).toBe(1);
+    expect(result.dayScore.breakdown.freezeConsumed).toBe(true);
+    expect(result.dayScore.breakdown.allScoredLogged).toBe(false);
+    expect(result.flags.freezeConsumed).toBe(true);
+    expect(result.flags.freezeGranted).toBe(false);
+  });
+
+  it('resets streak when no freeze available', () => {
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 5,
+        streakFreezesAvailable: 0,
+      }),
+      scoredActivities: scoredSet,
+      previousDayLogs: [],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(0);
+    expect(result.flags.freezeConsumed).toBe(false);
+  });
+
+  it('does not consume freeze on consecutive miss', () => {
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 5,
+        streakFreezesAvailable: 1,
+      }),
+      scoredActivities: scoredSet,
+      previousDayLogs: [],
+      previousDayScore: priorFailed,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(0);
+    expect(result.challengeUpdate.streakFreezesAvailable).toBe(1);
+    expect(result.flags.freezeConsumed).toBe(false);
+  });
+
+  it('does not consume freeze when streak is 0', () => {
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 0,
+        streakFreezesAvailable: 1,
+      }),
+      scoredActivities: scoredSet,
+      previousDayLogs: [],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(0);
+    expect(result.challengeUpdate.streakFreezesAvailable).toBe(1);
+    expect(result.flags.freezeConsumed).toBe(false);
+  });
+
+  it('consumes freeze at streak 1 when inventory was earned earlier', () => {
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 1,
+        longestStreak: 7,
+        streakFreezesAvailable: 1,
+        streakFreezesUsed: 0,
+      }),
+      scoredActivities: scoredSet,
+      previousDayLogs: [],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(1);
+    expect(result.challengeUpdate.streakFreezesAvailable).toBe(0);
+    expect(result.flags.freezeConsumed).toBe(true);
+  });
+
+  it('does not consume freeze on personal-only miss days', () => {
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 5,
+        longestStreak: 5,
+        streakFreezesAvailable: 1,
+      }),
+      scoredActivities: [],
+      personalActivities: [personalCheckbox],
+      previousDayLogs: [],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(0);
+    expect(result.challengeUpdate.streakFreezesAvailable).toBe(1);
+    expect(result.flags.freezeConsumed).toBe(false);
+  });
+
+  it('grants freeze when reaching streak 7 in an eligible week', () => {
+    const evaluationDay = new Date('2026-06-15T04:00:00.000Z');
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 6,
+        longestStreak: 6,
+        streakFreezesAvailable: 0,
+        streakFreezesUsed: 0,
+        lastStreakFreezeGrantedAt: null,
+      }),
+      previousDay: evaluationDay,
+      timezone: 'America/New_York',
+      scoredActivities: scoredSet,
+      previousDayLogs: [{ activityId: checkboxActivity.id, state: 'DONE' }],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(7);
+    expect(result.challengeUpdate.streakFreezesAvailable).toBe(1);
+    expect(result.challengeUpdate.lastStreakFreezeGrantedAt).toEqual(
+      evaluationDay,
+    );
+    expect(result.flags.freezeGranted).toBe(true);
+  });
+
+  it('does not grant a second freeze in the same ISO week', () => {
+    const evaluationDay = new Date('2026-06-17T04:00:00.000Z');
+    const grantedMonday = new Date('2026-06-15T04:00:00.000Z');
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 6,
+        streakFreezesAvailable: 0,
+        lastStreakFreezeGrantedAt: grantedMonday,
+      }),
+      previousDay: evaluationDay,
+      timezone: 'America/New_York',
+      scoredActivities: scoredSet,
+      previousDayLogs: [{ activityId: checkboxActivity.id, state: 'DONE' }],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(7);
+    expect(result.challengeUpdate.streakFreezesAvailable).toBe(0);
+    expect(result.flags.freezeGranted).toBe(false);
+  });
+
+  it('does not grant when inventory already holds a cloak', () => {
+    const evaluationDay = new Date('2026-06-15T04:00:00.000Z');
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 6,
+        streakFreezesAvailable: 1,
+      }),
+      previousDay: evaluationDay,
+      timezone: 'America/New_York',
+      scoredActivities: scoredSet,
+      previousDayLogs: [{ activityId: checkboxActivity.id, state: 'DONE' }],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.streakFreezesAvailable).toBe(1);
+    expect(result.flags.freezeGranted).toBe(false);
+  });
+
+  it('does not grant at streak 8 without empty inventory and new week', () => {
+    const evaluationDay = new Date('2026-06-22T04:00:00.000Z');
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 7,
+        streakFreezesAvailable: 0,
+        lastStreakFreezeGrantedAt: new Date('2026-06-15T04:00:00.000Z'),
+      }),
+      previousDay: evaluationDay,
+      timezone: 'America/New_York',
+      scoredActivities: scoredSet,
+      previousDayLogs: [{ activityId: checkboxActivity.id, state: 'DONE' }],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(8);
+    expect(result.flags.freezeGranted).toBe(false);
+  });
+});
+
 // --- Cron guard tests (fake prisma, no PrismaClient) ---
 
 function activityLogKey(
@@ -647,6 +852,19 @@ function createCronFakePrisma(
             }
             if (data.isActive === false) {
               challenge.isActive = false;
+            }
+            if (typeof data.streakFreezesAvailable === 'number') {
+              challenge.streakFreezesAvailable = data.streakFreezesAvailable;
+            }
+            if (typeof data.streakFreezesUsed === 'number') {
+              challenge.streakFreezesUsed = data.streakFreezesUsed;
+            }
+            if (
+              data.lastStreakFreezeGrantedAt instanceof Date ||
+              data.lastStreakFreezeGrantedAt === null
+            ) {
+              challenge.lastStreakFreezeGrantedAt =
+                data.lastStreakFreezeGrantedAt as Date | null;
             }
           },
         },
@@ -992,6 +1210,157 @@ describe('DayEvaluatorService — cron guards', () => {
     expect(challenge?.currentDay).toBe(6);
     expect(challenge?.currentStreak).toBe(2);
     expect(challenge?.totalXp).toBe(200);
+  });
+
+  it('grants streak freeze at day 7 and invokes grant WhatsApp send', async () => {
+    const trySendGrantMessage = vi.fn().mockResolvedValue(undefined);
+    const streakFreezeMessage = { trySendGrantMessage };
+
+    const { prisma, transactionOps, challenges } = createCronFakePrisma({
+      users: [
+        {
+          id: 'user-1',
+          phone: '+15551234567',
+          email: 'a@b.com',
+          passwordHash: 'x',
+          name: 'User',
+          timezone,
+          groupId: 'group-1',
+          whatsappOptIn: true,
+          createdAt: new Date(),
+          avatarUrl: null,
+          reminderTime: null,
+        },
+      ],
+      challenges: [
+        {
+          id: 'ch-1',
+          userId: 'user-1',
+          groupId: 'group-1',
+          startDate,
+          endDate: null,
+          lengthDays: 30,
+          currentDay: 7,
+          isActive: true,
+          totalXp: 0,
+          currentStreak: 6,
+          longestStreak: 6,
+          streakFreezesAvailable: 0,
+          streakFreezesUsed: 0,
+          lastStreakFreezeGrantedAt: null,
+        },
+      ],
+      activities: [makeActivity({ id: 'act-1', groupId: 'group-1' })],
+      activityLogs: [
+        {
+          id: 'log-1',
+          challengeId: 'ch-1',
+          userId: 'user-1',
+          activityId: 'act-1',
+          date: previousDay,
+          value: null,
+          tier: null,
+          subPoints: null,
+          state: 'DONE',
+          xpAwarded: 200,
+          proofUrl: null,
+          aiVerdict: null,
+        },
+      ],
+    });
+
+    const service = new DayEvaluatorService(
+      prisma as never,
+      streakFreezeMessage as never,
+    );
+    await service.evaluateDays();
+
+    expect(transactionOps).toHaveLength(2);
+    const challenge = challenges.get('ch-1');
+    expect(challenge?.currentStreak).toBe(7);
+    expect(challenge?.streakFreezesAvailable).toBe(1);
+    expect(challenge?.lastStreakFreezeGrantedAt).toEqual(previousDay);
+    expect(trySendGrantMessage).toHaveBeenCalledTimes(1);
+    expect(trySendGrantMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        evaluationDay: previousDay,
+        currentStreak: 7,
+        streakFreezesAvailable: 1,
+      }),
+    );
+  });
+
+  it('retries grant WhatsApp on finalized day when grant was awarded', async () => {
+    const trySendGrantMessage = vi.fn().mockResolvedValue(undefined);
+    const streakFreezeMessage = { trySendGrantMessage };
+
+    const { prisma, transactionOps } = createCronFakePrisma({
+      users: [
+        {
+          id: 'user-1',
+          phone: '+15551234567',
+          email: 'a@b.com',
+          passwordHash: 'x',
+          name: 'User',
+          timezone,
+          groupId: 'group-1',
+          whatsappOptIn: true,
+          createdAt: new Date(),
+          avatarUrl: null,
+          reminderTime: null,
+        },
+      ],
+      challenges: [
+        {
+          id: 'ch-1',
+          userId: 'user-1',
+          groupId: 'group-1',
+          startDate,
+          endDate: null,
+          lengthDays: 30,
+          currentDay: 8,
+          isActive: true,
+          totalXp: 1400,
+          currentStreak: 7,
+          longestStreak: 7,
+          streakFreezesAvailable: 1,
+          streakFreezesUsed: 0,
+          lastStreakFreezeGrantedAt: previousDay,
+        },
+      ],
+      activities: [makeActivity({ id: 'act-1', groupId: 'group-1' })],
+      dayScores: [
+        {
+          id: 'ds-1',
+          challengeId: 'ch-1',
+          userId: 'user-1',
+          date: previousDay,
+          dayNumber: 7,
+          xpEarned: 200,
+          xpDeducted: 0,
+          netXp: 200,
+          personalXp: 0,
+          breakdown: { allScoredLogged: true, entries: [] },
+          finalized: true,
+        },
+      ],
+    });
+
+    const service = new DayEvaluatorService(
+      prisma as never,
+      streakFreezeMessage as never,
+    );
+    await service.evaluateDays();
+
+    expect(transactionOps).toHaveLength(0);
+    expect(trySendGrantMessage).toHaveBeenCalledTimes(1);
+    expect(trySendGrantMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        evaluationDay: previousDay,
+      }),
+    );
   });
 
   it('finalizes the scheduled end day when the cron runs late', async () => {

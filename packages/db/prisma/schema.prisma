@@ -91,6 +91,10 @@ model Challenge {
   totalXp       Int           @default(0)
   currentStreak Int           @default(0)
   longestStreak Int           @default(0)
+  // Rain-cloak streak freeze: inventory (0 or 1), lifetime used, ISO-week grant dedupe.
+  streakFreezesAvailable    Int       @default(0)
+  streakFreezesUsed         Int       @default(0)
+  lastStreakFreezeGrantedAt DateTime?
   activityLogs  ActivityLog[]
   dayScores     DayScore[]
 }

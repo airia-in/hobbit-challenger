@@ -1,5 +1,9 @@
 import type { StreakBreak } from '@workspace-starter/types';
-import { isInterimDayCompleted, isInterimDayFailed } from './day-completion';
+import {
+  isFreezeAbsorbed,
+  isInterimDayCompleted,
+  isStreakBreakingFailure,
+} from './day-completion';
 import { addLocalDays, formatLocalDateKey } from './day-window';
 
 export type FinalizedDayScore = {
@@ -31,7 +35,7 @@ export function computeStreakBreak(
     .sort((a, b) => b.date.getTime() - a.date.getTime());
 
   const last = sorted[0];
-  if (!last || !isInterimDayFailed(last)) {
+  if (!last || !isStreakBreakingFailure(last)) {
     return noBreak;
   }
 
@@ -46,7 +50,7 @@ export function computeStreakBreak(
   while (true) {
     const key = formatLocalDateKey(cursor, timezone);
     const score = scoreByDateKey.get(key);
-    if (!score || !isInterimDayFailed(score)) {
+    if (!score || !isStreakBreakingFailure(score)) {
       break;
     }
     firstFailureDate = score.date;
@@ -58,7 +62,14 @@ export function computeStreakBreak(
   while (true) {
     const key = formatLocalDateKey(cursor, timezone);
     const score = scoreByDateKey.get(key);
-    if (!score || !isInterimDayCompleted(score)) {
+    if (!score) {
+      break;
+    }
+    if (isFreezeAbsorbed(score)) {
+      cursor = addLocalDays(cursor, -1, timezone);
+      continue;
+    }
+    if (!isInterimDayCompleted(score)) {
       break;
     }
     previousStreak += 1;
@@ -71,7 +82,7 @@ export function computeStreakBreak(
   );
   const priorToLatest = scoreByDateKey.get(priorToLatestKey);
   const isRepeatMiss =
-    priorToLatest != null && isInterimDayFailed(priorToLatest);
+    priorToLatest != null && isStreakBreakingFailure(priorToLatest);
 
   return {
     occurred: previousStreak > 0 || isRepeatMiss,

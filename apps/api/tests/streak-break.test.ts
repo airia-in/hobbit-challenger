@@ -7,10 +7,18 @@ const TZ = 'UTC';
 function score(
   dateKey: string,
   allScoredLogged: boolean,
-): { date: Date; breakdown: { allScoredLogged: boolean }; finalized: boolean } {
+  freezeConsumed = false,
+): {
+  date: Date;
+  breakdown: { allScoredLogged: boolean; freezeConsumed?: boolean };
+  finalized: boolean;
+} {
   return {
     date: parseLocalDateKey(dateKey, TZ),
-    breakdown: { allScoredLogged },
+    breakdown: {
+      allScoredLogged,
+      ...(freezeConsumed ? { freezeConsumed: true } : {}),
+    },
     finalized: true,
   };
 }
@@ -159,5 +167,46 @@ describe('computeStreakBreak', () => {
     );
 
     expect(result.daysSinceBreak).toBe(2);
+  });
+
+  it('returns no break when latest day failed with freeze consumed', () => {
+    const result = computeStreakBreak(
+      [score('2026-06-10', false, true), score('2026-06-09', true)],
+      TZ,
+      parseLocalDateKey('2026-06-11', TZ),
+    );
+
+    expect(result.occurred).toBe(false);
+    expect(result.brokeOnDate).toBeNull();
+  });
+
+  it('treats freeze-absorbed miss between successes as non-breaking', () => {
+    const result = computeStreakBreak(
+      [
+        score('2026-06-10', true),
+        score('2026-06-09', false, true),
+        score('2026-06-08', true),
+      ],
+      TZ,
+      parseLocalDateKey('2026-06-11', TZ),
+    );
+
+    expect(result.occurred).toBe(false);
+  });
+
+  it('breaks on consecutive real miss after freeze-absorbed day', () => {
+    const result = computeStreakBreak(
+      [
+        score('2026-06-11', false),
+        score('2026-06-10', false, true),
+        score('2026-06-09', true),
+      ],
+      TZ,
+      parseLocalDateKey('2026-06-12', TZ),
+    );
+
+    expect(result.occurred).toBe(true);
+    expect(result.previousStreak).toBe(1);
+    expect(result.brokeOnDate).toBe('2026-06-11');
   });
 });

@@ -29,6 +29,7 @@ const baseContext: ReminderContext = {
   journeyMilestone: null,
   currentStreak: STREAK_AT_RISK_MIN + 2,
   longestStreak: 15,
+  streakFreezesAvailable: 0,
 };
 
 const messaging = buildReminderMessaging('staging.hobbit.example');

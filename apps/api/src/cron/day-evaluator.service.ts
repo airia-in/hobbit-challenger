@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -9,10 +9,17 @@ import { evaluateDayRollover } from '../services/day-finalizer';
 import { activeChallengeRelationArgs } from '../utils/challenge-query';
 import { fallbackScheduledEnd } from '../utils/challenge-range';
 import { addLocalDays, getUserLocalDate } from '../utils/day-window';
+import { StreakFreezeMessageService } from '../whatsapp/streak-freeze-message.service';
 
 @Injectable()
 export class DayEvaluatorService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(DayEvaluatorService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    private readonly streakFreezeMessage?: StreakFreezeMessageService,
+  ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
   async evaluateDays() {
@@ -33,19 +40,25 @@ export class DayEvaluatorService {
       try {
         await this.evaluateUserDay(
           user.id,
+          user.name,
+          user.phone,
+          user.whatsappOptIn,
           user.timezone,
           user.group?.challengeTimezone ?? user.timezone,
           user.groupId,
           challenge,
         );
       } catch (error) {
-        console.error(`Day evaluation failed for user ${user.id}:`, error);
+        this.logger.error(`Day evaluation failed for user ${user.id}:`, error);
       }
     }
   }
 
   private async evaluateUserDay(
     userId: string,
+    userName: string,
+    userPhone: string | null,
+    whatsappOptIn: boolean,
     timezone: string,
     challengeTimezone: string,
     groupId: string | null,
@@ -57,6 +70,9 @@ export class DayEvaluatorService {
       lengthDays: number;
       longestStreak: number;
       currentStreak: number;
+      streakFreezesAvailable: number;
+      streakFreezesUsed: number;
+      lastStreakFreezeGrantedAt: Date | null;
     },
   ) {
     const orConditions: Array<Record<string, unknown>> = [
@@ -108,6 +124,16 @@ export class DayEvaluatorService {
     });
 
     if (existingScore?.finalized) {
+      await this.maybeSendStreakFreezeGrantMessage({
+        userId,
+        userName,
+        userPhone,
+        whatsappOptIn,
+        evaluationDay,
+        currentStreak: challenge.currentStreak,
+        streakFreezesAvailable: challenge.streakFreezesAvailable,
+        lastStreakFreezeGrantedAt: challenge.lastStreakFreezeGrantedAt,
+      });
       if (previousDay.getTime() > challengeEndDay.getTime()) {
         await this.prisma.challenge.update({
           where: { id: challenge.id },
@@ -116,6 +142,23 @@ export class DayEvaluatorService {
       }
       return;
     }
+
+    const dayBeforeEvaluation = addLocalDays(
+      evaluationDay,
+      -1,
+      challengeTimezone,
+    );
+    const previousDayScore =
+      dayBeforeEvaluation.getTime() >= challengeStartDay.getTime()
+        ? await this.prisma.dayScore.findFirst({
+            where: {
+              challengeId: challenge.id,
+              date: dayBeforeEvaluation,
+              finalized: true,
+            },
+            select: { breakdown: true, finalized: true },
+          })
+        : null;
 
     const activityLogs = await this.prisma.activityLog.findMany({
       where: {
@@ -133,14 +176,19 @@ export class DayEvaluatorService {
         endDate: challenge.endDate,
         currentStreak: challenge.currentStreak,
         longestStreak: challenge.longestStreak,
+        streakFreezesAvailable: challenge.streakFreezesAvailable,
+        streakFreezesUsed: challenge.streakFreezesUsed,
+        lastStreakFreezeGrantedAt: challenge.lastStreakFreezeGrantedAt,
       },
       previousDay: evaluationDay,
       timezone: challengeTimezone,
+      previousDayScore,
       scoredActivities: scoredActivities.map(mapActivityToScored),
       personalActivities: personalActivities.map(mapActivityToScored),
       previousDayLogs: activityLogs.map(mapLogToInput),
     });
 
+    let finalized = false;
     await this.prisma.$transaction(async (tx) => {
       // Authoritative guard: re-read inside the tx so concurrent finalizers cannot
       // both pass the outer check and double-increment totalXp (SQLite/libSQL
@@ -194,9 +242,73 @@ export class DayEvaluatorService {
           currentStreak: result.challengeUpdate.currentStreak,
           longestStreak: result.challengeUpdate.longestStreak,
           totalXp: { increment: result.challengeUpdate.totalXpIncrement },
+          streakFreezesAvailable: result.challengeUpdate.streakFreezesAvailable,
+          streakFreezesUsed: result.challengeUpdate.streakFreezesUsed,
+          lastStreakFreezeGrantedAt:
+            result.challengeUpdate.lastStreakFreezeGrantedAt,
           ...(result.challengeUpdate.completed ? { isActive: false } : {}),
         },
       });
+      finalized = true;
     });
+
+    if (finalized) {
+      await this.maybeSendStreakFreezeGrantMessage({
+        userId,
+        userName,
+        userPhone,
+        whatsappOptIn,
+        evaluationDay,
+        currentStreak: result.challengeUpdate.currentStreak,
+        streakFreezesAvailable:
+          result.challengeUpdate.streakFreezesAvailable ?? 0,
+        lastStreakFreezeGrantedAt:
+          result.challengeUpdate.lastStreakFreezeGrantedAt ?? null,
+        grantAwardedThisRun: result.flags.freezeGranted,
+      });
+    }
+  }
+
+  private async maybeSendStreakFreezeGrantMessage(input: {
+    userId: string;
+    userName: string;
+    userPhone: string | null;
+    whatsappOptIn: boolean;
+    evaluationDay: Date;
+    currentStreak: number;
+    streakFreezesAvailable: number;
+    lastStreakFreezeGrantedAt: Date | null;
+    grantAwardedThisRun?: boolean;
+  }): Promise<void> {
+    if (!this.streakFreezeMessage || !input.userPhone || !input.whatsappOptIn) {
+      return;
+    }
+
+    const grantedOnEvaluationDay =
+      input.grantAwardedThisRun ||
+      (input.lastStreakFreezeGrantedAt !== null &&
+        input.lastStreakFreezeGrantedAt.getTime() ===
+          input.evaluationDay.getTime());
+
+    if (!grantedOnEvaluationDay) {
+      return;
+    }
+
+    try {
+      await this.streakFreezeMessage.trySendGrantMessage({
+        prisma: this.prisma,
+        userId: input.userId,
+        userName: input.userName,
+        phone: input.userPhone,
+        evaluationDay: input.evaluationDay,
+        currentStreak: input.currentStreak,
+        streakFreezesAvailable: input.streakFreezesAvailable,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Streak freeze grant message failed for user ${input.userId}:`,
+        error,
+      );
+    }
   }
 }

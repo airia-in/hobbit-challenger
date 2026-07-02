@@ -287,6 +287,9 @@ function makeChallenge(
     totalXp: 0,
     currentStreak: 0,
     longestStreak: 0,
+    streakFreezesAvailable: 0,
+    streakFreezesUsed: 0,
+    lastStreakFreezeGrantedAt: null,
     ...overrides,
   };
 }
@@ -507,6 +510,60 @@ describe('stats.service', () => {
         brokeOnDate: null,
         daysSinceBreak: 0,
       });
+    });
+
+    it('exposes streak freeze inventory on dashboard stats', async () => {
+      const challengeId = 'challenge-freeze';
+      const prisma = createFakePrisma({
+        users: [makeUser()],
+        challenges: [
+          makeChallenge(challengeId, {
+            isActive: true,
+            streakFreezesAvailable: 1,
+            streakFreezesUsed: 2,
+          }),
+        ],
+        activities: [],
+        activityLogs: [],
+        dayScores: [],
+      });
+
+      const result = await getDashboardStats(prisma, USER_ID);
+
+      expect(result.streakFreezesAvailable).toBe(1);
+      expect(result.streakFreezesUsed).toBe(2);
+    });
+
+    it('suppresses streak break when latest day was freeze-absorbed', async () => {
+      const challengeId = 'challenge-freeze-absorbed';
+      const prisma = createFakePrisma({
+        users: [makeUser()],
+        challenges: [
+          makeChallenge(challengeId, {
+            isActive: true,
+            currentStreak: 5,
+            longestStreak: 5,
+            streakFreezesAvailable: 0,
+            streakFreezesUsed: 1,
+          }),
+        ],
+        activities: [],
+        activityLogs: [],
+        dayScores: [
+          makeDayScore(challengeId, '2026-06-10', {
+            finalized: true,
+            breakdown: { allScoredLogged: false, freezeConsumed: true },
+          }),
+          makeDayScore(challengeId, '2026-06-09', {
+            finalized: true,
+            breakdown: { allScoredLogged: true },
+          }),
+        ],
+      });
+
+      const result = await getDashboardStats(prisma, USER_ID);
+
+      expect(result.streakBreak.occurred).toBe(false);
     });
   });
 

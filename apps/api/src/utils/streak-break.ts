@@ -1,12 +1,6 @@
 import type { StreakBreak } from '@workspace-starter/types';
-import {
-  isInterimDayCompleted,
-  isInterimDayFailed,
-} from './day-completion';
-import {
-  addLocalDays,
-  formatLocalDateKey,
-} from './day-window';
+import { isInterimDayCompleted, isInterimDayFailed } from './day-completion';
+import { addLocalDays, formatLocalDateKey } from './day-window';
 
 export type FinalizedDayScore = {
   date: Date;

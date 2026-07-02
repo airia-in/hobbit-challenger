@@ -24,46 +24,44 @@ type CelebrationInput = {
   challengeStreak?: number;
 };
 
-const HABIT_CELEBRATIONS: Record<
-  (typeof BUILTIN_SEED_KEYS)[number],
-  string[]
-> = {
-  DIET: [
-    'Wholesome fuel for the road ahead.',
-    'Your pack is stocked with good choices.',
-    'Trail rations: excellent.',
-  ],
-  ACTIVITY: [
-    'Legs moving, spirit rising — fine marching.',
-    'The trail knows you walked it today.',
-    'Muscles earned their rest by the campfire.',
-  ],
-  WATER: [
-    'Hydration secured — a traveler’s best friend.',
-    'Your waterskin is full. Onward.',
-    'Clear streams crossed, thirst quenched.',
-  ],
-  READING: [
-    'A chapter by lamplight — wisdom gathered.',
-    'Pages turned, mind sharpened for the trail.',
-    'Stories stowed in your traveling pack.',
-  ],
-  PROGRESS_PHOTO: [
-    'Snapshot saved — the journey has proof.',
-    'Another mile documented on the trail.',
-    'Progress captured before the next bend.',
-  ],
-  NO_REELS: [
-    'Eyes on the path, not the scroll.',
-    'Distractions left behind at the last crossing.',
-    'Focus kept — the trail rewards attention.',
-  ],
-  NO_SOCIAL: [
-    'Quiet trail, clear head.',
-    'No detours into the noise today.',
-    'Social trails skipped — yours is the real one.',
-  ],
-};
+const HABIT_CELEBRATIONS: Record<(typeof BUILTIN_SEED_KEYS)[number], string[]> =
+  {
+    DIET: [
+      'Wholesome fuel for the road ahead.',
+      'Your pack is stocked with good choices.',
+      'Trail rations: excellent.',
+    ],
+    ACTIVITY: [
+      'Legs moving, spirit rising — fine marching.',
+      'The trail knows you walked it today.',
+      'Muscles earned their rest by the campfire.',
+    ],
+    WATER: [
+      'Hydration secured — a traveler’s best friend.',
+      'Your waterskin is full. Onward.',
+      'Clear streams crossed, thirst quenched.',
+    ],
+    READING: [
+      'A chapter by lamplight — wisdom gathered.',
+      'Pages turned, mind sharpened for the trail.',
+      'Stories stowed in your traveling pack.',
+    ],
+    PROGRESS_PHOTO: [
+      'Snapshot saved — the journey has proof.',
+      'Another mile documented on the trail.',
+      'Progress captured before the next bend.',
+    ],
+    NO_REELS: [
+      'Eyes on the path, not the scroll.',
+      'Distractions left behind at the last crossing.',
+      'Focus kept — the trail rewards attention.',
+    ],
+    NO_SOCIAL: [
+      'Quiet trail, clear head.',
+      'No detours into the noise today.',
+      'Social trails skipped — yours is the real one.',
+    ],
+  };
 
 const GENERIC_CELEBRATIONS = [
   'Another habit checked off the trail map.',
@@ -73,9 +71,11 @@ const GENERIC_CELEBRATIONS = [
 ];
 
 const STREAK_SUFFIXES = [
-  (n: number) => ` — ${n} ${n === 1 ? 'day' : 'days'} on the trail and counting.`,
+  (n: number) =>
+    ` — ${n} ${n === 1 ? 'day' : 'days'} on the trail and counting.`,
   (n: number) => ` ${n} ${n === 1 ? 'day' : 'days'} strong on this path.`,
-  (n: number) => ` The trail remembers this ${n}-${n === 1 ? 'day' : 'day'} stretch.`,
+  (n: number) =>
+    ` The trail remembers this ${n}-${n === 1 ? 'day' : 'day'} stretch.`,
 ];
 
 function pickVariant<T>(items: readonly T[], seed: string): T {
@@ -101,9 +101,10 @@ export function getTaskCelebrationLine({
   const dayKey = new Date().toISOString().slice(0, 10);
   const variantSeed = `${seedKey ?? title}:${dayKey}`;
 
-  const base = seedKey && isBuiltinSeedKey(seedKey)
-    ? pickVariant(HABIT_CELEBRATIONS[seedKey], variantSeed)
-    : pickVariant(GENERIC_CELEBRATIONS, variantSeed);
+  const base =
+    seedKey && isBuiltinSeedKey(seedKey)
+      ? pickVariant(HABIT_CELEBRATIONS[seedKey], variantSeed)
+      : pickVariant(GENERIC_CELEBRATIONS, variantSeed);
 
   const streak = currentStreak ?? challengeStreak;
   if (streak != null && streak > 0) {

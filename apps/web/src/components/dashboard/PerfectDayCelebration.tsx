@@ -59,7 +59,8 @@ export function PerfectDayCelebration({
         const duration = 1.8 + (index % 5) * 0.15;
         const color = COLORS[index % COLORS.length];
         const size = 6 + (index % 4) * 2;
-        const drift = index % 2 === 0 ? 'confetti-drift-left' : 'confetti-drift-right';
+        const drift =
+          index % 2 === 0 ? 'confetti-drift-left' : 'confetti-drift-right';
 
         return (
           <span

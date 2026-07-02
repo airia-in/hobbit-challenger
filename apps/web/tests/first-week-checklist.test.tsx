@@ -47,17 +47,13 @@ describe('FirstWeekChecklist', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(getOnboardingState().dismissed).toBe(true);
-    expect(screen.queryByTestId('first-week-checklist')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('first-week-checklist'),
+    ).not.toBeInTheDocument();
   });
 
   it('marks reminder and habit steps from props', () => {
-    render(
-      <FirstWeekChecklist
-        currentDay={5}
-        hasReminder
-        hasCompletedHabit
-      />,
-    );
+    render(<FirstWeekChecklist currentDay={5} hasReminder hasCompletedHabit />);
 
     const state = getOnboardingState();
     expect(state.completedSteps).toContain('reminder');
@@ -68,13 +64,7 @@ describe('FirstWeekChecklist', () => {
   });
 
   it('marks invite step when invite link is used', async () => {
-    render(
-      <FirstWeekChecklist
-        currentDay={4}
-        hasReminder
-        hasCompletedHabit
-      />,
-    );
+    render(<FirstWeekChecklist currentDay={4} hasReminder hasCompletedHabit />);
 
     markInviteStepClicked();
     dismissOnboardingChecklist();
@@ -88,11 +78,7 @@ describe('FirstWeekChecklist', () => {
     );
 
     const { container } = render(
-      <FirstWeekChecklist
-        currentDay={4}
-        hasReminder
-        hasCompletedHabit
-      />,
+      <FirstWeekChecklist currentDay={4} hasReminder hasCompletedHabit />,
     );
     expect(container).toBeEmptyDOMElement();
   });

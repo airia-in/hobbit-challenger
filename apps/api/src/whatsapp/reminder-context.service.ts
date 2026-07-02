@@ -101,9 +101,7 @@ export function collectUnloggedHabitNames(
   return names;
 }
 
-export function resolveJourneyMilestone(
-  dayNumber: number,
-): 7 | 21 | 30 | null {
+export function resolveJourneyMilestone(dayNumber: number): 7 | 21 | 30 | null {
   if (dayNumber === 7 || dayNumber === 21 || dayNumber === 30) {
     return dayNumber;
   }
@@ -180,9 +178,7 @@ export function buildReminderContextFromToday(
   const { topActivityStreak, topActivityName } = pickTopActivityStreak(
     today.scoredActivities,
   );
-  const unloggedHabitNames = collectUnloggedHabitNames(
-    today.scoredActivities,
-  );
+  const unloggedHabitNames = collectUnloggedHabitNames(today.scoredActivities);
   const journeyMilestone = resolveJourneyMilestone(today.currentDay);
   const streakAtRisk =
     stats.currentStreak >= STREAK_AT_RISK_MIN && tasksRemaining > 0;

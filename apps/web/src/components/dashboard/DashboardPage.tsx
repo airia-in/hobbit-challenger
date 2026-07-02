@@ -451,9 +451,7 @@ export function DashboardContent() {
               {BRAND_SUBTITLE}
             </p>
           </div>
-          {stats && (
-            <StreakBadge streak={stats.currentStreak} />
-          )}
+          {stats && <StreakBadge streak={stats.currentStreak} />}
         </header>
 
         {showRecoveryBanner && stats && (

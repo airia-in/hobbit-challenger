@@ -166,7 +166,9 @@ describe('StreakRecoveryBanner', () => {
 
     const banner = screen.getByTestId('streak-recovery-banner');
     expect(banner).toHaveAttribute('data-variant', 'fresh-break');
-    expect(screen.getByText(/rainy day on the trail yesterday/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/rainy day on the trail yesterday/i),
+    ).toBeInTheDocument();
   });
 
   it('renders the never-miss-twice variant when daysSinceBreak is 2 or more', () => {
@@ -182,7 +184,9 @@ describe('StreakRecoveryBanner', () => {
 
     const banner = screen.getByTestId('streak-recovery-banner');
     expect(banner).toHaveAttribute('data-variant', 'never-miss-twice');
-    expect(screen.getByText(/one rest day on the trail is fine/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/one rest day on the trail is fine/i),
+    ).toBeInTheDocument();
   });
 
   it('scroll CTA triggers the scroll handler', async () => {
@@ -254,7 +258,9 @@ describe('DashboardContent streak recovery', () => {
 
     render(<DashboardContent />);
 
-    expect(screen.queryByTestId('streak-recovery-banner')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('streak-recovery-banner'),
+    ).not.toBeInTheDocument();
   });
 
   it('hides the banner after dismissal for the same break date', async () => {
@@ -267,7 +273,9 @@ describe('DashboardContent streak recovery', () => {
     expect(screen.getByTestId('streak-recovery-banner')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Onward' }));
-    expect(screen.queryByTestId('streak-recovery-banner')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('streak-recovery-banner'),
+    ).not.toBeInTheDocument();
     expect(isStreakRecoveryDismissed('2026-07-02')).toBe(true);
   });
 

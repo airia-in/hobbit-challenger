@@ -22,8 +22,9 @@ function readRaw(): OnboardingChecklistState {
     return {
       dismissed: parsed.dismissed ?? false,
       completedSteps: Array.isArray(parsed.completedSteps)
-        ? parsed.completedSteps.filter((step): step is OnboardingStep =>
-            step === 'reminder' || step === 'habit' || step === 'invite',
+        ? parsed.completedSteps.filter(
+            (step): step is OnboardingStep =>
+              step === 'reminder' || step === 'habit' || step === 'invite',
           )
         : [],
       inviteClicked: parsed.inviteClicked ?? false,

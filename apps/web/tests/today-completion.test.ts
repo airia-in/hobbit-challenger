@@ -110,22 +110,25 @@ describe('today-completion', () => {
   });
 
   it('counts personal activities for anyActivityCompleted', () => {
-    const today = makeToday([], [
-      makeActivity({
-        id: 'p1',
-        isPersonal: true,
-        log: {
-          id: 'l1',
-          state: 'DONE',
-          value: null,
-          tier: null,
-          subPoints: null,
-          xpAwarded: 0,
-          proofUrl: null,
-          aiVerdict: null,
-        },
-      }),
-    ]);
+    const today = makeToday(
+      [],
+      [
+        makeActivity({
+          id: 'p1',
+          isPersonal: true,
+          log: {
+            id: 'l1',
+            state: 'DONE',
+            value: null,
+            tier: null,
+            subPoints: null,
+            xpAwarded: 0,
+            proofUrl: null,
+            aiVerdict: null,
+          },
+        }),
+      ],
+    );
     expect(anyActivityCompleted(today)).toBe(true);
   });
 });

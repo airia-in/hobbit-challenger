@@ -15,7 +15,11 @@ function toLogView(log: TodayActivity['log']): ActivityLogView | null {
 }
 
 export function deriveActivityStatus(activity: TodayActivity) {
-  return deriveTaskStatus(activity.kind, toLogView(activity.log), activity.canEdit);
+  return deriveTaskStatus(
+    activity.kind,
+    toLogView(activity.log),
+    activity.canEdit,
+  );
 }
 
 export function isActivityCompleted(activity: TodayActivity): boolean {

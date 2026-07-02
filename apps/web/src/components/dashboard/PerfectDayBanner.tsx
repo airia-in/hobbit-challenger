@@ -5,7 +5,10 @@ type PerfectDayBannerProps = {
   onDismiss: () => void;
 };
 
-export function PerfectDayBanner({ message, onDismiss }: PerfectDayBannerProps) {
+export function PerfectDayBanner({
+  message,
+  onDismiss,
+}: PerfectDayBannerProps) {
   return (
     <div
       className="flex items-start justify-between gap-3 rounded-lg border border-[var(--success)]/30 bg-[var(--success)]/10 px-4 py-3"

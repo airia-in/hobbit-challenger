@@ -46,7 +46,9 @@ export function buildReminderMessaging(
   };
 }
 
-export function buildReminderCopyLines(context: ReminderContext): ReminderCopyLines {
+export function buildReminderCopyLines(
+  context: ReminderContext,
+): ReminderCopyLines {
   const unloggedHabitsLine =
     context.unloggedHabitNames.length > 0
       ? `Still in the pack: ${context.unloggedHabitNames.join(', ')}.`
@@ -77,7 +79,7 @@ export function buildReminderCopyLines(context: ReminderContext): ReminderCopyLi
       : context.streakAtRisk
         ? 'Clouds on the horizon — a few logs will clear the sky.'
         : context.missedYesterday
-          ? 'Fresh morning air after yesterday\'s rain.'
+          ? "Fresh morning air after yesterday's rain."
           : 'Good trail weather for small wins today.';
 
   return {
@@ -235,8 +237,8 @@ const MORNING_CLEAR: readonly string[] = [
 ];
 
 const MORNING_CLEAR_AFTER_MISS: readonly string[] = [
-  'Good morning, {{name}}! {{brandName}} here — fresh trail on day {{dayNumber}} after yesterday\'s mud.',
-  'Rise and ramble, {{name}}! {{brandName}} here — day {{dayNumber}} starts clean after yesterday\'s detour.',
+  "Good morning, {{name}}! {{brandName}} here — fresh trail on day {{dayNumber}} after yesterday's mud.",
+  "Rise and ramble, {{name}}! {{brandName}} here — day {{dayNumber}} starts clean after yesterday's detour.",
 ];
 
 const MORNING_MILESTONE: readonly string[] = [
@@ -247,13 +249,13 @@ const MORNING_MILESTONE: readonly string[] = [
 
 const MORNING_YESTERDAY_MISS: readonly string[] = [
   'Good morning, {{name}}! {{brandName}} here — rain yesterday, sunshine on day {{dayNumber}}.',
-  'Morning, {{name}}! {{brandName}} here — muddy patch behind us, {{tasksRemaining}} task(s) on today\'s path.',
+  "Morning, {{name}}! {{brandName}} here — muddy patch behind us, {{tasksRemaining}} task(s) on today's path.",
 ];
 
 const MORNING_STREAK_AT_RISK: readonly string[] = [
   'Good morning, {{name}}! {{brandName}} here — your {{currentStreak}}-day streak wants {{tasksRemaining}} log(s) today.',
   'Morning, {{name}}! {{brandName}} here — keep the {{currentStreak}}-day fire going, {{tasksRemaining}} log(s) to go.',
-  'Hey {{name}}, {{brandName}} here — day {{dayNumber}} — don\'t let a {{currentStreak}}-day streak get cold. {{tasksRemaining}} still open.',
+  "Hey {{name}}, {{brandName}} here — day {{dayNumber}} — don't let a {{currentStreak}}-day streak get cold. {{tasksRemaining}} still open.",
 ];
 
 const MORNING_TASKS: readonly string[] = [
@@ -269,7 +271,7 @@ const EVENING_MILESTONE: readonly string[] = [
 const EVENING_STREAK_AT_RISK: readonly string[] = [
   'Hi {{name}}, {{brandName}} here — {{currentStreak}}-day streak at risk. {{tasksRemaining}} task(s) and {{xpAtRisk}} XP before midnight.',
   'Evening, {{name}}! {{brandName}} here — {{tasksRemaining}} open, {{xpAtRisk}} XP at stake for your {{currentStreak}}-day run.',
-  'Hey {{name}}, {{brandName}} here — don\'t let day {{dayNumber}} snap a {{currentStreak}}-day streak. {{tasksRemaining}} still unlogged, {{xpAtRisk}} XP at risk.',
+  "Hey {{name}}, {{brandName}} here — don't let day {{dayNumber}} snap a {{currentStreak}}-day streak. {{tasksRemaining}} still unlogged, {{xpAtRisk}} XP at risk.",
 ];
 
 const EVENING_XP_ONLY: readonly string[] = [
@@ -281,7 +283,7 @@ const EVENING_XP_ONLY: readonly string[] = [
 const EVENING_DEFAULT: readonly string[] = [
   'Hi {{name}}, {{brandName}} here — {{tasksRemaining}} task(s) still open and {{xpAtRisk}} XP at risk before midnight.',
   'Evening, {{name}}! {{brandName}} here — {{tasksRemaining}} habit(s) unlogged; {{xpAtRisk}} XP fades at midnight.',
-  'Hey {{name}}, {{brandName}} here — campfire\'s cooling with {{tasksRemaining}} task(s) and {{xpAtRisk}} XP tonight.',
+  "Hey {{name}}, {{brandName}} here — campfire's cooling with {{tasksRemaining}} task(s) and {{xpAtRisk}} XP tonight.",
 ];
 
 function fillFallbackTemplate(
@@ -301,10 +303,7 @@ function fillFallbackTemplate(
   return `${filled}${rankSuffix}`;
 }
 
-function selectMorningTemplate(
-  context: ReminderContext,
-  seed: number,
-): string {
+function selectMorningTemplate(context: ReminderContext, seed: number): string {
   if (context.tasksRemaining <= 0) {
     if (context.missedYesterday) {
       return pickVariant(MORNING_CLEAR_AFTER_MISS, seed);
@@ -323,10 +322,7 @@ function selectMorningTemplate(
   return pickVariant(MORNING_TASKS, seed);
 }
 
-function selectEveningTemplate(
-  context: ReminderContext,
-  seed: number,
-): string {
+function selectEveningTemplate(context: ReminderContext, seed: number): string {
   if (context.journeyMilestone != null) {
     return pickVariant(EVENING_MILESTONE, seed);
   }

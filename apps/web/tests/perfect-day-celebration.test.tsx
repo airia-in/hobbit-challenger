@@ -33,7 +33,9 @@ describe('PerfectDayCelebration', () => {
     await waitFor(() => {
       expect(onDone).toHaveBeenCalledOnce();
     });
-    expect(screen.queryByTestId('perfect-day-confetti')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('perfect-day-confetti'),
+    ).not.toBeInTheDocument();
   });
 
   it('renders confetti particles when motion is allowed', () => {

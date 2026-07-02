@@ -114,9 +114,7 @@ export function FirstWeekChecklist({
             <>
               <span
                 className={
-                  done
-                    ? 'text-[var(--success)]'
-                    : 'text-[var(--text-muted)]'
+                  done ? 'text-[var(--success)]' : 'text-[var(--text-muted)]'
                 }
                 aria-hidden
               >

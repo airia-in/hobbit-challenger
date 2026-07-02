@@ -3,24 +3,18 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { activeChallengeRelationArgs } from '../utils/challenge-query';
 import { deriveChallengeProgress } from '../utils/challenge-range';
-import {
-  getUserLocalDate,
-  getLocalMinutesSinceTarget,
-  isLocalTimeMatch,
-  isWithinLocalCatchUpWindow,
-} from '../utils/day-window';
+import { getUserLocalDate } from '../utils/day-window';
 import {
   isWinbackEligible,
+  isWinbackMorningWindowActionable,
   localCalendarDaysBetween,
   OTHER_DAILY_REMINDER_KINDS,
+  shouldDeferRemindersForWinback,
   WINBACK_KIND,
+  type WinbackDeferInput,
 } from '../utils/winback-dormancy';
 import { EvolutionApiClient } from '../whatsapp/evolution.client';
 import { WinbackMessageService } from '../whatsapp/winback-message.service';
-
-const DEFAULT_MORNING_TIME = '08:00';
-const FIRST_SEND_CATCH_UP_MINUTES = 15;
-const FAILED_RETRY_WINDOW_MINUTES = 15;
 
 type WinbackCandidate = {
   id: string;
@@ -38,6 +32,22 @@ type WinbackCandidate = {
     isActive: boolean;
     stoppedAt: Date | null;
   };
+};
+
+export type WinbackDeferUserInput = {
+  id: string;
+  reminderTime: string | null;
+  challengeTimezone: string;
+};
+
+export type WinbackDeferBatchContext = {
+  challengeByUser: Map<
+    string,
+    WinbackCandidate['challenge'] & { userId: string }
+  >;
+  lastActivityByChallenge: Map<string, Date | null>;
+  lastWinbackByUser: Map<string, Date>;
+  winbackLogTodayByUser: Map<string, { status: string } | null>;
 };
 
 @Injectable()
@@ -146,54 +156,156 @@ export class WinbackService {
   }
 
   /**
-   * Used by ReminderService to defer all reminder kinds when win-back owns the day.
+   * Batches challenge, activity, and win-back log lookups for ReminderService.
    */
-  async shouldDeferRemindersForUser(input: {
-    userId: string;
-    challengeTimezone: string;
-    reminderTime: string | null;
-    challenge: WinbackCandidate['challenge'];
-    lastActivityDate: Date | null;
-    lastWinbackSentAt: Date | null;
-  }): Promise<boolean> {
-    const localDate = getUserLocalDate(input.challengeTimezone);
-    const eligible = isWinbackEligible({
+  async loadDeferBatchContext(
+    users: WinbackDeferUserInput[],
+  ): Promise<WinbackDeferBatchContext> {
+    if (users.length === 0) {
+      return {
+        challengeByUser: new Map(),
+        lastActivityByChallenge: new Map(),
+        lastWinbackByUser: new Map(),
+        winbackLogTodayByUser: new Map(),
+      };
+    }
+
+    const userIds = users.map((user) => user.id);
+    const localDateByUser = new Map(
+      users.map((user) => [user.id, getUserLocalDate(user.challengeTimezone)]),
+    );
+    const uniqueDates = [
+      ...new Set([...localDateByUser.values()].map((date) => date.getTime())),
+    ].map((time) => new Date(time));
+
+    const challenges = await this.prisma.challenge.findMany({
+      where: {
+        userId: { in: userIds },
+        isActive: true,
+        stoppedAt: null,
+      },
+      orderBy: { startDate: 'desc' },
+    });
+
+    const challengeByUser = new Map<
+      string,
+      WinbackCandidate['challenge'] & { userId: string }
+    >();
+    for (const challenge of challenges) {
+      if (!challengeByUser.has(challenge.userId)) {
+        challengeByUser.set(challenge.userId, challenge);
+      }
+    }
+
+    const challengeIds = [...challengeByUser.values()].map(
+      (challenge) => challenge.id,
+    );
+
+    const [lastLogs, winbackSentLogs, todayWinbackLogs] = await Promise.all([
+      challengeIds.length > 0
+        ? this.prisma.activityLog.groupBy({
+            by: ['challengeId'],
+            where: { challengeId: { in: challengeIds } },
+            _max: { date: true },
+          })
+        : Promise.resolve([]),
+      this.prisma.reminderLog.findMany({
+        where: {
+          userId: { in: userIds },
+          kind: WINBACK_KIND,
+          status: 'SENT',
+        },
+        orderBy: { sentAt: 'desc' },
+        select: { userId: true, sentAt: true },
+      }),
+      uniqueDates.length > 0
+        ? this.prisma.reminderLog.findMany({
+            where: {
+              userId: { in: userIds },
+              kind: WINBACK_KIND,
+              date: { in: uniqueDates },
+            },
+            select: { userId: true, date: true, status: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const lastActivityByChallenge = new Map(
+      lastLogs.map((row) => [row.challengeId, row._max.date]),
+    );
+
+    const lastWinbackByUser = new Map<string, Date>();
+    for (const log of winbackSentLogs) {
+      if (!lastWinbackByUser.has(log.userId)) {
+        lastWinbackByUser.set(log.userId, log.sentAt);
+      }
+    }
+
+    const winbackLogTodayByUser = new Map<string, { status: string } | null>();
+    for (const user of users) {
+      const localDate = localDateByUser.get(user.id)!;
+      const log = todayWinbackLogs.find(
+        (row) =>
+          row.userId === user.id && row.date.getTime() === localDate.getTime(),
+      );
+      winbackLogTodayByUser.set(user.id, log ?? null);
+    }
+
+    return {
+      challengeByUser,
+      lastActivityByChallenge,
+      lastWinbackByUser,
+      winbackLogTodayByUser,
+    };
+  }
+
+  shouldDeferRemindersForUser(
+    input: {
+      userId: string;
+      challengeTimezone: string;
+      reminderTime: string | null;
+      now?: Date;
+    } & Partial<WinbackDeferInput>,
+    batch?: WinbackDeferBatchContext,
+  ): boolean {
+    if (batch) {
+      const challenge = batch.challengeByUser.get(input.userId);
+      if (!challenge) {
+        return false;
+      }
+
+      return shouldDeferRemindersForWinback({
+        lastActivityDate:
+          batch.lastActivityByChallenge.get(challenge.id) ?? null,
+        challengeStartDate: challenge.startDate,
+        challengeTimezone: input.challengeTimezone,
+        challenge,
+        lastWinbackSentAt: batch.lastWinbackByUser.get(input.userId) ?? null,
+        winbackLogToday: batch.winbackLogTodayByUser.get(input.userId) ?? null,
+        reminderTime: input.reminderTime,
+        now: input.now,
+      });
+    }
+
+    if (
+      !input.challenge ||
+      input.lastActivityDate === undefined ||
+      input.lastWinbackSentAt === undefined ||
+      input.winbackLogToday === undefined
+    ) {
+      return false;
+    }
+
+    return shouldDeferRemindersForWinback({
       lastActivityDate: input.lastActivityDate,
-      challengeStartDate: input.challenge.startDate,
+      challengeStartDate: input.challengeStartDate!,
       challengeTimezone: input.challengeTimezone,
       challenge: input.challenge,
       lastWinbackSentAt: input.lastWinbackSentAt,
+      winbackLogToday: input.winbackLogToday,
+      reminderTime: input.reminderTime,
+      now: input.now,
     });
-
-    const winbackLog = await this.prisma.reminderLog.findUnique({
-      where: {
-        userId_date_kind: {
-          userId: input.userId,
-          date: localDate,
-          kind: WINBACK_KIND,
-        },
-      },
-    });
-
-    if (winbackLog?.status === 'SENT') {
-      return true;
-    }
-
-    if (eligible) {
-      return true;
-    }
-
-    if (winbackLog?.status === 'FAILED') {
-      const morningTime = input.reminderTime ?? DEFAULT_MORNING_TIME;
-      return isWithinLocalRetryWindow(
-        input.challengeTimezone,
-        morningTime,
-        new Date(),
-        FAILED_RETRY_WINDOW_MINUTES,
-      );
-    }
-
-    return false;
   }
 
   private async processCandidate(
@@ -202,16 +314,24 @@ export class WinbackService {
     lastWinbackSentAt: Date | null,
   ): Promise<void> {
     const { challengeTimezone } = candidate;
-    const morningTime = candidate.reminderTime ?? DEFAULT_MORNING_TIME;
     const localDate = getUserLocalDate(challengeTimezone);
 
+    const winbackLog = await this.prisma.reminderLog.findUnique({
+      where: {
+        userId_date_kind: {
+          userId: candidate.id,
+          date: localDate,
+          kind: WINBACK_KIND,
+        },
+      },
+    });
+
     if (
-      !(await this.isMorningWindowDue(
-        candidate.id,
-        localDate,
-        challengeTimezone,
-        morningTime,
-      ))
+      !isWinbackMorningWindowActionable({
+        timezone: challengeTimezone,
+        reminderTime: candidate.reminderTime,
+        winbackLogToday: winbackLog,
+      })
     ) {
       return;
     }
@@ -256,67 +376,19 @@ export class WinbackService {
     });
   }
 
-  private async isMorningWindowDue(
-    userId: string,
-    localDate: Date,
-    timezone: string,
-    morningTime: string,
-  ): Promise<boolean> {
-    if (isLocalTimeMatch(timezone, morningTime)) {
-      return true;
-    }
-
-    const existing = await this.prisma.reminderLog.findUnique({
-      where: {
-        userId_date_kind: {
-          userId,
-          date: localDate,
-          kind: WINBACK_KIND,
-        },
-      },
-    });
-
-    if (existing?.status === 'FAILED') {
-      return isWithinLocalRetryWindow(
-        timezone,
-        morningTime,
-        new Date(),
-        FAILED_RETRY_WINDOW_MINUTES,
-      );
-    }
-
-    return isWithinLocalCatchUpWindow(
-      timezone,
-      morningTime,
-      new Date(),
-      FIRST_SEND_CATCH_UP_MINUTES,
-    );
-  }
-
   private async hasOtherReminderSentToday(
     userId: string,
     localDate: Date,
   ): Promise<boolean> {
-    for (const kind of OTHER_DAILY_REMINDER_KINDS) {
-      const existing = await this.prisma.reminderLog.findUnique({
-        where: {
-          userId_date_kind: { userId, date: localDate, kind },
-        },
-      });
-      if (existing?.status === 'SENT') {
-        return true;
-      }
-    }
-    return false;
+    const sent = await this.prisma.reminderLog.findFirst({
+      where: {
+        userId,
+        date: localDate,
+        kind: { in: [...OTHER_DAILY_REMINDER_KINDS] },
+        status: 'SENT',
+      },
+      select: { id: true },
+    });
+    return sent !== null;
   }
-}
-
-function isWithinLocalRetryWindow(
-  timezone: string,
-  targetHHMM: string,
-  now: Date,
-  windowMinutes: number,
-): boolean {
-  const elapsed = getLocalMinutesSinceTarget(timezone, targetHHMM, now);
-  return elapsed !== null && elapsed > 0 && elapsed <= windowMinutes;
 }

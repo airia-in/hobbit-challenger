@@ -141,6 +141,36 @@ function createWinbackFakePrisma(seed: {
         );
         return reminderLogs.get(key) ?? null;
       },
+      findFirst: async ({
+        where,
+      }: {
+        where: {
+          userId?: string;
+          date?: Date;
+          kind?: string | { in: string[] };
+          status?: string;
+        };
+      }) => {
+        for (const log of reminderLogs.values()) {
+          if (where.userId && log.userId !== where.userId) continue;
+          if (where.date && log.date.getTime() !== where.date.getTime()) {
+            continue;
+          }
+          if (typeof where.kind === 'string' && log.kind !== where.kind) {
+            continue;
+          }
+          if (
+            where.kind &&
+            typeof where.kind === 'object' &&
+            !where.kind.in.includes(log.kind)
+          ) {
+            continue;
+          }
+          if (where.status && log.status !== where.status) continue;
+          return log;
+        }
+        return null;
+      },
       upsert: async ({
         where,
         create,
@@ -372,7 +402,7 @@ describe('WinbackService', () => {
     expect(trySendWinback).not.toHaveBeenCalled();
   });
 
-  it('defers other reminders when win-back is eligible', async () => {
+  it('defers other reminders during actionable morning window when eligible', async () => {
     const lastLogDate = getUserLocalDate(
       TZ,
       new Date('2026-06-12T00:00:00.000Z'),
@@ -385,16 +415,72 @@ describe('WinbackService', () => {
       { trySendWinback: vi.fn() } as never,
     );
 
-    const shouldDefer = await service.shouldDeferRemindersForUser({
+    const shouldDefer = service.shouldDeferRemindersForUser({
       userId: 'u1',
       challengeTimezone: TZ,
       reminderTime: '08:00',
       challenge,
       lastActivityDate: lastLogDate,
       lastWinbackSentAt: null,
+      winbackLogToday: null,
     });
 
     expect(shouldDefer).toBe(true);
+  });
+
+  it('does not defer after morning catch-up closes without SENT', async () => {
+    vi.setSystemTime(new Date('2026-06-15T09:00:00.000Z'));
+    const lastLogDate = getUserLocalDate(
+      TZ,
+      new Date('2026-06-12T00:00:00.000Z'),
+    );
+    const { prisma } = createWinbackFakePrisma({ users: [] });
+
+    const service = new WinbackService(
+      prisma as never,
+      { isConfigured: () => true, sendText: vi.fn() } as never,
+      { trySendWinback: vi.fn() } as never,
+    );
+
+    const shouldDefer = service.shouldDeferRemindersForUser({
+      userId: 'u1',
+      challengeTimezone: TZ,
+      reminderTime: '08:00',
+      challenge,
+      lastActivityDate: lastLogDate,
+      lastWinbackSentAt: null,
+      winbackLogToday: null,
+    });
+
+    expect(shouldDefer).toBe(false);
+  });
+
+  it('does not defer after FAILED win-back once retry window closes', async () => {
+    vi.setSystemTime(new Date('2026-06-15T08:16:00.000Z'));
+    const lastLogDate = getUserLocalDate(
+      TZ,
+      new Date('2026-06-12T00:00:00.000Z'),
+    );
+    const { prisma } = createWinbackFakePrisma({ users: [] });
+
+    const service = new WinbackService(
+      prisma as never,
+      { isConfigured: () => true, sendText: vi.fn() } as never,
+      { trySendWinback: vi.fn() } as never,
+    );
+
+    const shouldDefer = service.shouldDeferRemindersForUser({
+      userId: 'u1',
+      challengeTimezone: TZ,
+      reminderTime: '08:00',
+      challenge,
+      lastActivityDate: lastLogDate,
+      lastWinbackSentAt: null,
+      winbackLogToday: { status: 'FAILED' },
+      now: new Date('2026-06-15T08:16:00.000Z'),
+    });
+
+    expect(shouldDefer).toBe(false);
   });
 
   it('does not defer when recovery window (2 dormant days)', async () => {
@@ -410,13 +496,14 @@ describe('WinbackService', () => {
       { trySendWinback: vi.fn() } as never,
     );
 
-    const shouldDefer = await service.shouldDeferRemindersForUser({
+    const shouldDefer = service.shouldDeferRemindersForUser({
       userId: 'u1',
       challengeTimezone: TZ,
       reminderTime: '08:00',
       challenge,
       lastActivityDate: lastLogDate,
       lastWinbackSentAt: null,
+      winbackLogToday: null,
     });
 
     expect(shouldDefer).toBe(false);

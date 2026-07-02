@@ -41,6 +41,15 @@ function pickVariant<T>(variants: readonly T[], seed: number): T {
   return variants[seed % variants.length]!;
 }
 
+export function ensureWinbackDashboardUrl(
+  text: string,
+  messaging: ReminderMessaging,
+): string {
+  if (text.includes(messaging.dashboardUrl)) {
+    return text;
+  }
+  return `${text} ${messaging.dashboardUrl}`;
+}
 export function buildWinbackFallback(
   context: WinbackContext,
   messaging: ReminderMessaging = buildReminderMessaging(),
@@ -152,7 +161,7 @@ export class WinbackMessageService {
       if (!content) {
         throw new Error('Empty OpenAI response');
       }
-      return content;
+      return ensureWinbackDashboardUrl(content, this.messaging);
     } catch (error) {
       this.logger.error('Winback compose failed:', error);
       return buildWinbackFallback(context, this.messaging);

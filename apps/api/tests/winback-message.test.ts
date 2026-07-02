@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   WinbackMessageService,
   buildWinbackFallback,
+  ensureWinbackDashboardUrl,
   interpolateWinbackPrompt,
 } from '../src/whatsapp/winback-message.service';
 import {
@@ -139,6 +140,12 @@ describe('WinbackMessageService', () => {
     expect(rendered).toContain('12');
     expect(rendered).toContain('4');
     expect(rendered).toContain(messaging.dashboardUrl);
+  });
+
+  it('appends dashboard URL when LLM output omits it', () => {
+    const text = ensureWinbackDashboardUrl('Welcome back, Sam!', messaging);
+    expect(text).toContain(messaging.dashboardUrl);
+    expect(text).toContain('Welcome back, Sam!');
   });
 
   it('returns fallback when API key is missing', async () => {

@@ -3,9 +3,11 @@ import { getUserLocalDate } from '../src/utils/day-window';
 import {
   isDormantForWinback,
   isWinbackEligible,
+  isWinbackMorningWindowActionable,
   isWinbackSuppressed,
   localCalendarDaysBetween,
   shouldBlockOtherRemindersForWinback,
+  shouldDeferRemindersForWinback,
   shouldRetryWinback,
   WINBACK_DORMANT_DAYS_MIN,
   WINBACK_SUPPRESSION_DAYS,
@@ -127,7 +129,7 @@ describe('winback suppression window', () => {
     ).toBe(false);
   });
 
-  it('resets suppression when user logs after win-back', () => {
+  it('resets suppression when user logs after win-back on a later day', () => {
     const lastWinback = new Date('2026-06-12T12:00:00.000Z');
     const activityAfterWinback = new Date('2026-06-13T08:00:00.000Z');
     const now = new Date('2026-06-14T12:00:00.000Z');
@@ -135,6 +137,20 @@ describe('winback suppression window', () => {
       isWinbackSuppressed({
         lastWinbackSentAt: lastWinback,
         lastActivityDate: activityAfterWinback,
+        timezone: TZ,
+        now,
+      }),
+    ).toBe(false);
+  });
+
+  it('resets suppression when user logs on the same local day as win-back', () => {
+    const lastWinback = new Date('2026-06-12T12:00:00.000Z');
+    const sameDayActivity = localDay('2026-06-12T08:00:00.000Z');
+    const now = new Date('2026-06-14T12:00:00.000Z');
+    expect(
+      isWinbackSuppressed({
+        lastWinbackSentAt: lastWinback,
+        lastActivityDate: sameDayActivity,
         timezone: TZ,
         now,
       }),
@@ -187,20 +203,73 @@ describe('winback exclusions and precedence helpers', () => {
     ).toBe(false);
   });
 
-  it('blocks other reminders when win-back owns the day', () => {
+  it('blocks other reminders while win-back owns the actionable morning window', () => {
     expect(
       shouldBlockOtherRemindersForWinback({
         winbackEligible: true,
         winbackSentToday: false,
-        winbackPendingToday: false,
+        winbackMorningActionable: true,
       }),
     ).toBe(true);
 
     expect(
       shouldBlockOtherRemindersForWinback({
+        winbackEligible: true,
+        winbackSentToday: false,
+        winbackMorningActionable: false,
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldBlockOtherRemindersForWinback({
         winbackEligible: false,
         winbackSentToday: true,
-        winbackPendingToday: false,
+        winbackMorningActionable: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('releases defer after morning window closes without SENT', () => {
+    const lastLogDate = localDay('2026-06-12T08:00:00.000Z');
+    const afterCatchUp = new Date('2026-06-15T12:16:00.000Z');
+
+    expect(
+      shouldDeferRemindersForWinback({
+        lastActivityDate: lastLogDate,
+        challengeStartDate: activeChallenge.startDate,
+        challengeTimezone: TZ,
+        challenge: activeChallenge,
+        lastWinbackSentAt: null,
+        winbackLogToday: null,
+        reminderTime: '08:00',
+        now: afterCatchUp,
+      }),
+    ).toBe(false);
+  });
+
+  it('defers during actionable morning window when eligible', () => {
+    const lastLogDate = localDay('2026-06-12T08:00:00.000Z');
+    const inCatchUp = new Date('2026-06-15T12:10:00.000Z');
+
+    expect(
+      isWinbackMorningWindowActionable({
+        timezone: TZ,
+        reminderTime: '08:00',
+        winbackLogToday: null,
+        now: inCatchUp,
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldDeferRemindersForWinback({
+        lastActivityDate: lastLogDate,
+        challengeStartDate: activeChallenge.startDate,
+        challengeTimezone: TZ,
+        challenge: activeChallenge,
+        lastWinbackSentAt: null,
+        winbackLogToday: null,
+        reminderTime: '08:00',
+        now: inCatchUp,
       }),
     ).toBe(true);
   });

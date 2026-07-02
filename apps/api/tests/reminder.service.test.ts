@@ -115,9 +115,16 @@ function createReminderFakePrisma(seed: {
 
 function createWinbackServiceMock(shouldDefer = false): {
   shouldDeferRemindersForUser: ReturnType<typeof vi.fn>;
+  loadDeferBatchContext: ReturnType<typeof vi.fn>;
 } {
   return {
-    shouldDeferRemindersForUser: vi.fn().mockResolvedValue(shouldDefer),
+    shouldDeferRemindersForUser: vi.fn().mockReturnValue(shouldDefer),
+    loadDeferBatchContext: vi.fn().mockResolvedValue({
+      challengeByUser: new Map(),
+      lastActivityByChallenge: new Map(),
+      lastWinbackByUser: new Map(),
+      winbackLogTodayByUser: new Map(),
+    }),
   };
 }
 
@@ -126,7 +133,10 @@ function createReminderService(
   evolution: unknown,
   contextService: unknown,
   openAiReminder: unknown,
-  winbackService?: { shouldDeferRemindersForUser: ReturnType<typeof vi.fn> },
+  winbackService?: {
+    shouldDeferRemindersForUser: ReturnType<typeof vi.fn>;
+    loadDeferBatchContext: ReturnType<typeof vi.fn>;
+  },
 ): ReminderService {
   return new ReminderService(
     prisma as never,

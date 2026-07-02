@@ -145,6 +145,37 @@ describe('buildReminderCopyLines', () => {
     expect(lines.milestoneLine).toContain('21');
     expect(lines.streakAtRiskLine).toContain('8-day streak');
     expect(lines.unloggedHabitsLine).toContain('Diet');
+    expect(lines.streakFreezeLine).toBe('');
+  });
+
+  it('omits streakFreezeLine when no cloaks are available', () => {
+    const lines = buildReminderCopyLines({
+      ...baseContext,
+      streakFreezesAvailable: 0,
+      streakAtRisk: false,
+    });
+    expect(lines.streakFreezeLine).toBe('');
+  });
+
+  it('mentions rain cloak in streakFreezeLine when freezes are available', () => {
+    const lines = buildReminderCopyLines({
+      ...baseContext,
+      streakFreezesAvailable: 1,
+      streakAtRisk: false,
+    });
+    expect(lines.streakFreezeLine).toMatch(/rain cloak/i);
+    expect(lines.streakFreezeLine).toContain('1');
+  });
+
+  it('mentions cloak in evening at-risk copy when freezes are available', () => {
+    const lines = buildReminderCopyLines({
+      ...baseContext,
+      streakFreezesAvailable: 1,
+      streakAtRisk: true,
+      currentStreak: 8,
+    });
+    expect(lines.streakAtRiskLine).toMatch(/rain cloak/i);
+    expect(lines.streakFreezeLine).toBe('');
   });
 
   it('builds recovery line when yesterday was a streak break', () => {
@@ -232,6 +263,26 @@ describe('buildFallbackMessage', () => {
     );
     expect(message).toContain(String(baseContext.currentStreak));
     expect(message).toContain(messaging.dashboardUrl);
+  });
+
+  it('evening at-risk fallback mentions rain cloak when freezes available', () => {
+    const message = buildFallbackMessage(
+      'EVENING',
+      { ...baseContext, streakFreezesAvailable: 1 },
+      messaging,
+      0,
+    );
+    expect(message).toMatch(/rain cloak|cloak/i);
+  });
+
+  it('morning at-risk fallback does not mention cloak when freezes are zero', () => {
+    const message = buildFallbackMessage(
+      'MORNING',
+      { ...baseContext, streakFreezesAvailable: 0 },
+      messaging,
+      0,
+    );
+    expect(message).not.toMatch(/rain cloak|cloak/i);
   });
 
   it('selects recovery and streak-at-risk fallbacks deterministically', () => {

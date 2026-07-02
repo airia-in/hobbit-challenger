@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   getDatePartsInTimezone,
   getUserLocalDate,
+  addLocalDays,
   isLocalTimeMatch,
   isWithinLocalCatchUpWindow,
   parseLocalDateKey,
@@ -22,6 +23,10 @@ import {
   OpenAiReminderService,
   type ReminderKind,
 } from '../whatsapp/openai-reminder.service';
+import {
+  STREAK_FREEZE_CONSUMED_KIND,
+  shouldDeferMorningForStreakFreezeConsumed,
+} from '../whatsapp/streak-freeze-message.service';
 import {
   WinbackService,
   type WinbackDeferBatchContext,
@@ -172,7 +177,24 @@ export class ReminderService {
           await this.trySendReminder(user, recoveryDate, 'RECOVERY', context);
         }
       } else if (morningWindowActive) {
-        await this.trySendReminder(user, localDate, 'MORNING', context);
+        const yesterday = addLocalDays(localDate, -1, reminderTimezone);
+        const consumeLog = await this.prisma.reminderLog.findUnique({
+          where: {
+            userId_date_kind: {
+              userId: user.id,
+              date: yesterday,
+              kind: STREAK_FREEZE_CONSUMED_KIND,
+            },
+          },
+        });
+        if (
+          !shouldDeferMorningForStreakFreezeConsumed(
+            consumeLog,
+            reminderTimezone,
+          )
+        ) {
+          await this.trySendReminder(user, localDate, 'MORNING', context);
+        }
       }
     }
 

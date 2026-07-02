@@ -41,8 +41,20 @@ export function computeStreakBreak(
     sorted.map((score) => [formatLocalDateKey(score.date, timezone), score]),
   );
 
-  let previousStreak = 0;
+  let firstFailureDate = last.date;
   let cursor = addLocalDays(last.date, -1, timezone);
+  while (true) {
+    const key = formatLocalDateKey(cursor, timezone);
+    const score = scoreByDateKey.get(key);
+    if (!score || !isInterimDayFailed(score)) {
+      break;
+    }
+    firstFailureDate = score.date;
+    cursor = addLocalDays(cursor, -1, timezone);
+  }
+
+  let previousStreak = 0;
+  cursor = addLocalDays(firstFailureDate, -1, timezone);
   while (true) {
     const key = formatLocalDateKey(cursor, timezone);
     const score = scoreByDateKey.get(key);
@@ -53,8 +65,16 @@ export function computeStreakBreak(
     cursor = addLocalDays(cursor, -1, timezone);
   }
 
+  const priorToLatestKey = formatLocalDateKey(
+    addLocalDays(last.date, -1, timezone),
+    timezone,
+  );
+  const priorToLatest = scoreByDateKey.get(priorToLatestKey);
+  const isRepeatMiss =
+    priorToLatest != null && isInterimDayFailed(priorToLatest);
+
   return {
-    occurred: previousStreak > 0,
+    occurred: previousStreak > 0 || isRepeatMiss,
     previousStreak,
     brokeOnDate,
     daysSinceBreak: daysBetweenDateKeys(brokeOnDate, todayKey),

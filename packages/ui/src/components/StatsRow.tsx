@@ -6,6 +6,7 @@ export type StatsRowProps = {
   currentStreak: number;
   longestStreak: number;
   successRate: number;
+  labels?: Partial<Record<(typeof STAT_ITEMS)[number]['key'], string>>;
   className?: string;
   itemClassName?: string;
   labelClassName?: string;
@@ -26,6 +27,7 @@ export function StatsRow({
   currentStreak,
   longestStreak,
   successRate,
+  labels,
   className,
   itemClassName,
   labelClassName,
@@ -61,7 +63,7 @@ export function StatsRow({
             )}
             style={{ fontFamily: 'var(--font-mono)' }}
           >
-            {item.label}
+            {labels?.[item.key] ?? item.label}
           </p>
           <p
             className={cn(

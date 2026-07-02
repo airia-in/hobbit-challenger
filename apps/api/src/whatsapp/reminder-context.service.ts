@@ -15,11 +15,20 @@ import {
   isActivityLogLogged,
   isInterimDayFailed,
 } from '../utils/day-completion';
-import { addLocalDays } from '../utils/day-window';
+import { addLocalDays, getUserLocalDate } from '../utils/day-window';
 import type { PrismaService } from '../prisma/prisma.service';
 
 export const UNLOGGED_HABITS_CAP = 3;
 export const STREAK_AT_RISK_MIN = 3;
+
+/** Challenge-local yesterday (midnight anchor in challenge TZ, not user TZ). */
+export function getChallengeYesterdayDate(
+  challengeTimezone: string,
+  now = new Date(),
+): Date {
+  const todayInChallenge = getUserLocalDate(challengeTimezone, now);
+  return addLocalDays(todayInChallenge, -1, challengeTimezone);
+}
 
 export type ReminderContext = {
   name: string;
@@ -241,7 +250,7 @@ export class ReminderContextService {
       });
       if (challenge) {
         const timezone = user.group?.challengeTimezone ?? user.timezone;
-        const yesterday = addLocalDays(stats.todayDate, -1, timezone);
+        const yesterday = getChallengeYesterdayDate(timezone);
         const yesterdayScore = await prisma.dayScore.findFirst({
           where: {
             challengeId: challenge.id,

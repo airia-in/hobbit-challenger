@@ -37,21 +37,48 @@ export function PerfectDayCelebration({
     }
 
     setVisible(true);
-    const timeout = setTimeout(() => {
+
+    const finish = () => {
       setVisible(false);
       onDone();
-    }, 2800);
+    };
 
-    return () => clearTimeout(timeout);
+    const timeout = setTimeout(finish, 2800);
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        finish();
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      clearTimeout(timeout);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [active, onDone]);
 
   if (!visible) return null;
 
+  function dismiss() {
+    setVisible(false);
+    onDone();
+  }
+
   return (
     <div
-      className="pointer-events-none fixed inset-0 z-50 overflow-hidden"
+      className="fixed inset-0 z-50 cursor-pointer overflow-hidden"
       data-testid="perfect-day-confetti"
       aria-hidden
+      onClick={dismiss}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          dismiss();
+        }
+      }}
+      role="presentation"
     >
       {Array.from({ length: PARTICLE_COUNT }, (_, index) => {
         const left = (index * 17 + 11) % 100;
@@ -65,7 +92,7 @@ export function PerfectDayCelebration({
         return (
           <span
             key={index}
-            className={`confetti-particle ${drift}`}
+            className={`confetti-particle pointer-events-none ${drift}`}
             style={{
               left: `${left}%`,
               width: size,

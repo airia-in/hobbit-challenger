@@ -32,6 +32,7 @@ export function useActivityCelebrations(
       ...today.personalActivities,
     ];
     const prev = prevSnapshotRef.current;
+    // Skip first paint so already-complete tasks are not praised on load.
     const hadPriorSnapshot = prev.size > 0;
     const newlyCompleted: Record<string, string> = {};
     const clearedIds: string[] = [];
@@ -52,6 +53,7 @@ export function useActivityCelebrations(
           title: activity.title,
           currentStreak: prevEntry?.streak ?? activity.currentStreak,
           challengeStreak,
+          dateKey: today.dateKey,
         });
       }
     }

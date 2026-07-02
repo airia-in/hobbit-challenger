@@ -1,19 +1,26 @@
+import {
+  readStorageItem,
+  removeStorageItem,
+  writeStorageItem,
+} from './browser-storage';
+
 const STORAGE_PREFIX = 'hobbit:perfect-day:';
+const CELEBRATED_KEY = `${STORAGE_PREFIX}celebrated`;
 
 export function getPerfectDayCelebratedDate(): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage.getItem(`${STORAGE_PREFIX}celebrated`);
-  } catch {
-    return null;
-  }
+  return readStorageItem(CELEBRATED_KEY);
 }
 
 export function markPerfectDayCelebrated(dateKey: string): void {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(`${STORAGE_PREFIX}celebrated`, dateKey);
+  writeStorageItem(CELEBRATED_KEY, dateKey);
 }
 
 export function hasPerfectDayBeenCelebrated(dateKey: string): boolean {
   return getPerfectDayCelebratedDate() === dateKey;
+}
+
+export function clearPerfectDayCelebrated(dateKey: string): void {
+  if (getPerfectDayCelebratedDate() === dateKey) {
+    removeStorageItem(CELEBRATED_KEY);
+  }
 }

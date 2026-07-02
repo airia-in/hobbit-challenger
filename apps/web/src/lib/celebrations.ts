@@ -22,6 +22,7 @@ type CelebrationInput = {
   title: string;
   currentStreak?: number;
   challengeStreak?: number;
+  dateKey?: string;
 };
 
 const HABIT_CELEBRATIONS: Record<(typeof BUILTIN_SEED_KEYS)[number], string[]> =
@@ -75,8 +76,22 @@ const STREAK_SUFFIXES = [
     ` — ${n} ${n === 1 ? 'day' : 'days'} on the trail and counting.`,
   (n: number) => ` ${n} ${n === 1 ? 'day' : 'days'} strong on this path.`,
   (n: number) =>
-    ` The trail remembers this ${n}-${n === 1 ? 'day' : 'day'} stretch.`,
+    ` The trail remembers this ${n}-${n === 1 ? 'day' : 'days'} stretch.`,
 ];
+
+const KIND_FRICTION: Record<string, number> = {
+  CHECKBOX: 0,
+  NUMBER: 1,
+  TIERED: 2,
+  SUBPOINTS: 3,
+};
+
+export type EasiestHabitCandidate = {
+  id: string;
+  title: string;
+  kind: string;
+  canAttachProof?: boolean;
+};
 
 function pickVariant<T>(items: readonly T[], seed: string): T {
   let hash = 0;
@@ -92,13 +107,43 @@ function isBuiltinSeedKey(
   return (BUILTIN_SEED_KEYS as readonly string[]).includes(seedKey);
 }
 
+export function activityFrictionRank(
+  kind: string,
+  canAttachProof = false,
+): number {
+  const base = KIND_FRICTION[kind] ?? 99;
+  return base + (canAttachProof ? 0.5 : 0);
+}
+
+export function pickEasiestUnloggedScoredHabit<T extends EasiestHabitCandidate>(
+  activities: T[],
+  isCompleted: (activity: T) => boolean,
+): T | null {
+  const unlogged = activities.filter((activity) => !isCompleted(activity));
+  if (unlogged.length === 0) return null;
+
+  return unlogged.reduce((best, current) =>
+    activityFrictionRank(current.kind, current.canAttachProof) <
+    activityFrictionRank(best.kind, best.canAttachProof)
+      ? current
+      : best,
+  );
+}
+
+export const TASK_CARD_ID_PREFIX = 'task-card-';
+
+export function taskCardDomId(activityId: string): string {
+  return `${TASK_CARD_ID_PREFIX}${activityId}`;
+}
+
 export function getTaskCelebrationLine({
   seedKey,
   title,
   currentStreak,
   challengeStreak,
+  dateKey,
 }: CelebrationInput): string {
-  const dayKey = new Date().toISOString().slice(0, 10);
+  const dayKey = dateKey ?? new Date().toISOString().slice(0, 10);
   const variantSeed = `${seedKey ?? title}:${dayKey}`;
 
   const base =
@@ -119,8 +164,11 @@ export function getPerfectDayBanner(dateKey: string): string {
   return pickVariant(PERFECT_DAY_BANNERS, dateKey);
 }
 
-export const STREAK_RECOVERY_CTA = "See today's habits";
 export const STREAK_RECOVERY_DISMISS = PERFECT_DAY_DISMISS;
+
+export function getStreakRecoveryCta(habitTitle: string): string {
+  return `Log ${habitTitle} — easy win`;
+}
 
 type StreakRecoveryInput = {
   previousStreak: number;

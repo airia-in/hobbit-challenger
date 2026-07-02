@@ -1,3 +1,5 @@
+import { readStorageItem, writeStorageItem } from './browser-storage';
+
 const STORAGE_KEY = 'hobbit:onboarding-checklist';
 
 export type OnboardingStep = 'reminder' | 'habit' | 'invite';
@@ -16,7 +18,7 @@ const DEFAULT_STATE: OnboardingChecklistState = {
 function readRaw(): OnboardingChecklistState {
   if (typeof window === 'undefined') return { ...DEFAULT_STATE };
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = readStorageItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_STATE };
     const parsed = JSON.parse(raw) as Partial<OnboardingChecklistState>;
     return {
@@ -39,8 +41,7 @@ export function getOnboardingState(): OnboardingChecklistState {
 }
 
 export function saveOnboardingState(state: OnboardingChecklistState): void {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  writeStorageItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 export function dismissOnboardingChecklist(): void {

@@ -8,11 +8,17 @@ import {
   collectUnloggedHabitNames,
   computeXpAtRisk,
   countTasksFromToday,
+  getChallengeYesterdayDate,
   hasEveningReminderEligibility,
   pickTopActivityStreak,
   resolveJourneyMilestone,
   STREAK_AT_RISK_MIN,
 } from '../src/whatsapp/reminder-context.service';
+import {
+  addLocalDays,
+  formatLocalDateKey,
+  getUserLocalDate,
+} from '../src/utils/day-window';
 
 function scoredActivity(
   overrides: Partial<TodayActivity> & { id: string },
@@ -189,6 +195,24 @@ describe('reminder-context helpers', () => {
       currentStreak: STREAK_AT_RISK_MIN,
       longestStreak: 12,
     });
+  });
+
+  it('anchors challenge yesterday when user timezone lags challenge timezone', () => {
+    const now = new Date('2026-06-10T18:00:00.000Z');
+    const challengeTz = 'Asia/Tokyo';
+    const userTz = 'America/Los_Angeles';
+
+    const wrongYesterday = addLocalDays(
+      getUserLocalDate(userTz, now),
+      -1,
+      challengeTz,
+    );
+    const correctYesterday = getChallengeYesterdayDate(challengeTz, now);
+
+    expect(formatLocalDateKey(wrongYesterday, challengeTz)).toBe('2026-06-09');
+    expect(formatLocalDateKey(correctYesterday, challengeTz)).toBe(
+      '2026-06-10',
+    );
   });
 
   it('evening eligibility requires incomplete tasks or xp at risk', () => {

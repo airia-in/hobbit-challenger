@@ -90,7 +90,7 @@ describe('computeStreakBreak', () => {
     expect(result.daysSinceBreak).toBe(3);
   });
 
-  it('handles consecutive failed finalized days', () => {
+  it('keeps recovery active through consecutive failed finalized days', () => {
     const result = computeStreakBreak(
       [
         score('2026-06-03', false),
@@ -101,7 +101,63 @@ describe('computeStreakBreak', () => {
       parseLocalDateKey('2026-06-04', TZ),
     );
     expect(result.brokeOnDate).toBe('2026-06-03');
-    expect(result.previousStreak).toBe(0);
-    expect(result.occurred).toBe(false);
+    expect(result.previousStreak).toBe(1);
+    expect(result.occurred).toBe(true);
+    expect(result.daysSinceBreak).toBe(1);
+  });
+
+  it('reports streak before the first failure after a long success run', () => {
+    const scores = [
+      score('2026-06-08', false),
+      score('2026-06-07', false),
+      score('2026-06-06', false),
+      score('2026-06-05', true),
+      score('2026-06-04', true),
+      score('2026-06-03', true),
+      score('2026-06-02', true),
+      score('2026-06-01', true),
+    ];
+
+    const result = computeStreakBreak(
+      scores,
+      TZ,
+      parseLocalDateKey('2026-06-09', TZ),
+    );
+
+    expect(result).toEqual({
+      occurred: true,
+      previousStreak: 5,
+      brokeOnDate: '2026-06-08',
+      daysSinceBreak: 1,
+    });
+  });
+
+  it('detects a break after miss-success-miss pattern', () => {
+    const result = computeStreakBreak(
+      [
+        score('2026-06-03', false),
+        score('2026-06-02', true),
+        score('2026-06-01', false),
+      ],
+      TZ,
+      parseLocalDateKey('2026-06-04', TZ),
+    );
+
+    expect(result).toEqual({
+      occurred: true,
+      previousStreak: 1,
+      brokeOnDate: '2026-06-03',
+      daysSinceBreak: 1,
+    });
+  });
+
+  it('uses challenge-local today for daysSinceBreak', () => {
+    const result = computeStreakBreak(
+      [score('2026-06-10', false), score('2026-06-09', true)],
+      'Asia/Tokyo',
+      parseLocalDateKey('2026-06-12', 'Asia/Tokyo'),
+    );
+
+    expect(result.daysSinceBreak).toBe(2);
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PerfectDayCelebration } from '../src/components/dashboard/PerfectDayCelebration';
 
@@ -44,5 +44,32 @@ describe('PerfectDayCelebration', () => {
 
     render(<PerfectDayCelebration active onDone={onDone} />);
     expect(screen.getByTestId('perfect-day-confetti')).toBeInTheDocument();
+  });
+
+  it('dismisses confetti early on click', async () => {
+    const onDone = vi.fn();
+    mockMatchMedia(false);
+
+    render(<PerfectDayCelebration active onDone={onDone} />);
+    fireEvent.click(screen.getByTestId('perfect-day-confetti'));
+
+    await waitFor(() => {
+      expect(onDone).toHaveBeenCalledOnce();
+    });
+    expect(
+      screen.queryByTestId('perfect-day-confetti'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('dismisses confetti early on Escape', async () => {
+    const onDone = vi.fn();
+    mockMatchMedia(false);
+
+    render(<PerfectDayCelebration active onDone={onDone} />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(onDone).toHaveBeenCalledOnce();
+    });
   });
 });

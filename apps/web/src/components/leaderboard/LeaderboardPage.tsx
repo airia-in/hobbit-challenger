@@ -9,6 +9,7 @@ import { AuthenticatedImage } from '../common/AuthenticatedImage';
 import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
+import { JOURNEY_LABELS } from '../../lib/celebrations';
 import { trpc } from '../../lib/trpc';
 
 type LeaderboardWindow = 'today' | 'week' | 'total';
@@ -65,7 +66,7 @@ export function LeaderboardContent() {
           className="text-3xl text-[var(--text-primary)] sm:text-4xl"
           style={{ fontFamily: 'var(--font-display)' }}
         >
-          Fellow travelers
+          {JOURNEY_LABELS.fellowTravelers}
         </h1>
         <p className="text-sm text-[var(--text-muted)]">
           Travelers on the trail · refreshes every 60s

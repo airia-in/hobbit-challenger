@@ -34,6 +34,9 @@ describe('FirstWeekChecklist', () => {
     );
     expect(screen.getByTestId('first-week-checklist')).toBeInTheDocument();
     expect(screen.getByText(/first week on the trail/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /set your morning reminder/i }),
+    ).toHaveAttribute('href', '/profile?focus=reminder');
   });
 
   it('persists dismissal in localStorage', async () => {

@@ -1,6 +1,5 @@
 import {
   getStreakRecoveryMessage,
-  STREAK_RECOVERY_CTA,
   STREAK_RECOVERY_DISMISS,
 } from '../../lib/celebrations';
 
@@ -8,6 +7,7 @@ type StreakRecoveryBannerProps = {
   previousStreak: number;
   longestStreak: number;
   daysSinceBreak: number;
+  ctaLabel: string;
   onDismiss: () => void;
   onScrollToTasks: () => void;
 };
@@ -16,6 +16,7 @@ export function StreakRecoveryBanner({
   previousStreak,
   longestStreak,
   daysSinceBreak,
+  ctaLabel,
   onDismiss,
   onScrollToTasks,
 }: StreakRecoveryBannerProps) {
@@ -39,7 +40,7 @@ export function StreakRecoveryBanner({
           className="rounded-md border border-[var(--accent-red)]/40 bg-[var(--surface)] px-3 py-1.5 text-xs uppercase tracking-wider text-[var(--accent-red)] transition hover:border-[var(--accent-red)]/70"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          {STREAK_RECOVERY_CTA}
+          {ctaLabel}
         </button>
       </div>
       <button

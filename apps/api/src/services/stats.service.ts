@@ -129,7 +129,7 @@ export async function getDashboardStats(
   const streakBreak = computeStreakBreak(
     finalizedScoresForBreak,
     challengeTimezone,
-    todayDate,
+    getUserLocalDate(challengeTimezone),
   );
 
   return {

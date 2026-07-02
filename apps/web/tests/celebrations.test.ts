@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   getPerfectDayBanner,
+  getStreakRecoveryCta,
   getTaskCelebrationLine,
   JOURNEY_LABELS,
+  pickEasiestUnloggedScoredHabit,
 } from '../src/lib/celebrations';
 
 describe('celebrations', () => {
@@ -16,6 +18,7 @@ describe('celebrations', () => {
     const line = getTaskCelebrationLine({
       seedKey: 'WATER',
       title: 'Water',
+      dateKey: '2026-07-03',
     });
     expect(line.toLowerCase()).toMatch(/water|hydration|thirst/);
   });
@@ -28,13 +31,30 @@ describe('celebrations', () => {
     expect(line.length).toBeGreaterThan(10);
   });
 
-  it('appends streak context when currentStreak is provided', () => {
+  it('uses streak suffix pluralization for multi-day streaks', () => {
     const line = getTaskCelebrationLine({
       seedKey: 'DIET',
       title: 'Diet',
-      currentStreak: 4,
+      currentStreak: 3,
+      dateKey: '2026-07-03',
     });
-    expect(line).toMatch(/4 days/);
+    expect(line).toMatch(/3 days/);
+    expect(line).not.toMatch(/3-day day/);
+  });
+
+  it('builds recovery CTA copy from the easiest habit title', () => {
+    expect(getStreakRecoveryCta('Water')).toBe('Log Water — easy win');
+  });
+
+  it('ranks checkbox habits as easiest', () => {
+    const easiest = pickEasiestUnloggedScoredHabit(
+      [
+        { id: '1', title: 'Steps', kind: 'NUMBER' },
+        { id: '2', title: 'Water', kind: 'CHECKBOX' },
+      ],
+      () => false,
+    );
+    expect(easiest?.title).toBe('Water');
   });
 
   it('returns a stable perfect-day banner for a date key', () => {

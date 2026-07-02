@@ -82,6 +82,7 @@ export type TaskCardProps = {
   }) => Promise<GuidanceAskResult>;
   disabled?: boolean;
   celebrationLine?: string;
+  domId?: string;
   className?: string;
 };
 
@@ -383,6 +384,7 @@ export function TaskCard({
   onAskGuidance,
   disabled = false,
   celebrationLine,
+  domId,
   className,
 }: TaskCardProps) {
   const showExpand = hasExpandableContent(kind, expandedContent);
@@ -422,6 +424,7 @@ export function TaskCard({
 
   return (
     <div
+      id={domId}
       className={cn(
         'overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)]',
         isComplete && 'border-[var(--success)]/20',
@@ -465,7 +468,10 @@ export function TaskCard({
               </span>
             )}
             {isComplete && celebrationLine && (
-              <span className="mt-1 block text-xs italic text-[var(--success)]">
+              <span
+                className="mt-1 block text-xs italic text-[var(--success)]"
+                aria-live="polite"
+              >
                 {celebrationLine}
               </span>
             )}

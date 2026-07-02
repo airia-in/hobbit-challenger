@@ -3,7 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StreakRecoveryBanner } from '../src/components/dashboard/StreakRecoveryBanner';
 import { DashboardContent } from '../src/components/dashboard/DashboardPage';
-import { getStreakRecoveryMessage } from '../src/lib/celebrations';
+import {
+  getStreakRecoveryCta,
+  getStreakRecoveryMessage,
+  pickEasiestUnloggedScoredHabit,
+  taskCardDomId,
+} from '../src/lib/celebrations';
 import {
   dismissStreakRecovery,
   isStreakRecoveryDismissed,
@@ -93,6 +98,7 @@ const baseToday = {
       log: null,
       canEdit: true,
       seedKey: 'WATER',
+      canAttachProof: false,
     },
   ],
   personalActivities: [],
@@ -152,6 +158,40 @@ describe('getStreakRecoveryMessage', () => {
   });
 });
 
+describe('pickEasiestUnloggedScoredHabit', () => {
+  it('prefers checkbox habits over number and tiered types', () => {
+    const easiest = pickEasiestUnloggedScoredHabit(
+      [
+        {
+          id: 'tiered',
+          title: 'Workout',
+          kind: 'TIERED',
+          canAttachProof: false,
+        },
+        {
+          id: 'number',
+          title: 'Steps',
+          kind: 'NUMBER',
+          canAttachProof: false,
+        },
+        {
+          id: 'checkbox',
+          title: 'Water',
+          kind: 'CHECKBOX',
+          canAttachProof: false,
+        },
+      ],
+      () => false,
+    );
+
+    expect(easiest?.id).toBe('checkbox');
+  });
+
+  it('names the easiest habit in recovery CTA copy', () => {
+    expect(getStreakRecoveryCta('Water')).toBe('Log Water — easy win');
+  });
+});
+
 describe('StreakRecoveryBanner', () => {
   it('renders the fresh-break variant when daysSinceBreak is 1', () => {
     render(
@@ -159,6 +199,7 @@ describe('StreakRecoveryBanner', () => {
         previousStreak={4}
         longestStreak={9}
         daysSinceBreak={1}
+        ctaLabel={getStreakRecoveryCta('Water')}
         onDismiss={vi.fn()}
         onScrollToTasks={vi.fn()}
       />,
@@ -169,6 +210,9 @@ describe('StreakRecoveryBanner', () => {
     expect(
       screen.getByText(/rainy day on the trail yesterday/i),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /log water/i }),
+    ).toBeInTheDocument();
   });
 
   it('renders the never-miss-twice variant when daysSinceBreak is 2 or more', () => {
@@ -177,6 +221,7 @@ describe('StreakRecoveryBanner', () => {
         previousStreak={4}
         longestStreak={9}
         daysSinceBreak={3}
+        ctaLabel={getStreakRecoveryCta('Water')}
         onDismiss={vi.fn()}
         onScrollToTasks={vi.fn()}
       />,
@@ -196,13 +241,14 @@ describe('StreakRecoveryBanner', () => {
         previousStreak={4}
         longestStreak={9}
         daysSinceBreak={1}
+        ctaLabel={getStreakRecoveryCta('Water')}
         onDismiss={vi.fn()}
         onScrollToTasks={onScrollToTasks}
       />,
     );
 
     await userEvent.click(
-      screen.getByRole('button', { name: /see today's habits/i }),
+      screen.getByRole('button', { name: /log water — easy win/i }),
     );
     expect(onScrollToTasks).toHaveBeenCalledOnce();
   });
@@ -216,6 +262,7 @@ describe('StreakRecoveryBanner', () => {
         previousStreak={4}
         longestStreak={9}
         daysSinceBreak={1}
+        ctaLabel={getStreakRecoveryCta('Water')}
         onDismiss={onDismiss}
         onScrollToTasks={vi.fn()}
       />,
@@ -230,6 +277,7 @@ describe('StreakRecoveryBanner', () => {
 describe('DashboardContent streak recovery', () => {
   afterEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
   });
 
   it('shows the banner when streakBreak occurred on today view', () => {
@@ -242,6 +290,9 @@ describe('DashboardContent streak recovery', () => {
 
     expect(screen.getByTestId('streak-recovery-banner')).toBeInTheDocument();
     expect(screen.queryByTestId('perfect-day-banner')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /log water — easy win/i }),
+    ).toBeInTheDocument();
   });
 
   it('hides the banner when viewing a historical date', () => {
@@ -279,9 +330,8 @@ describe('DashboardContent streak recovery', () => {
     expect(isStreakRecoveryDismissed('2026-07-02')).toBe(true);
   });
 
-  it('scroll CTA targets the today tasks section', () => {
-    const scrollIntoView = vi.fn();
-    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+  it('does not flash a previously dismissed banner on load', () => {
+    dismissStreakRecovery('2026-07-02');
 
     mockActivitiesGetToday.mockReturnValue(idleQuery(baseToday));
     mockStatsGetDashboard.mockReturnValue(idleQuery(baseStats));
@@ -290,10 +340,73 @@ describe('DashboardContent streak recovery', () => {
 
     render(<DashboardContent />);
 
+    expect(
+      screen.queryByTestId('streak-recovery-banner'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('scroll CTA targets the easiest unlogged habit card', () => {
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+
+    mockActivitiesGetToday.mockReturnValue(
+      idleQuery({
+        ...baseToday,
+        scoredActivities: [
+          {
+            id: 'activity-tiered',
+            title: 'Workout',
+            emoji: '🏋️',
+            kind: 'TIERED' as const,
+            log: null,
+            canEdit: true,
+            seedKey: null,
+            canAttachProof: false,
+          },
+          {
+            id: 'activity-water',
+            title: 'Water',
+            emoji: '💧',
+            kind: 'CHECKBOX' as const,
+            log: null,
+            canEdit: true,
+            seedKey: 'WATER',
+            canAttachProof: false,
+          },
+        ],
+      }),
+    );
+    mockStatsGetDashboard.mockReturnValue(idleQuery(baseStats));
+    mockHeatmapGet.mockReturnValue(idleQuery({ cells: [] }));
+    mockProfileGet.mockReturnValue(idleQuery({ reminderTime: null }));
+
+    render(<DashboardContent />);
+
+    const easiest = pickEasiestUnloggedScoredHabit(
+      [
+        {
+          id: 'activity-tiered',
+          title: 'Workout',
+          kind: 'TIERED',
+          canAttachProof: false,
+        },
+        {
+          id: 'activity-water',
+          title: 'Water',
+          kind: 'CHECKBOX',
+          canAttachProof: false,
+        },
+      ],
+      () => false,
+    );
+    expect(easiest?.title).toBe('Water');
+
     fireEvent.click(
-      screen.getByRole('button', { name: /see today's habits/i }),
+      screen.getByRole('button', { name: /log water — easy win/i }),
     );
     expect(scrollIntoView).toHaveBeenCalled();
-    expect(document.getElementById('today-tasks')).toBeInTheDocument();
+    expect(
+      document.getElementById(taskCardDomId('activity-water')),
+    ).toBeInTheDocument();
   });
 });

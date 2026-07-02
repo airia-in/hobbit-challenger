@@ -10,11 +10,17 @@ import {
 import { loadPromptFile } from '../services/prompt-loader';
 import type { ReminderContext } from './reminder-context.service';
 
-export type ReminderKind = 'MORNING' | 'EVENING';
+export type ReminderKind =
+  | 'MORNING'
+  | 'EVENING'
+  | 'RECOVERY'
+  | 'STREAK_AT_RISK';
 
 const PROMPT_FILES: Record<ReminderKind, string> = {
   MORNING: 'reminder-morning.jinja',
   EVENING: 'reminder-evening.jinja',
+  RECOVERY: 'reminder-recovery.jinja',
+  STREAK_AT_RISK: 'reminder-streak-at-risk.jinja',
 };
 
 const DEFAULT_WEB_DOMAIN = 'hobbit.drcode.ai';
@@ -33,6 +39,7 @@ export type ReminderCopyLines = {
   milestoneLine: string;
   yesterdayMissLine: string;
   streakAtRiskLine: string;
+  recoveryLine: string;
 };
 
 export function buildReminderMessaging(
@@ -73,6 +80,10 @@ export function buildReminderCopyLines(
     ? `Your ${context.currentStreak}-day streak needs today's logs before the campfire goes out.`
     : '';
 
+  const recoveryLine = context.missedYesterday
+    ? 'One muddy day — the trail rule is never miss twice. Today counts.'
+    : '';
+
   const themedIntro =
     context.journeyMilestone != null
       ? 'Pack light, walk steady — milestone weather ahead.'
@@ -89,6 +100,7 @@ export function buildReminderCopyLines(
     milestoneLine,
     yesterdayMissLine,
     streakAtRiskLine,
+    recoveryLine,
   };
 }
 
@@ -206,13 +218,20 @@ export function interpolatePrompt(
 function appendDashboardLink(
   message: string,
   context: ReminderContext,
+  kind: ReminderKind,
   messaging: ReminderMessaging,
 ): string {
-  if (context.tasksRemaining <= 0) {
+  const alwaysInclude =
+    kind === 'RECOVERY' || kind === 'STREAK_AT_RISK' || kind === 'EVENING';
+  if (!alwaysInclude && context.tasksRemaining <= 0) {
     return message;
   }
 
-  return `${message} Log them: ${messaging.dashboardUrl}`;
+  const suffix =
+    kind === 'RECOVERY'
+      ? ` Log today: ${messaging.dashboardUrl}`
+      : ` Log them: ${messaging.dashboardUrl}`;
+  return `${message}${suffix}`;
 }
 
 export function fallbackSeed(
@@ -286,6 +305,18 @@ const EVENING_DEFAULT: readonly string[] = [
   "Hey {{name}}, {{brandName}} here — campfire's cooling with {{tasksRemaining}} task(s) and {{xpAtRisk}} XP tonight.",
 ];
 
+const RECOVERY_DEFAULT: readonly string[] = [
+  "Good morning, {{name}}! {{brandName}} here — yesterday's mud is behind us. Never miss twice — {{tasksRemaining}} log(s) today keep the trail alive.",
+  "Morning, {{name}}! {{brandName}} here — one slip doesn't end the journey. Today's the comeback day with {{tasksRemaining}} habit(s) on the path.",
+  'Hey {{name}}, {{brandName}} here — fresh trail air on day {{dayNumber}}. Rule of the road: never miss twice. {{tasksRemaining}} log(s) waiting.',
+];
+
+const STREAK_AT_RISK_KIND_DEFAULT: readonly string[] = [
+  'Hi {{name}}, {{brandName}} here — your {{currentStreak}}-day streak needs {{tasksRemaining}} log(s) before the campfire goes out.',
+  'Evening, {{name}}! {{brandName}} here — {{currentStreak}} days on the trail; {{tasksRemaining}} habit(s) and {{xpAtRisk}} XP still open tonight.',
+  "Hey {{name}}, {{brandName}} here — clouds on day {{dayNumber}}. Don't let a {{currentStreak}}-day streak get cold — {{tasksRemaining}} to log.",
+];
+
 function fillFallbackTemplate(
   template: string,
   context: ReminderContext,
@@ -326,13 +357,41 @@ function selectEveningTemplate(context: ReminderContext, seed: number): string {
   if (context.journeyMilestone != null) {
     return pickVariant(EVENING_MILESTONE, seed);
   }
-  if (context.streakAtRisk) {
-    return pickVariant(EVENING_STREAK_AT_RISK, seed);
-  }
   if (context.tasksRemaining <= 0 && context.xpAtRisk > 0) {
     return pickVariant(EVENING_XP_ONLY, seed);
   }
   return pickVariant(EVENING_DEFAULT, seed);
+}
+
+function selectRecoveryTemplate(
+  _context: ReminderContext,
+  seed: number,
+): string {
+  return pickVariant(RECOVERY_DEFAULT, seed);
+}
+
+function selectStreakAtRiskKindTemplate(
+  _context: ReminderContext,
+  seed: number,
+): string {
+  return pickVariant(STREAK_AT_RISK_KIND_DEFAULT, seed);
+}
+
+function selectFallbackTemplate(
+  kind: ReminderKind,
+  context: ReminderContext,
+  seed: number,
+): string {
+  switch (kind) {
+    case 'MORNING':
+      return selectMorningTemplate(context, seed);
+    case 'EVENING':
+      return selectEveningTemplate(context, seed);
+    case 'RECOVERY':
+      return selectRecoveryTemplate(context, seed);
+    case 'STREAK_AT_RISK':
+      return selectStreakAtRiskKindTemplate(context, seed);
+  }
 }
 
 export function buildFallbackMessage(
@@ -341,12 +400,9 @@ export function buildFallbackMessage(
   messaging: ReminderMessaging = buildReminderMessaging(),
   seed = fallbackSeed(context, kind),
 ): string {
-  const template =
-    kind === 'MORNING'
-      ? selectMorningTemplate(context, seed)
-      : selectEveningTemplate(context, seed);
+  const template = selectFallbackTemplate(kind, context, seed);
   const message = fillFallbackTemplate(template, context, messaging);
-  return appendDashboardLink(message, context, messaging);
+  return appendDashboardLink(message, context, kind, messaging);
 }
 
 export const FALLBACK_VARIANT_TEMPLATES = [
@@ -360,4 +416,6 @@ export const FALLBACK_VARIANT_TEMPLATES = [
   ...EVENING_STREAK_AT_RISK,
   ...EVENING_XP_ONLY,
   ...EVENING_DEFAULT,
+  ...RECOVERY_DEFAULT,
+  ...STREAK_AT_RISK_KIND_DEFAULT,
 ] as const;

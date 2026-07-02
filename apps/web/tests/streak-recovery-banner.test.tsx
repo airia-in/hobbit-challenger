@@ -126,6 +126,8 @@ const baseStats = {
   currentStreak: 0,
   longestStreak: 12,
   successRate: 60,
+  streakFreezesAvailable: 0,
+  streakFreezesUsed: 0,
   streakBreak: {
     occurred: true,
     previousStreak: 5,
@@ -483,5 +485,51 @@ describe('DashboardContent streak recovery', () => {
     expect(
       document.getElementById(taskCardDomId('activity-water')),
     ).toBeInTheDocument();
+  });
+
+  it('hides the banner when streakBreak occurred is false (freeze absorbed)', () => {
+    mockActivitiesGetToday.mockReturnValue(idleQuery(baseToday));
+    mockStatsGetDashboard.mockReturnValue(
+      idleQuery({
+        ...baseStats,
+        streakBreak: {
+          occurred: false,
+          previousStreak: 5,
+          brokeOnDate: null,
+          daysSinceBreak: 0,
+        },
+      }),
+    );
+    mockHeatmapGet.mockReturnValue(idleQuery({ cells: [] }));
+    mockProfileGet.mockReturnValue(idleQuery({ reminderTime: null }));
+
+    render(<DashboardContent />);
+
+    expect(
+      screen.queryByTestId('streak-recovery-banner'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows rain-cloak indicator when streakFreezesAvailable is 1', () => {
+    mockActivitiesGetToday.mockReturnValue(idleQuery(baseToday));
+    mockStatsGetDashboard.mockReturnValue(
+      idleQuery({
+        ...baseStats,
+        currentStreak: 7,
+        streakFreezesAvailable: 1,
+        streakBreak: {
+          occurred: false,
+          previousStreak: 0,
+          brokeOnDate: null,
+          daysSinceBreak: 0,
+        },
+      }),
+    );
+    mockHeatmapGet.mockReturnValue(idleQuery({ cells: [] }));
+    mockProfileGet.mockReturnValue(idleQuery({ reminderTime: null }));
+
+    render(<DashboardContent />);
+
+    expect(screen.getByLabelText('1 rain cloak available')).toBeInTheDocument();
   });
 });

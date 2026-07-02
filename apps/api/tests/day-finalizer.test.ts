@@ -86,6 +86,9 @@ type EvaluateDayRolloverChallenge = {
   lengthDays: number;
   currentStreak: number;
   longestStreak: number;
+  streakFreezesAvailable?: number;
+  streakFreezesUsed?: number;
+  lastStreakFreezeGrantedAt?: Date | null;
 };
 
 describe('evaluateDayRollover — grace applied', () => {
@@ -408,6 +411,172 @@ describe('evaluateDayRollover — breakdown shape', () => {
       ]),
     });
     expect(result.dayScore.breakdown.entries).toHaveLength(2);
+  });
+});
+
+describe('evaluateDayRollover — streak freeze', () => {
+  const scoredSet = [checkboxActivity];
+
+  const priorSuccess = {
+    finalized: true,
+    breakdown: { allScoredLogged: true },
+  };
+
+  const priorFailed = {
+    finalized: true,
+    breakdown: { allScoredLogged: false },
+  };
+
+  it('consumes freeze on single miss with prior success', () => {
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 5,
+        longestStreak: 5,
+        streakFreezesAvailable: 1,
+        streakFreezesUsed: 0,
+      }),
+      scoredActivities: scoredSet,
+      previousDayLogs: [],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(5);
+    expect(result.challengeUpdate.streakFreezesAvailable).toBe(0);
+    expect(result.challengeUpdate.streakFreezesUsed).toBe(1);
+    expect(result.dayScore.breakdown.freezeConsumed).toBe(true);
+    expect(result.dayScore.breakdown.allScoredLogged).toBe(false);
+    expect(result.flags.freezeConsumed).toBe(true);
+    expect(result.flags.freezeGranted).toBe(false);
+  });
+
+  it('resets streak when no freeze available', () => {
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 5,
+        streakFreezesAvailable: 0,
+      }),
+      scoredActivities: scoredSet,
+      previousDayLogs: [],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(0);
+    expect(result.flags.freezeConsumed).toBe(false);
+  });
+
+  it('does not consume freeze on consecutive miss', () => {
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 5,
+        streakFreezesAvailable: 1,
+      }),
+      scoredActivities: scoredSet,
+      previousDayLogs: [],
+      previousDayScore: priorFailed,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(0);
+    expect(result.challengeUpdate.streakFreezesAvailable).toBe(1);
+    expect(result.flags.freezeConsumed).toBe(false);
+  });
+
+  it('does not consume freeze when streak is 0', () => {
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 0,
+        streakFreezesAvailable: 1,
+      }),
+      scoredActivities: scoredSet,
+      previousDayLogs: [],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(0);
+    expect(result.challengeUpdate.streakFreezesAvailable).toBe(1);
+    expect(result.flags.freezeConsumed).toBe(false);
+  });
+
+  it('grants freeze when reaching streak 7 in an eligible week', () => {
+    const evaluationDay = new Date('2026-06-15T04:00:00.000Z');
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 6,
+        longestStreak: 6,
+        streakFreezesAvailable: 0,
+        streakFreezesUsed: 0,
+        lastStreakFreezeGrantedAt: null,
+      }),
+      previousDay: evaluationDay,
+      timezone: 'America/New_York',
+      scoredActivities: scoredSet,
+      previousDayLogs: [{ activityId: checkboxActivity.id, state: 'DONE' }],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(7);
+    expect(result.challengeUpdate.streakFreezesAvailable).toBe(1);
+    expect(result.challengeUpdate.lastStreakFreezeGrantedAt).toEqual(
+      evaluationDay,
+    );
+    expect(result.flags.freezeGranted).toBe(true);
+  });
+
+  it('does not grant a second freeze in the same ISO week', () => {
+    const evaluationDay = new Date('2026-06-17T04:00:00.000Z');
+    const grantedMonday = new Date('2026-06-15T04:00:00.000Z');
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 6,
+        streakFreezesAvailable: 0,
+        lastStreakFreezeGrantedAt: grantedMonday,
+      }),
+      previousDay: evaluationDay,
+      timezone: 'America/New_York',
+      scoredActivities: scoredSet,
+      previousDayLogs: [{ activityId: checkboxActivity.id, state: 'DONE' }],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(7);
+    expect(result.challengeUpdate.streakFreezesAvailable).toBe(0);
+    expect(result.flags.freezeGranted).toBe(false);
+  });
+
+  it('does not grant when inventory already holds a cloak', () => {
+    const evaluationDay = new Date('2026-06-15T04:00:00.000Z');
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 6,
+        streakFreezesAvailable: 1,
+      }),
+      previousDay: evaluationDay,
+      timezone: 'America/New_York',
+      scoredActivities: scoredSet,
+      previousDayLogs: [{ activityId: checkboxActivity.id, state: 'DONE' }],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.streakFreezesAvailable).toBe(1);
+    expect(result.flags.freezeGranted).toBe(false);
+  });
+
+  it('does not grant at streak 8 without empty inventory and new week', () => {
+    const evaluationDay = new Date('2026-06-22T04:00:00.000Z');
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 7,
+        streakFreezesAvailable: 0,
+        lastStreakFreezeGrantedAt: new Date('2026-06-15T04:00:00.000Z'),
+      }),
+      previousDay: evaluationDay,
+      timezone: 'America/New_York',
+      scoredActivities: scoredSet,
+      previousDayLogs: [{ activityId: checkboxActivity.id, state: 'DONE' }],
+      previousDayScore: priorSuccess,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(8);
+    expect(result.flags.freezeGranted).toBe(false);
   });
 });
 

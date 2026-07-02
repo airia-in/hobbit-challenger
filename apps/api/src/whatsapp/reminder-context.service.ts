@@ -13,6 +13,7 @@ import { getDashboardStats } from '../services/stats.service';
 import { challengeDisplayOrderBy } from '../utils/challenge-query';
 import {
   isActivityLogLogged,
+  isFreezeAbsorbed,
   isInterimDayFailed,
 } from '../utils/day-completion';
 import { addLocalDays, getUserLocalDate } from '../utils/day-window';
@@ -47,6 +48,7 @@ export type ReminderContext = {
   journeyMilestone: 7 | 21 | 30 | null;
   currentStreak: number;
   longestStreak: number;
+  streakFreezesAvailable: number;
 };
 
 function todayActivityToScored(activity: TodayActivity): ScoredActivity {
@@ -176,6 +178,7 @@ export function buildReminderContextFromToday(
     totalXp: number;
     currentStreak: number;
     longestStreak: number;
+    streakFreezesAvailable?: number;
   },
   rank: number | null,
   missedYesterday: boolean,
@@ -209,6 +212,7 @@ export function buildReminderContextFromToday(
     journeyMilestone,
     currentStreak: stats.currentStreak,
     longestStreak: stats.longestStreak,
+    streakFreezesAvailable: stats.streakFreezesAvailable ?? 0,
   };
 }
 
@@ -260,7 +264,8 @@ export class ReminderContextService {
           select: { finalized: true, breakdown: true },
         });
         missedYesterday = yesterdayScore
-          ? isInterimDayFailed(yesterdayScore)
+          ? isInterimDayFailed(yesterdayScore) &&
+            !isFreezeAbsorbed(yesterdayScore)
           : false;
       }
     }
@@ -275,6 +280,7 @@ export class ReminderContextService {
         totalXp: stats.totalXp,
         currentStreak: stats.currentStreak,
         longestStreak: stats.longestStreak,
+        streakFreezesAvailable: stats.streakFreezesAvailable,
       },
       rank,
       missedYesterday,

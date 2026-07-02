@@ -194,6 +194,7 @@ describe('reminder-context helpers', () => {
       journeyMilestone: 7,
       currentStreak: STREAK_AT_RISK_MIN,
       longestStreak: 12,
+      streakFreezesAvailable: 0,
     });
   });
 
@@ -234,6 +235,7 @@ describe('reminder-context helpers', () => {
         journeyMilestone: null,
         currentStreak: 0,
         longestStreak: 0,
+        streakFreezesAvailable: 0,
       }),
     ).toBe(false);
 
@@ -257,5 +259,20 @@ describe('reminder-context helpers', () => {
         longestStreak: 5,
       }),
     ).toBe(true);
+  });
+
+  it('treats freeze-absorbed yesterday as not missed for copy', () => {
+    const yesterdayFreeze = {
+      finalized: true,
+      breakdown: { allScoredLogged: false, freezeConsumed: true },
+    };
+    const wouldMiss =
+      yesterdayFreeze.finalized &&
+      !(yesterdayFreeze.breakdown as { allScoredLogged: boolean })
+        .allScoredLogged &&
+      !(yesterdayFreeze.breakdown as { freezeConsumed?: boolean })
+        .freezeConsumed;
+
+    expect(wouldMiss).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import type { StreakBreak } from '@workspace-starter/types';
+import type { DashboardStats as DashboardStatsBase } from '@workspace-starter/types';
 import type { Activity } from '@workspace-starter/db';
 import type { PrismaService } from '../prisma/prisma.service';
 import { challengeDisplayOrderBy } from '../utils/challenge-query';
@@ -25,20 +25,7 @@ import {
   type ActivitySeriesPoint,
 } from '../utils/stats-aggregation';
 
-export type DashboardStats = {
-  totalXp: number;
-  todayNetXp: number;
-  currentDay: number;
-  lengthDays: number;
-  startDate: Date | null;
-  todayDate: Date;
-  estimatedFinishDate: Date | null;
-  currentStreak: number;
-  longestStreak: number;
-  totalDaysCompleted: number;
-  successRate: number;
-  streakBreak: StreakBreak;
-};
+export type DashboardStats = DashboardStatsBase;
 
 export async function getDashboardStats(
   prisma: PrismaService,
@@ -147,6 +134,8 @@ export async function getDashboardStats(
     totalDaysCompleted,
     successRate,
     streakBreak,
+    streakFreezesAvailable: challenge?.streakFreezesAvailable ?? 0,
+    streakFreezesUsed: challenge?.streakFreezesUsed ?? 0,
   };
 }
 

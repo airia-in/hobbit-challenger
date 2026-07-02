@@ -4,12 +4,18 @@ import {
   fallbackScheduledEnd,
   lengthDaysFromRange,
 } from '../utils/challenge-range';
+import { getUserLocalDate } from '../utils/day-window';
+import {
+  canConsumeStreakFreeze,
+  canGrantStreakFreeze,
+} from '../utils/streak-freeze';
 import {
   type ActivityLogInput,
   type DayScoreBreakdownEntry,
   type ScoredActivity,
   computeDayScore,
 } from './scoring.service';
+import type { DayScoreCompletionInput } from '../utils/day-completion';
 
 export type EvaluateDayRolloverInput = {
   challenge: {
@@ -19,9 +25,13 @@ export type EvaluateDayRolloverInput = {
     lengthDays: number;
     currentStreak: number;
     longestStreak: number;
+    streakFreezesAvailable?: number;
+    streakFreezesUsed?: number;
+    lastStreakFreezeGrantedAt?: Date | null;
   };
   previousDay?: Date;
   timezone?: string;
+  previousDayScore?: DayScoreCompletionInput | null;
   scoredActivities: ScoredActivity[];
   personalActivities?: ScoredActivity[];
   previousDayLogs: ActivityLogInput[];
@@ -36,6 +46,7 @@ export type EvaluateDayRolloverResult = {
     personalXp: number;
     breakdown: {
       allScoredLogged: boolean;
+      freezeConsumed?: boolean;
       entries: DayScoreBreakdownEntry[];
     };
   };
@@ -45,6 +56,13 @@ export type EvaluateDayRolloverResult = {
     longestStreak: number;
     totalXpIncrement: number;
     completed: boolean;
+    streakFreezesAvailable?: number;
+    streakFreezesUsed?: number;
+    lastStreakFreezeGrantedAt?: Date | null;
+  };
+  flags: {
+    freezeConsumed: boolean;
+    freezeGranted: boolean;
   };
 };
 
@@ -56,7 +74,12 @@ export function evaluateDayRollover(
     scoredActivities,
     personalActivities = [],
     previousDayLogs,
+    previousDayScore,
   } = input;
+
+  const streakFreezesAvailable = challenge.streakFreezesAvailable ?? 0;
+  const streakFreezesUsed = challenge.streakFreezesUsed ?? 0;
+  const lastStreakFreezeGrantedAt = challenge.lastStreakFreezeGrantedAt ?? null;
 
   const scoredActivityIds = scoredActivities.map((activity) => activity.id);
   const { allScoredLogged } = computeDayLoggingStatus(
@@ -97,9 +120,56 @@ export function evaluateDayRollover(
       : personalActivities.length > 0
         ? allPersonalLogged
         : false;
-  const newStreak = dayCounted ? challenge.currentStreak + 1 : 0;
-  const newLongestStreak = Math.max(challenge.longestStreak, newStreak);
+
   const timezone = input.timezone ?? 'UTC';
+  const evaluationDay = input.previousDay ?? getUserLocalDate(timezone);
+  let newStreak: number;
+  let newLongestStreak: number;
+  let freezeConsumed = false;
+  let freezeGranted = false;
+  let nextFreezesAvailable = streakFreezesAvailable;
+  let nextFreezesUsed = streakFreezesUsed;
+  let nextLastGrantedAt = lastStreakFreezeGrantedAt;
+
+  if (dayCounted) {
+    newStreak = challenge.currentStreak + 1;
+    newLongestStreak = Math.max(challenge.longestStreak, newStreak);
+    if (
+      canGrantStreakFreeze(
+        {
+          currentStreak: challenge.currentStreak,
+          streakFreezesAvailable,
+          lastStreakFreezeGrantedAt,
+        },
+        newStreak,
+        evaluationDay,
+        timezone,
+      )
+    ) {
+      nextFreezesAvailable = 1;
+      nextLastGrantedAt = evaluationDay;
+      freezeGranted = true;
+    }
+  } else if (
+    canConsumeStreakFreeze(
+      {
+        currentStreak: challenge.currentStreak,
+        streakFreezesAvailable,
+        lastStreakFreezeGrantedAt,
+      },
+      previousDayScore,
+    )
+  ) {
+    newStreak = challenge.currentStreak;
+    newLongestStreak = challenge.longestStreak;
+    nextFreezesAvailable = streakFreezesAvailable - 1;
+    nextFreezesUsed = streakFreezesUsed + 1;
+    freezeConsumed = true;
+  } else {
+    newStreak = 0;
+    newLongestStreak = challenge.longestStreak;
+  }
+
   const endDate =
     challenge.startDate && challenge.endDate !== undefined
       ? fallbackScheduledEnd(
@@ -138,6 +208,7 @@ export function evaluateDayRollover(
         // Means "all gating activities logged for this day" (scored for grouped
         // users, personal for personal-only) so completion metadata matches streak.
         allScoredLogged: dayCounted,
+        ...(freezeConsumed ? { freezeConsumed: true } : {}),
         entries: score.breakdown,
       },
     },
@@ -147,6 +218,13 @@ export function evaluateDayRollover(
       longestStreak: newLongestStreak,
       totalXpIncrement: score.netXp,
       completed,
+      streakFreezesAvailable: nextFreezesAvailable,
+      streakFreezesUsed: nextFreezesUsed,
+      lastStreakFreezeGrantedAt: nextLastGrantedAt,
+    },
+    flags: {
+      freezeConsumed,
+      freezeGranted,
     },
   };
 }

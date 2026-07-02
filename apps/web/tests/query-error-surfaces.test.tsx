@@ -269,6 +269,8 @@ const dashboardStats = {
   currentStreak: 3,
   longestStreak: 3,
   successRate: 75,
+  streakFreezesAvailable: 0,
+  streakFreezesUsed: 0,
   streakBreak: {
     occurred: false,
     previousStreak: 0,

@@ -508,6 +508,7 @@ export function DashboardContent() {
           {stats && (
             <StreakBadge
               streak={stats.currentStreak}
+              freezesAvailable={stats.streakFreezesAvailable}
               label={JOURNEY_LABELS.streakPlural}
             />
           )}

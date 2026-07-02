@@ -114,6 +114,16 @@ Only add a `client:*` directive when the shared component or its children need b
 
 `apps/web/tsconfig.json` already maps `@workspace-starter/ui` to `../../packages/ui/src/index.ts`, and `apps/web/astro.config.mjs` already includes `@workspace-starter/ui` in `optimizeDeps`. Do not edit those files for a normal new component.
 
+## Tailwind class scanning
+
+`apps/web` is the Tailwind entrypoint. Utilities used only in `packages/ui` are not emitted unless the UI package is registered in `apps/web/src/styles/global.css`:
+
+```css
+@source '../../../../packages/ui/src';
+```
+
+The path is relative to `apps/web/src/styles/` and needs **four** `../` segments to reach the monorepo root. After adding responsive utilities to shared components, rebuild web and confirm the utility appears in `apps/web/dist/client/_astro/*.css` when debugging missing styles.
+
 ## Quality Bar
 
 - Keep shared components free of data fetching, routing, app-specific copy, and tRPC calls.

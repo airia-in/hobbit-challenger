@@ -209,6 +209,15 @@ test.describe('production start flows', () => {
     await expect(
       admin.page.getByRole('columnheader', { name: 'Success' }),
     ).toBeVisible();
+    await expect(
+      admin.page.getByTestId('leaderboard-desktop-table'),
+    ).toBeVisible();
+    await expect(
+      admin.page.getByTestId('leaderboard-desktop-table').getByText(adminName),
+    ).toBeVisible();
+    await expect(
+      admin.page.getByTestId('leaderboard-desktop-table').getByText(memberName),
+    ).toBeVisible();
 
     await admin.page.goto('/progress');
     await expect(

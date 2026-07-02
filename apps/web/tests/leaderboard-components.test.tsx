@@ -82,6 +82,20 @@ describe('LeaderboardTable', () => {
     expect(container.querySelectorAll('[aria-current="true"]')).toHaveLength(2);
   });
 
+  it('renders desktop table rows with data-testid leaderboard-desktop-table', () => {
+    render(
+      <LeaderboardTable
+        members={[baseMember]}
+        sortBy="xp"
+        onSortChange={vi.fn()}
+      />,
+    );
+
+    const desktopTable = screen.getByTestId('leaderboard-desktop-table');
+    expect(desktopTable).toHaveTextContent('Alex');
+    expect(desktopTable).toHaveTextContent('#1');
+  });
+
   it('calls onSortChange when sort select changes', () => {
     const onSortChange = vi.fn();
     render(

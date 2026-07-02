@@ -212,6 +212,16 @@ test('workspace package manifests keep shared graph invariants', async () => {
   }
 });
 
+test('web Tailwind scans shared UI package classes', async () => {
+  const globalCss = await readText('apps/web/src/styles/global.css');
+
+  assert.match(
+    globalCss,
+    /@source\s+['"]\.\.\/\.\.\/\.\.\/\.\.\/packages\/ui\/src['"]/,
+    'apps/web must @source packages/ui so responsive utilities from shared components are emitted',
+  );
+});
+
 test('root Turbo invocations reference configured tasks', async () => {
   const [pkg, turbo] = await Promise.all([
     readJson('package.json'),

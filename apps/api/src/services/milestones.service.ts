@@ -7,6 +7,7 @@ import {
   getMilestoneDefinition,
   pickMostPrestigiousMilestone,
 } from '@workspace-starter/types';
+import { Prisma } from '@workspace-starter/db';
 import type { PrismaService } from '../prisma/prisma.service';
 import { isInterimDayCompleted } from '../utils/day-completion';
 import { formatLocalDateKey } from '../utils/day-window';
@@ -366,8 +367,15 @@ export async function evaluateAndUnlockMilestones(
         },
       });
       newlyUnlocked.push(key);
-    } catch {
-      // Unique constraint — already unlocked (re-finalization safe).
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        // Unique constraint — already unlocked (re-finalization safe).
+        continue;
+      }
+      throw error;
     }
   }
 

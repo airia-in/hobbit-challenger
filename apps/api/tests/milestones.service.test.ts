@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Prisma } from '@workspace-starter/db';
 import {
   buildHistoricalUnlockCandidates,
   evaluateAndUnlockMilestones,
@@ -287,6 +288,13 @@ describe('milestone metrics helpers', () => {
 });
 
 describe('evaluateAndUnlockMilestones idempotency', () => {
+  function p2002DuplicateError(): Prisma.PrismaClientKnownRequestError {
+    return new Prisma.PrismaClientKnownRequestError('Unique constraint', {
+      code: 'P2002',
+      clientVersion: 'test',
+    });
+  }
+
   it('creates each milestone once across repeated evaluation', async () => {
     const rows: Array<{ milestoneKey: string; unlockedAt: Date }> = [];
     const prisma = {
@@ -299,7 +307,7 @@ describe('evaluateAndUnlockMilestones idempotency', () => {
           data: { milestoneKey: string; unlockedAt?: Date };
         }) => {
           if (rows.some((row) => row.milestoneKey === data.milestoneKey)) {
-            throw new Error('Unique constraint');
+            throw p2002DuplicateError();
           }
           rows.push({
             milestoneKey: data.milestoneKey,
@@ -389,6 +397,52 @@ describe('evaluateAndUnlockMilestones idempotency', () => {
 
     expect(result.newlyUnlocked.length).toBeGreaterThanOrEqual(4);
     expect(rows.length).toBe(result.newlyUnlocked.length);
+  });
+
+  it('swallows P2002 duplicate but rethrows other create errors', async () => {
+    const prisma = {
+      userMilestone: {
+        findMany: async () => [],
+        create: async () => {
+          throw p2002DuplicateError();
+        },
+      },
+      activityLog: { findMany: async () => [] },
+      dayScore: { findMany: async () => [] },
+      activity: { findMany: async () => [] },
+      challenge: {
+        findUnique: async () => ({ streakFreezesUsed: 0 }),
+      },
+    };
+
+    const input = {
+      userId: 'user-1',
+      challengeId: 'challenge-1',
+      groupId: null,
+      evaluationDay,
+      timezone,
+      newStreak: 7,
+      dayCounted: true,
+      allScoredLogged: true,
+      freezeConsumed: false,
+    };
+
+    const result = await evaluateAndUnlockMilestones(prisma as never, input);
+    expect(result.newlyUnlocked).toEqual([]);
+
+    const failingPrisma = {
+      ...prisma,
+      userMilestone: {
+        findMany: async () => [],
+        create: async () => {
+          throw new Error('connection lost');
+        },
+      },
+    };
+
+    await expect(
+      evaluateAndUnlockMilestones(failingPrisma as never, input),
+    ).rejects.toThrow('connection lost');
   });
 });
 

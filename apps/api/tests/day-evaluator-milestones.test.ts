@@ -46,7 +46,7 @@ describe('DayEvaluatorService — milestone policy', () => {
     };
   }
 
-  it('retries milestone evaluation on finalized days', async () => {
+  it('self-heals milestone evaluation once per finalized day', async () => {
     const evaluateSpy = vi
       .spyOn(milestonesService, 'evaluateAndUnlockMilestones')
       .mockResolvedValue({ newlyUnlocked: ['streak_7'] });
@@ -81,13 +81,49 @@ describe('DayEvaluatorService — milestone policy', () => {
 
     await service.evaluateDays();
 
-    expect(evaluateSpy).toHaveBeenCalled();
+    expect(evaluateSpy).toHaveBeenCalledTimes(1);
     expect(trySendBatchUnlockMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         primaryMilestoneKey: 'streak_7',
         additionalUnlockCount: 0,
       }),
     );
+  });
+
+  it('skips milestone rescan on steady-state cron ticks for finalized days', async () => {
+    const evaluateSpy = vi
+      .spyOn(milestonesService, 'evaluateAndUnlockMilestones')
+      .mockResolvedValue({ newlyUnlocked: [] });
+
+    const prisma = {
+      user: { findMany: async () => [baseUser()] },
+      activity: {
+        findMany: async () => [
+          {
+            id: 'act-1',
+            groupId: 'group-1',
+            scored: true,
+            isPersonal: false,
+            active: true,
+            kind: 'CHECKBOX',
+          },
+        ],
+      },
+      dayScore: {
+        findFirst: async () => ({
+          finalized: true,
+          breakdown: { allScoredLogged: true },
+        }),
+      },
+      $transaction: async () => undefined,
+    };
+
+    const service = new DayEvaluatorService(prisma as never);
+
+    await service.evaluateDays();
+    await service.evaluateDays();
+
+    expect(evaluateSpy).toHaveBeenCalledTimes(1);
   });
 
   it('sends milestone message on challenge completion night', async () => {

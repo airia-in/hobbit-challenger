@@ -2,17 +2,20 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { challengeDisplayOrderBy } from '../utils/challenge-query';
-import { formatLocalDateKey } from '../utils/day-window';
+import { formatLocalDateKey, parseLocalDateKey } from '../utils/day-window';
 import { WINBACK_KIND } from '../utils/winback-dormancy';
 import {
   computeWeeklyRecapRollup,
+  computeWeeklyRecapRollupRange,
   type WeeklyRecapRollup,
 } from '../utils/weekly-recap-rollup';
 import {
   getWeeklyRecapLogDate,
   getWeeklyRecapSkipReason,
+  getWeeklyRecapTimezone,
   getWeeklyRecapWeekKeys,
   isWeeklyRecapSlotDue,
+  isWeeklyRecapSundaySweepDue,
   WEEKLY_RECAP_KIND,
 } from '../utils/weekly-recap-eligibility';
 import { EvolutionApiClient } from '../whatsapp/evolution.client';
@@ -112,19 +115,44 @@ export class WeeklyRecapService {
       return;
     }
 
+    const now = new Date();
+    const windowCandidates = users.flatMap((user) => {
+      if (!user.phone) {
+        return [];
+      }
+      const recapTimezone = getWeeklyRecapTimezone({
+        timezone: user.timezone,
+        challengeTimezone: user.group?.challengeTimezone,
+      });
+      if (!isWeeklyRecapSundaySweepDue(recapTimezone, now)) {
+        return [];
+      }
+      return [
+        {
+          id: user.id,
+          name: user.name,
+          phone: user.phone,
+          weeklyRecapOptIn: user.weeklyRecapOptIn,
+          whatsappOptIn: user.whatsappOptIn,
+          groupId: user.groupId,
+          recapTimezone,
+        },
+      ];
+    });
+
+    if (windowCandidates.length === 0) {
+      return;
+    }
+
     const batch = await this.loadBatchContext(
-      users.map((user) => ({
-        id: user.id,
-        challengeTimezone: user.group?.challengeTimezone ?? user.timezone,
+      windowCandidates.map((candidate) => ({
+        id: candidate.id,
+        challengeTimezone: candidate.recapTimezone,
       })),
     );
 
-    for (const user of users) {
-      if (!user.phone) {
-        continue;
-      }
-
-      const challenge = batch.challengeByUser.get(user.id);
+    for (const candidate of windowCandidates) {
+      const challenge = batch.challengeByUser.get(candidate.id);
       if (!challenge) {
         continue;
       }
@@ -132,19 +160,22 @@ export class WeeklyRecapService {
       try {
         await this.processCandidate(
           {
-            id: user.id,
-            name: user.name,
-            phone: user.phone,
-            weeklyRecapOptIn: user.weeklyRecapOptIn,
-            whatsappOptIn: user.whatsappOptIn,
-            challengeTimezone: user.group?.challengeTimezone ?? user.timezone,
-            groupId: user.groupId,
+            id: candidate.id,
+            name: candidate.name,
+            phone: candidate.phone,
+            weeklyRecapOptIn: candidate.weeklyRecapOptIn,
+            whatsappOptIn: candidate.whatsappOptIn,
+            challengeTimezone: candidate.recapTimezone,
+            groupId: candidate.groupId,
             challenge,
           },
           batch,
         );
       } catch (error) {
-        this.logger.error(`Weekly recap failed for user ${user.id}:`, error);
+        this.logger.error(
+          `Weekly recap failed for user ${candidate.id}:`,
+          error,
+        );
       }
     }
   }
@@ -201,6 +232,17 @@ export class WeeklyRecapService {
       (challenge) => challenge.id,
     );
 
+    let minWeekStartKey = '9999-99-99';
+    for (const candidate of candidates) {
+      const { weekStartKey } = getWeeklyRecapWeekKeys(
+        candidate.challengeTimezone,
+      );
+      if (weekStartKey < minWeekStartKey) {
+        minWeekStartKey = weekStartKey;
+      }
+    }
+    const rollupWindowStart = parseLocalDateKey(minWeekStartKey, 'UTC');
+
     const usersWithGroups = await this.prisma.user.findMany({
       where: { id: { in: userIds } },
       select: { id: true, groupId: true },
@@ -249,7 +291,10 @@ export class WeeklyRecapService {
         : Promise.resolve([]),
       challengeIds.length > 0
         ? this.prisma.activityLog.findMany({
-            where: { challengeId: { in: challengeIds } },
+            where: {
+              challengeId: { in: challengeIds },
+              date: { gte: rollupWindowStart },
+            },
             select: {
               challengeId: true,
               activityId: true,
@@ -263,7 +308,10 @@ export class WeeklyRecapService {
         : Promise.resolve([]),
       challengeIds.length > 0
         ? this.prisma.dayScore.findMany({
-            where: { challengeId: { in: challengeIds } },
+            where: {
+              challengeId: { in: challengeIds },
+              date: { gte: rollupWindowStart },
+            },
             select: {
               challengeId: true,
               date: true,
@@ -386,17 +434,31 @@ export class WeeklyRecapService {
       return;
     }
 
+    const dayScores =
+      batch.dayScoresByChallenge.get(candidate.challenge.id) ?? [];
+    const rollupRange = computeWeeklyRecapRollupRange(
+      candidate.challenge,
+      candidate.challengeTimezone,
+      dayScores,
+    );
+
     const skipReason = getWeeklyRecapSkipReason({
       challenge: candidate.challenge,
       challengeTimezone: candidate.challengeTimezone,
       lastActivityDate:
         batch.lastActivityByChallenge.get(candidate.challenge.id) ?? null,
       lastWinbackSentAt: batch.lastWinbackByUser.get(candidate.id) ?? null,
-      activityDatesInWeek:
-        batch.activityDatesByChallenge.get(candidate.challenge.id) ?? [],
+      activityDatesInWeek: (
+        batch.activityDatesByChallenge.get(candidate.challenge.id) ?? []
+      ).filter(
+        (dateKey) =>
+          dateKey >= rollupRange.eligibleStartKey &&
+          dateKey <= rollupRange.eligibleEndKey,
+      ),
       weeklyRecapOptIn: candidate.weeklyRecapOptIn,
       whatsappOptIn: candidate.whatsappOptIn,
       hasPhone: true,
+      eligibleRange: rollupRange,
     });
 
     if (skipReason) {
@@ -412,7 +474,7 @@ export class WeeklyRecapService {
     const rollup = computeWeeklyRecapRollup({
       challenge: candidate.challenge,
       timezone: candidate.challengeTimezone,
-      dayScores: batch.dayScoresByChallenge.get(candidate.challenge.id) ?? [],
+      dayScores,
       activityLogs:
         batch.activityLogsByChallenge.get(candidate.challenge.id) ?? [],
       activityNames,

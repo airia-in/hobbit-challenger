@@ -118,21 +118,45 @@ function createFakePrisma(seed: {
       findMany: async ({
         where,
       }: {
-        where: { challengeId: { in: string[] } };
+        where: {
+          challengeId: { in: string[] };
+          date?: { gte: Date };
+        };
       }) =>
-        activityLogs.filter((log) =>
-          where.challengeId.in.includes(log.challengeId),
-        ),
+        activityLogs.filter((log) => {
+          if (!where.challengeId.in.includes(log.challengeId)) {
+            return false;
+          }
+          if (
+            where.date?.gte &&
+            log.date.getTime() < where.date.gte.getTime()
+          ) {
+            return false;
+          }
+          return true;
+        }),
     },
     dayScore: {
       findMany: async ({
         where,
       }: {
-        where: { challengeId: { in: string[] } };
+        where: {
+          challengeId: { in: string[] };
+          date?: { gte: Date };
+        };
       }) =>
-        dayScores.filter((score) =>
-          where.challengeId.in.includes(score.challengeId),
-        ),
+        dayScores.filter((score) => {
+          if (!where.challengeId.in.includes(score.challengeId)) {
+            return false;
+          }
+          if (
+            where.date?.gte &&
+            score.date.getTime() < where.date.gte.getTime()
+          ) {
+            return false;
+          }
+          return true;
+        }),
     },
     activity: {
       findMany: async () => [],
@@ -258,10 +282,36 @@ describe('WeeklyRecapService', () => {
         logDate: LOG_DATE,
         context: expect.objectContaining({
           name: 'Alex',
-          rollup: expect.objectContaining({ daysShowedUp: 1 }),
+          rollup: expect.objectContaining({
+            daysShowedUp: 1,
+            eligibleDays: 6,
+          }),
         }),
       }),
     );
+  });
+
+  it('does not load batch context outside the Sunday send window', async () => {
+    vi.setSystemTime(new Date('2026-06-28T11:00:00.000Z'));
+    const trySendWeeklyRecap = vi.fn();
+    const findManySpy = vi.fn(async () => []);
+    const prisma = {
+      ...createFakePrisma({
+        users: [activeUser],
+        challenges: [challenge],
+      }),
+      challenge: { findMany: findManySpy },
+    };
+
+    const service = new WeeklyRecapService(
+      prisma as never,
+      { isConfigured: () => true } as never,
+      { trySendWeeklyRecap } as never,
+    );
+
+    await service.processWeeklyRecaps();
+    expect(findManySpy).not.toHaveBeenCalled();
+    expect(trySendWeeklyRecap).not.toHaveBeenCalled();
   });
 
   it('skips dormant users in favor of winback', async () => {

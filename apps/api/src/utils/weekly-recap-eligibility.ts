@@ -8,6 +8,7 @@ import {
   parseLocalDateKey,
 } from './day-window';
 import {
+  addDaysToDateKey,
   countDaysInclusive,
   getIsoWeekStart,
   iterDateKeys,
@@ -38,7 +39,18 @@ function parseDateKey(dateKey: string): {
   return { year, month, day };
 }
 
-/** True when the user's local calendar day is Sunday. */
+/**
+ * Recap scheduling anchor — matches daily reminders (`reminder.service.ts`):
+ * group challenge timezone when present, otherwise profile timezone.
+ */
+export function getWeeklyRecapTimezone(input: {
+  timezone: string;
+  challengeTimezone?: string | null;
+}): string {
+  return input.challengeTimezone ?? input.timezone;
+}
+
+/** True when the recap-timezone calendar day is Sunday. */
 export function isLocalSunday(timezone: string, now = new Date()): boolean {
   const dateKey = formatLocalDateKey(now, timezone);
   const { year, month, day } = parseDateKey(dateKey);
@@ -117,6 +129,8 @@ export type WeeklyRecapEligibilityInput = {
   weeklyRecapOptIn: boolean;
   whatsappOptIn: boolean;
   hasPhone: boolean;
+  /** When set, used for eligible-day and activity gates (finalized rollup range). */
+  eligibleRange?: WeeklyRecapEligibleRange;
   now?: Date;
 };
 
@@ -174,7 +188,9 @@ export function getWeeklyRecapSkipReason(
     return 'challenge_ended_before_week';
   }
 
-  const range = computeWeeklyRecapEligibleRange(input.challenge, timezone, now);
+  const range =
+    input.eligibleRange ??
+    computeWeeklyRecapEligibleRange(input.challenge, timezone, now);
   if (range.eligibleDays < WEEKLY_RECAP_MIN_ELIGIBLE_DAYS) {
     return 'insufficient_eligible_days';
   }
@@ -293,6 +309,62 @@ export function isWeeklyRecapSlotDue(input: {
     recapLogThisWeek: input.recapLogThisWeek,
     now: input.now,
   });
+}
+
+/**
+ * Cheap Sunday ~10:00 sweep gate for the EVERY_MINUTE cron — skips heavy
+ * batch loads outside the catch-up + FAILED-retry window.
+ */
+export function isWeeklyRecapSundaySweepDue(
+  timezone: string,
+  now = new Date(),
+): boolean {
+  if (!isLocalSunday(timezone, now)) {
+    return false;
+  }
+
+  if (isLocalTimeMatch(timezone, WEEKLY_RECAP_TIME, now)) {
+    return true;
+  }
+
+  const elapsed = getLocalMinutesSinceTarget(timezone, WEEKLY_RECAP_TIME, now);
+  if (elapsed === null) {
+    return false;
+  }
+
+  const maxWindowMinutes =
+    WEEKLY_RECAP_CATCH_UP_MINUTES + WEEKLY_RECAP_RETRY_MINUTES;
+  return elapsed > 0 && elapsed <= maxWindowMinutes;
+}
+
+/**
+ * Caps the eligible range to finalized days only. On Sunday send, today is
+ * excluded until its DayScore is finalized so rollup metrics share one basis.
+ */
+export function capEligibleRangeToFinalizedDays(
+  range: WeeklyRecapEligibleRange,
+  finalizedDateKeys: Set<string>,
+  timezone: string,
+  now = new Date(),
+): WeeklyRecapEligibleRange {
+  const todayKey = formatLocalDateKey(now, timezone);
+  if (todayKey < range.eligibleStartKey || todayKey > range.eligibleEndKey) {
+    return range;
+  }
+  if (finalizedDateKeys.has(todayKey)) {
+    return range;
+  }
+
+  const cappedEndKey = addDaysToDateKey(todayKey, -1);
+  if (cappedEndKey < range.eligibleStartKey) {
+    return { ...range, eligibleEndKey: cappedEndKey, eligibleDays: 0 };
+  }
+
+  return {
+    ...range,
+    eligibleEndKey: cappedEndKey,
+    eligibleDays: countDaysInclusive(range.eligibleStartKey, cappedEndKey),
+  };
 }
 
 /** Exported for tests — dormant check without full winback eligibility. */

@@ -3,14 +3,17 @@ import {
   computeWeeklyRecapEligibleRange,
   getWeeklyRecapLogDate,
   getWeeklyRecapSkipReason,
+  getWeeklyRecapTimezone,
   getWeeklyRecapWeekKeys,
   isLocalSunday,
   isWeeklyRecapEligible,
   isWeeklyRecapSlotDue,
+  isWeeklyRecapSundaySweepDue,
   isWeeklyRecapWindowActionable,
   WEEKLY_RECAP_KIND,
   WEEKLY_RECAP_MIN_ELIGIBLE_DAYS,
 } from '../src/utils/weekly-recap-eligibility';
+import { getRollupEligibleRangeForTest } from '../src/utils/weekly-recap-rollup';
 
 const TZ = 'UTC';
 const SUNDAY = new Date('2026-06-28T10:00:00.000Z');
@@ -203,5 +206,54 @@ describe('weekly recap scheduling', () => {
   it('detects local Sunday', () => {
     expect(isLocalSunday(TZ, SUNDAY)).toBe(true);
     expect(isLocalSunday(TZ, SATURDAY)).toBe(false);
+  });
+
+  it('uses challenge timezone for grouped users (reminder convention)', () => {
+    expect(
+      getWeeklyRecapTimezone({
+        timezone: 'Pacific/Kiritimati',
+        challengeTimezone: 'UTC',
+      }),
+    ).toBe('UTC');
+    expect(
+      isWeeklyRecapSundaySweepDue('UTC', new Date('2026-06-28T10:00:00.000Z')),
+    ).toBe(true);
+    expect(
+      isWeeklyRecapSundaySweepDue(
+        'Pacific/Kiritimati',
+        new Date('2026-06-28T10:00:00.000Z'),
+      ),
+    ).toBe(false);
+  });
+
+  it('caps Sunday send denominator to finalized days only', () => {
+    const range = getRollupEligibleRangeForTest(challenge(), TZ, [], SUNDAY);
+    expect(range.eligibleDays).toBe(6);
+    expect(range.eligibleEndKey).toBe('2026-06-27');
+  });
+
+  it('skips Sunday-only live activity when today is not finalized', () => {
+    const rollupRange = getRollupEligibleRangeForTest(
+      challenge(),
+      TZ,
+      [],
+      SUNDAY,
+    );
+    expect(
+      getWeeklyRecapSkipReason(
+        baseInput({
+          activityDatesInWeek: ['2026-06-28'],
+          eligibleRange: rollupRange,
+        }),
+      ),
+    ).toBe('zero_activity');
+  });
+
+  it('opens the Sunday sweep only inside catch-up + retry window', () => {
+    expect(isWeeklyRecapSundaySweepDue(TZ, SUNDAY)).toBe(true);
+    expect(isWeeklyRecapSundaySweepDue(TZ, SATURDAY)).toBe(false);
+    expect(
+      isWeeklyRecapSundaySweepDue(TZ, new Date('2026-06-28T11:00:00.000Z')),
+    ).toBe(false);
   });
 });

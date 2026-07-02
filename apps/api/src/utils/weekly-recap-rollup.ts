@@ -11,6 +11,7 @@ import {
 } from './stats-aggregation';
 import {
   computeWeeklyRecapEligibleRange,
+  capEligibleRangeToFinalizedDays,
   getWeeklyRecapWeekKeys,
   type WeeklyRecapEligibleRange,
 } from './weekly-recap-eligibility';
@@ -74,14 +75,15 @@ function buildIdentityReflectionLine(
   daysShowedUp: number,
   eligibleDays: number,
 ): string {
+  const dayLabel = eligibleDays === 1 ? 'day' : 'days';
   if (daysShowedUp >= eligibleDays && eligibleDays >= 5) {
-    return `You showed up every eligible day this week (${daysShowedUp} of ${eligibleDays}) — that's who you're becoming.`;
+    return `You showed up every eligible day this week (${daysShowedUp} of ${eligibleDays} ${dayLabel}) — that's who you're becoming.`;
   }
   if (daysShowedUp >= Math.ceil(eligibleDays * 0.7)) {
-    return `You showed up ${daysShowedUp} of ${eligibleDays} days — steady steps, and that's who you're becoming.`;
+    return `You showed up ${daysShowedUp} of ${eligibleDays} ${dayLabel} — steady steps, and that's who you're becoming.`;
   }
   if (daysShowedUp >= 1) {
-    return `You showed up ${daysShowedUp} of ${eligibleDays} days — small steps still shape the trail you're on.`;
+    return `You showed up ${daysShowedUp} of ${eligibleDays} ${dayLabel} — small steps still shape the trail you're on.`;
   }
   return 'The trail is still here when you are ready.';
 }
@@ -171,6 +173,26 @@ function findBestHabit(
   };
 }
 
+export function computeWeeklyRecapRollupRange(
+  challenge: ChallengeLike,
+  timezone: string,
+  dayScores: DayScoreRow[],
+  now = new Date(),
+): WeeklyRecapEligibleRange {
+  const baseRange = computeWeeklyRecapEligibleRange(challenge, timezone, now);
+  const finalizedDateKeys = new Set(
+    dayScores
+      .filter((score) => score.finalized)
+      .map((score) => formatLocalDateKey(score.date, timezone)),
+  );
+  return capEligibleRangeToFinalizedDays(
+    baseRange,
+    finalizedDateKeys,
+    timezone,
+    now,
+  );
+}
+
 export function computeWeeklyRecapRollup(input: {
   challenge: ChallengeLike;
   timezone: string;
@@ -181,7 +203,12 @@ export function computeWeeklyRecapRollup(input: {
 }): WeeklyRecapRollup {
   const now = input.now ?? new Date();
   const timezone = input.timezone;
-  const range = computeWeeklyRecapEligibleRange(input.challenge, timezone, now);
+  const range = computeWeeklyRecapRollupRange(
+    input.challenge,
+    timezone,
+    input.dayScores,
+    now,
+  );
   const { weekStartKey, weekEndKey } = getWeeklyRecapWeekKeys(timezone, now);
 
   const finalizedInWeek = input.dayScores.filter((score) => {
@@ -219,7 +246,11 @@ export function computeWeeklyRecapRollup(input: {
     .map((score) => ({ date: score.date, breakdown: score.breakdown }));
 
   const streakStart = streakBeforeWeek(finalizedScores, weekStartKey, timezone);
-  const streakEnd = streakAtWeekEnd(finalizedScores, weekEndKey, timezone);
+  const streakEnd = streakAtWeekEnd(
+    finalizedScores,
+    range.eligibleEndKey,
+    timezone,
+  );
 
   const best = findBestHabit(
     input.activityLogs,
@@ -287,9 +318,10 @@ export function summarizeWeeklyRecapRollup(rollup: WeeklyRecapRollup): string {
 export function getRollupEligibleRangeForTest(
   challenge: ChallengeLike,
   timezone: string,
+  dayScores: DayScoreRow[] = [],
   now?: Date,
 ): WeeklyRecapEligibleRange {
-  return computeWeeklyRecapEligibleRange(challenge, timezone, now);
+  return computeWeeklyRecapRollupRange(challenge, timezone, dayScores, now);
 }
 
 /** @internal test helper */

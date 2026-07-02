@@ -270,8 +270,15 @@ const emptyToday = {
   dayTotals: {
     netXp: 0,
     personalXp: 0,
+    xpEarned: 0,
+    xpDeducted: 0,
   },
+  dateKey: '2026-07-02',
+  isViewingToday: true,
+  canNavigateBack: false,
+  canNavigateForward: false,
   canEdit: true,
+  currentDay: 1,
 };
 
 const adminGroup = {

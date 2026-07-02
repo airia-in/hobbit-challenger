@@ -90,6 +90,22 @@ export function formatLocalDateKey(date: Date, timezone: string): string {
   return formatDateKey(date, timezone);
 }
 
+const LOCAL_DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** True when `dateKey` is a YYYY-MM-DD string. */
+export function isLocalDateKey(dateKey: string): boolean {
+  return LOCAL_DATE_KEY_PATTERN.test(dateKey);
+}
+
+/** UTC midnight for a local calendar day in the given timezone. */
+export function parseLocalDateKey(dateKey: string, timezone: string): Date {
+  if (!isLocalDateKey(dateKey)) {
+    throw new Error(`Invalid local date key: ${dateKey}`);
+  }
+  const { year, month, day } = parseDateKey(dateKey);
+  return zonedTimeToUtc({ year, month, day }, timezone);
+}
+
 function parseDateKey(
   dateKey: string,
 ): Omit<DateParts, 'hour' | 'minute' | 'second'> {

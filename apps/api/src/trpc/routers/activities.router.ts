@@ -11,6 +11,19 @@ import { requireGroupAdmin } from './groups.router';
 
 const activityLogStateSchema = z.enum(['DONE', 'FAILED', 'UNLOGGED']);
 
+const localDateKeySchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD');
+
+const optionalDateInputSchema = z.object({
+  date: localDateKeySchema.optional(),
+});
+
+const mutationDateInputSchema = z.object({
+  activityId: z.string().min(1),
+  date: localDateKeySchema.optional(),
+});
+
 async function getCallerGroupId(
   prisma: Parameters<typeof requireGroupAdmin>[0],
   userId: string,
@@ -23,24 +36,30 @@ async function getCallerGroupId(
 }
 
 export const activitiesRouter = router({
-  getToday: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.activitiesService.getToday(ctx.prisma, ctx.user.id);
-  }),
+  getToday: protectedProcedure
+    .input(optionalDateInputSchema.optional())
+    .query(async ({ ctx, input }) => {
+      return ctx.activitiesService.getToday(
+        ctx.prisma,
+        ctx.user.id,
+        input?.date,
+      );
+    }),
 
   markActivity: protectedProcedure
-    .input(z.object({ activityId: z.string().min(1) }))
+    .input(mutationDateInputSchema)
     .mutation(async ({ ctx, input }) => {
       return ctx.activitiesService.markActivity(
         ctx.prisma,
         ctx.user.id,
         input.activityId,
+        input.date,
       );
     }),
 
   logNumber: protectedProcedure
     .input(
-      z.object({
-        activityId: z.string().min(1),
+      mutationDateInputSchema.extend({
         value: z.number().finite().min(0),
       }),
     )
@@ -50,13 +69,13 @@ export const activitiesRouter = router({
         ctx.user.id,
         input.activityId,
         input.value,
+        input.date,
       );
     }),
 
   setSubPoints: protectedProcedure
     .input(
-      z.object({
-        activityId: z.string().min(1),
+      mutationDateInputSchema.extend({
         states: z.record(z.string(), activityLogStateSchema),
       }),
     )
@@ -66,13 +85,13 @@ export const activitiesRouter = router({
         ctx.user.id,
         input.activityId,
         input.states,
+        input.date,
       );
     }),
 
   setTier: protectedProcedure
     .input(
-      z.object({
-        activityId: z.string().min(1),
+      mutationDateInputSchema.extend({
         tier: z.string().min(1),
       }),
     )
@@ -82,23 +101,24 @@ export const activitiesRouter = router({
         ctx.user.id,
         input.activityId,
         input.tier,
+        input.date,
       );
     }),
 
   undoActivity: protectedProcedure
-    .input(z.object({ activityId: z.string().min(1) }))
+    .input(mutationDateInputSchema)
     .mutation(async ({ ctx, input }) => {
       return ctx.activitiesService.undoActivity(
         ctx.prisma,
         ctx.user.id,
         input.activityId,
+        input.date,
       );
     }),
 
   attachProof: protectedProcedure
     .input(
-      z.object({
-        activityId: z.string().min(1),
+      mutationDateInputSchema.extend({
         // Only paths from our /api/uploads endpoint; blocks SSRF, data URIs, and .. traversal.
         proofUrl: z
           .string()
@@ -114,6 +134,7 @@ export const activitiesRouter = router({
         ctx.user.id,
         input.activityId,
         input.proofUrl,
+        input.date,
       );
     }),
 

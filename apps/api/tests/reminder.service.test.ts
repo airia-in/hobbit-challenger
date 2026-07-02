@@ -4,7 +4,8 @@ import {
   ReminderService,
 } from '../src/cron/reminder.service';
 import type { ReminderContext } from '../src/whatsapp/reminder-context.service';
-import { parseLocalDateKey } from '../src/utils/day-window';
+import { addLocalDays, parseLocalDateKey } from '../src/utils/day-window';
+import { STREAK_FREEZE_CONSUMED_KIND } from '../src/whatsapp/streak-freeze-message.service';
 
 type ReminderLogRow = {
   id: string;
@@ -167,6 +168,7 @@ const defaultContext: ReminderContext = {
   journeyMilestone: null,
   currentStreak: 0,
   longestStreak: 0,
+  streakFreezesAvailable: 0,
 };
 
 describe('ReminderService', () => {
@@ -824,6 +826,50 @@ describe('ReminderService', () => {
     expect(recoveryLog?.date.getTime()).toBe(
       parseLocalDateKey(recoveryBreakDate, timezone).getTime(),
     );
+  });
+
+  it('defers morning reminder when streak-freeze consume one-shot was sent today', async () => {
+    const localDate = new Date('2026-06-15T00:00:00.000Z');
+    const yesterday = addLocalDays(localDate, -1, timezone);
+
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Good morning!');
+    const buildContext = vi.fn().mockResolvedValue(defaultContext);
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          whatsappOptIn: true,
+        },
+      ],
+      reminderLogs: [
+        {
+          id: 'consume-1',
+          userId: 'u1',
+          date: yesterday,
+          kind: STREAK_FREEZE_CONSUMED_KIND,
+          status: 'SENT',
+          sentAt: new Date('2026-06-15T04:30:00.000Z'),
+        },
+      ],
+    });
+
+    const service = createReminderService(
+      prisma,
+      { isConfigured: () => true, sendText },
+      { buildContext },
+      { compose },
+    );
+
+    await service.processReminders();
+
+    expect(sendText).not.toHaveBeenCalled();
+    expect(compose).not.toHaveBeenCalled();
   });
 
   it('defers all reminders when win-back owns the day', async () => {

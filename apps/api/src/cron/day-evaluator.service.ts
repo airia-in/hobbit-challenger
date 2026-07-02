@@ -8,6 +8,7 @@ import {
 import { evaluateDayRollover } from '../services/day-finalizer';
 import { activeChallengeRelationArgs } from '../utils/challenge-query';
 import { fallbackScheduledEnd } from '../utils/challenge-range';
+import { isFreezeAbsorbed } from '../utils/day-completion';
 import { addLocalDays, getUserLocalDate } from '../utils/day-window';
 import { StreakFreezeMessageService } from '../whatsapp/streak-freeze-message.service';
 
@@ -27,7 +28,14 @@ export class DayEvaluatorService {
       where: {
         challenges: { some: { isActive: true } },
       },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        whatsappOptIn: true,
+        timezone: true,
+        reminderTime: true,
+        groupId: true,
         group: { select: { challengeTimezone: true } },
         challenges: activeChallengeRelationArgs(),
       },
@@ -44,6 +52,7 @@ export class DayEvaluatorService {
           user.phone,
           user.whatsappOptIn,
           user.timezone,
+          user.reminderTime,
           user.group?.challengeTimezone ?? user.timezone,
           user.groupId,
           challenge,
@@ -60,6 +69,7 @@ export class DayEvaluatorService {
     userPhone: string | null,
     whatsappOptIn: boolean,
     timezone: string,
+    reminderTime: string | null,
     challengeTimezone: string,
     groupId: string | null,
     challenge: {
@@ -73,6 +83,7 @@ export class DayEvaluatorService {
       streakFreezesAvailable: number;
       streakFreezesUsed: number;
       lastStreakFreezeGrantedAt: Date | null;
+      isActive: boolean;
     },
   ) {
     const orConditions: Array<Record<string, unknown>> = [
@@ -124,15 +135,29 @@ export class DayEvaluatorService {
     });
 
     if (existingScore?.finalized) {
-      await this.maybeSendStreakFreezeGrantMessage({
+      await this.maybeSendStreakFreezeConsumeMessage({
         userId,
         userName,
         userPhone,
         whatsappOptIn,
         evaluationDay,
         currentStreak: challenge.currentStreak,
+        challengeTimezone,
+        reminderTime,
+        freezeConsumedOnDay: isFreezeAbsorbed(existingScore),
+        challengeActive: challenge.isActive,
+      });
+      await this.maybeRetryStreakFreezeGrantMessage({
+        userId,
+        userName,
+        userPhone,
+        whatsappOptIn,
+        currentStreak: challenge.currentStreak,
         streakFreezesAvailable: challenge.streakFreezesAvailable,
         lastStreakFreezeGrantedAt: challenge.lastStreakFreezeGrantedAt,
+        challengeTimezone,
+        reminderTime,
+        challengeActive: challenge.isActive,
       });
       if (previousDay.getTime() > challengeEndDay.getTime()) {
         await this.prisma.challenge.update({
@@ -253,44 +278,54 @@ export class DayEvaluatorService {
     });
 
     if (finalized) {
-      await this.maybeSendStreakFreezeGrantMessage({
+      await this.maybeSendStreakFreezeConsumeMessage({
         userId,
         userName,
         userPhone,
         whatsappOptIn,
         evaluationDay,
         currentStreak: result.challengeUpdate.currentStreak,
+        challengeTimezone,
+        reminderTime,
+        freezeConsumedOnDay: result.flags.freezeConsumed,
+        challengeActive: !result.challengeUpdate.completed,
+      });
+      await this.maybeRetryStreakFreezeGrantMessage({
+        userId,
+        userName,
+        userPhone,
+        whatsappOptIn,
+        currentStreak: result.challengeUpdate.currentStreak,
         streakFreezesAvailable:
           result.challengeUpdate.streakFreezesAvailable ?? 0,
         lastStreakFreezeGrantedAt:
           result.challengeUpdate.lastStreakFreezeGrantedAt ?? null,
-        grantAwardedThisRun: result.flags.freezeGranted,
+        challengeTimezone,
+        reminderTime,
+        challengeActive: !result.challengeUpdate.completed,
       });
     }
   }
 
-  private async maybeSendStreakFreezeGrantMessage(input: {
+  private async maybeRetryStreakFreezeGrantMessage(input: {
     userId: string;
     userName: string;
     userPhone: string | null;
     whatsappOptIn: boolean;
-    evaluationDay: Date;
     currentStreak: number;
     streakFreezesAvailable: number;
     lastStreakFreezeGrantedAt: Date | null;
-    grantAwardedThisRun?: boolean;
+    challengeTimezone: string;
+    reminderTime: string | null;
+    challengeActive: boolean;
   }): Promise<void> {
-    if (!this.streakFreezeMessage || !input.userPhone || !input.whatsappOptIn) {
-      return;
-    }
-
-    const grantedOnEvaluationDay =
-      input.grantAwardedThisRun ||
-      (input.lastStreakFreezeGrantedAt !== null &&
-        input.lastStreakFreezeGrantedAt.getTime() ===
-          input.evaluationDay.getTime());
-
-    if (!grantedOnEvaluationDay) {
+    if (
+      !this.streakFreezeMessage ||
+      !input.userPhone ||
+      !input.whatsappOptIn ||
+      !input.challengeActive ||
+      !input.lastStreakFreezeGrantedAt
+    ) {
       return;
     }
 
@@ -300,13 +335,56 @@ export class DayEvaluatorService {
         userId: input.userId,
         userName: input.userName,
         phone: input.userPhone,
-        evaluationDay: input.evaluationDay,
+        evaluationDay: input.lastStreakFreezeGrantedAt,
         currentStreak: input.currentStreak,
         streakFreezesAvailable: input.streakFreezesAvailable,
+        timezone: input.challengeTimezone,
+        morningTime: input.reminderTime ?? undefined,
       });
     } catch (error) {
       this.logger.error(
         `Streak freeze grant message failed for user ${input.userId}:`,
+        error,
+      );
+    }
+  }
+
+  private async maybeSendStreakFreezeConsumeMessage(input: {
+    userId: string;
+    userName: string;
+    userPhone: string | null;
+    whatsappOptIn: boolean;
+    evaluationDay: Date;
+    currentStreak: number;
+    challengeTimezone: string;
+    reminderTime: string | null;
+    freezeConsumedOnDay: boolean;
+    challengeActive: boolean;
+  }): Promise<void> {
+    if (
+      !this.streakFreezeMessage ||
+      !input.userPhone ||
+      !input.whatsappOptIn ||
+      !input.freezeConsumedOnDay ||
+      !input.challengeActive
+    ) {
+      return;
+    }
+
+    try {
+      await this.streakFreezeMessage.trySendConsumeMessage({
+        prisma: this.prisma,
+        userId: input.userId,
+        userName: input.userName,
+        phone: input.userPhone,
+        evaluationDay: input.evaluationDay,
+        currentStreak: input.currentStreak,
+        timezone: input.challengeTimezone,
+        morningTime: input.reminderTime ?? undefined,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Streak freeze consume message failed for user ${input.userId}:`,
         error,
       );
     }

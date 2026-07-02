@@ -36,6 +36,7 @@ export type ReminderCopyLines = {
   themedIntro: string;
   unloggedHabitsLine: string;
   streakLine: string;
+  streakFreezeLine: string;
   milestoneLine: string;
   yesterdayMissLine: string;
   streakAtRiskLine: string;
@@ -77,8 +78,17 @@ export function buildReminderCopyLines(
     : '';
 
   const streakAtRiskLine = context.streakAtRisk
-    ? `Your ${context.currentStreak}-day streak needs today's logs before the campfire goes out.`
+    ? context.streakFreezesAvailable > 0
+      ? `Your ${context.currentStreak}-day streak needs today's logs before the campfire goes out — your rain cloak has you covered if tonight slips.`
+      : `Your ${context.currentStreak}-day streak needs today's logs before the campfire goes out.`
     : '';
+
+  const streakFreezeLine =
+    context.streakFreezesAvailable > 0
+      ? context.streakAtRisk
+        ? ''
+        : `Rain cloak ready — ${context.streakFreezesAvailable} streak freeze available if a scored day slips this week.`
+      : '';
 
   const recoveryLine = context.missedYesterday
     ? 'One muddy day — the trail rule is never miss twice. Today counts.'
@@ -97,6 +107,7 @@ export function buildReminderCopyLines(
     themedIntro,
     unloggedHabitsLine,
     streakLine,
+    streakFreezeLine,
     milestoneLine,
     yesterdayMissLine,
     streakAtRiskLine,
@@ -277,6 +288,11 @@ const MORNING_STREAK_AT_RISK: readonly string[] = [
   "Hey {{name}}, {{brandName}} here — day {{dayNumber}} — don't let a {{currentStreak}}-day streak get cold. {{tasksRemaining}} still open.",
 ];
 
+const MORNING_STREAK_AT_RISK_WITH_CLOAK: readonly string[] = [
+  'Good morning, {{name}}! {{brandName}} here — {{currentStreak}}-day streak, rain cloak in the pack, {{tasksRemaining}} log(s) today.',
+  'Morning, {{name}}! {{brandName}} here — your cloak has your back; {{tasksRemaining}} log(s) for the {{currentStreak}}-day trail.',
+];
+
 const MORNING_TASKS: readonly string[] = [
   'Good morning, {{name}}! {{brandName}} here — day {{dayNumber}} with {{tasksRemaining}} task(s) in the pack.',
   'Morning, {{name}}! {{brandName}} here — day {{dayNumber}} with {{tasksRemaining}} habit(s) to log before sunset.',
@@ -291,6 +307,11 @@ const EVENING_STREAK_AT_RISK: readonly string[] = [
   'Hi {{name}}, {{brandName}} here — {{currentStreak}}-day streak at risk. {{tasksRemaining}} task(s) and {{xpAtRisk}} XP before midnight.',
   'Evening, {{name}}! {{brandName}} here — {{tasksRemaining}} open, {{xpAtRisk}} XP at stake for your {{currentStreak}}-day run.',
   "Hey {{name}}, {{brandName}} here — don't let day {{dayNumber}} snap a {{currentStreak}}-day streak. {{tasksRemaining}} still unlogged, {{xpAtRisk}} XP at risk.",
+];
+
+const EVENING_STREAK_AT_RISK_WITH_CLOAK: readonly string[] = [
+  'Hi {{name}}, {{brandName}} here — {{currentStreak}}-day streak at risk, but your rain cloak has you covered tonight. {{tasksRemaining}} task(s), {{xpAtRisk}} XP before midnight.',
+  'Evening, {{name}}! {{brandName}} here — cloak ready if needed; still worth logging {{tasksRemaining}} for {{xpAtRisk}} XP on your {{currentStreak}}-day run.',
 ];
 
 const EVENING_XP_ONLY: readonly string[] = [
@@ -348,7 +369,12 @@ function selectMorningTemplate(context: ReminderContext, seed: number): string {
     return pickVariant(MORNING_YESTERDAY_MISS, seed);
   }
   if (context.streakAtRisk) {
-    return pickVariant(MORNING_STREAK_AT_RISK, seed);
+    return pickVariant(
+      context.streakFreezesAvailable > 0
+        ? MORNING_STREAK_AT_RISK_WITH_CLOAK
+        : MORNING_STREAK_AT_RISK,
+      seed,
+    );
   }
   return pickVariant(MORNING_TASKS, seed);
 }
@@ -356,6 +382,14 @@ function selectMorningTemplate(context: ReminderContext, seed: number): string {
 function selectEveningTemplate(context: ReminderContext, seed: number): string {
   if (context.journeyMilestone != null) {
     return pickVariant(EVENING_MILESTONE, seed);
+  }
+  if (context.streakAtRisk) {
+    return pickVariant(
+      context.streakFreezesAvailable > 0
+        ? EVENING_STREAK_AT_RISK_WITH_CLOAK
+        : EVENING_STREAK_AT_RISK,
+      seed,
+    );
   }
   if (context.tasksRemaining <= 0 && context.xpAtRisk > 0) {
     return pickVariant(EVENING_XP_ONLY, seed);
@@ -411,9 +445,11 @@ export const FALLBACK_VARIANT_TEMPLATES = [
   ...MORNING_MILESTONE,
   ...MORNING_YESTERDAY_MISS,
   ...MORNING_STREAK_AT_RISK,
+  ...MORNING_STREAK_AT_RISK_WITH_CLOAK,
   ...MORNING_TASKS,
   ...EVENING_MILESTONE,
   ...EVENING_STREAK_AT_RISK,
+  ...EVENING_STREAK_AT_RISK_WITH_CLOAK,
   ...EVENING_XP_ONLY,
   ...EVENING_DEFAULT,
   ...RECOVERY_DEFAULT,

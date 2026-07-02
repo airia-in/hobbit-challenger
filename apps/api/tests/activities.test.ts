@@ -1274,11 +1274,7 @@ describe('activities service', () => {
       }),
     );
 
-    const result = await service.getToday(
-      fake.prisma,
-      USER_ID,
-      yesterdayKey,
-    );
+    const result = await service.getToday(fake.prisma, USER_ID, yesterdayKey);
 
     expect(result.dateKey).toBe(yesterdayKey);
     expect(result.isViewingToday).toBe(false);

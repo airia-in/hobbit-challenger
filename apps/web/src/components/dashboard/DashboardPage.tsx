@@ -60,9 +60,9 @@ function useTodayMutations(viewedDateKey?: string) {
     void utils.stats.getDashboard.invalidate();
   }
 
-  function createHandlers<
-    TInput extends { activityId: string; date?: string },
-  >(optimisticPatch: (data: GetTodayCache, input: TInput) => GetTodayCache) {
+  function createHandlers<TInput extends { activityId: string; date?: string }>(
+    optimisticPatch: (data: GetTodayCache, input: TInput) => GetTodayCache,
+  ) {
     return {
       async onMutate(input: TInput) {
         await utils.activities.getToday.cancel(queryInput);
@@ -396,7 +396,9 @@ export function DashboardContent() {
                 type="button"
                 data-testid="dashboard-date-prev"
                 disabled={!today.canNavigateBack}
-                onClick={() => setViewedDateKey(shiftDateKey(today.dateKey, -1))}
+                onClick={() =>
+                  setViewedDateKey(shiftDateKey(today.dateKey, -1))
+                }
                 className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm uppercase tracking-wider text-[var(--text-primary)] transition hover:border-[var(--accent-red)]/50 disabled:cursor-not-allowed disabled:opacity-40"
                 style={{ fontFamily: 'var(--font-mono)' }}
                 aria-label="Previous day"

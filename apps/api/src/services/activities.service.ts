@@ -549,11 +549,7 @@ export async function recomputeLiveDayScore(
     select: { finalized: true, netXp: true },
   });
 
-  const dayNumber = dayNumberForDateKey(
-    challenge.startDate,
-    dateKey,
-    timezone,
-  );
+  const dayNumber = dayNumberForDateKey(challenge.startDate, dateKey, timezone);
 
   await prisma.dayScore.upsert({
     where: {
@@ -777,12 +773,15 @@ async function assertCanMutateForDate(
     where: { challengeId, activityId, date: targetDate },
   });
 
-  if (existing && isActivityLogLogged({
-    state: existing.state,
-    tier: existing.tier,
-    value: existing.value,
-    subPoints: existing.subPoints,
-  })) {
+  if (
+    existing &&
+    isActivityLogLogged({
+      state: existing.state,
+      tier: existing.tier,
+      value: existing.value,
+      subPoints: existing.subPoints,
+    })
+  ) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
       message: 'Entry already recorded for this date',
@@ -971,7 +970,8 @@ export class ActivitiesService {
       dayTotals = emptyDayTotals();
     }
 
-    const todayWindowOpenForEdit = isViewingToday && todayWindowOpen && isWithinRange;
+    const todayWindowOpenForEdit =
+      isViewingToday && todayWindowOpen && isWithinRange;
     const scoredActivities: TodayActivity[] = [];
     const personalActivities: TodayActivity[] = [];
 

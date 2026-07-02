@@ -3,20 +3,28 @@ import {
   type MilestoneKey,
   MILESTONE_CATALOG,
   MILESTONE_KEYS,
+  compareMilestonePrestige,
   getMilestoneDefinition,
+  pickMostPrestigiousMilestone,
 } from '@workspace-starter/types';
 import type { PrismaService } from '../prisma/prisma.service';
-import {
-  isActivityLogLogged,
-  isInterimDayCompleted,
-} from '../utils/day-completion';
+import { isInterimDayCompleted } from '../utils/day-completion';
 import { formatLocalDateKey } from '../utils/day-window';
 import {
-  computeLongestHabitStreak,
+  computeDormantDaysBefore,
+  computeLongestCompletedHabitStreak,
   countConsecutivePerfectDays,
   countLoggedActivityLogs,
+  deriveComebackDate,
+  deriveFirstFreezeConsumedDate,
+  deriveFirstPerfectDayDate,
+  deriveFirstPerfectWeekDate,
+  deriveHabitStreak14Date,
+  deriveStreakMilestoneDates,
+  deriveTotalLogs100Date,
+  hasAnyActivityLogOnDay,
+  replayChallengeStreak,
 } from '../utils/milestone-metrics';
-import { localCalendarDaysBetween } from '../utils/winback-dormancy';
 
 export type MilestoneEvaluationInput = {
   userId: string;
@@ -34,6 +42,11 @@ export type MilestoneEvaluationResult = {
   newlyUnlocked: MilestoneKey[];
 };
 
+export type MilestoneUnlockCandidate = {
+  key: MilestoneKey;
+  unlockedAt: Date;
+};
+
 const STREAK_THRESHOLDS: Array<{ key: MilestoneKey; days: number }> = [
   { key: 'streak_7', days: 7 },
   { key: 'streak_21', days: 21 },
@@ -41,201 +54,315 @@ const STREAK_THRESHOLDS: Array<{ key: MilestoneKey; days: number }> = [
   { key: 'streak_66', days: 66 },
 ];
 
-/** Pure evaluation: which milestones unlock given current state (idempotent keys). */
-export function evaluateMilestoneCandidates(
-  input: MilestoneEvaluationInput,
-  context: {
-    existingKeys: Set<string>;
-    totalLogCount: number;
-    consecutivePerfectDays: number;
-    longestHabitStreak: number;
-    dormantDaysBeforeEvaluation: number;
-  },
-): MilestoneKey[] {
-  const unlocked: MilestoneKey[] = [];
+export type MilestoneHistoricalContext = {
+  existingKeys: Set<string>;
+  totalLogCount: number;
+  longestHabitStreak: number;
+  dormantDaysBeforeEvaluation: number;
+  loggedOnEvaluationDay: boolean;
+  pendingUnlocks: MilestoneUnlockCandidate[];
+};
 
+/** Pure evaluation: which milestones unlock from full-history context. */
+export function evaluateMilestoneCandidates(
+  context: MilestoneHistoricalContext,
+): MilestoneKey[] {
+  return context.pendingUnlocks
+    .filter((candidate) => !context.existingKeys.has(candidate.key))
+    .map((candidate) => candidate.key);
+}
+
+export function buildHistoricalUnlockCandidates(input: {
+  allFinalizedDayScores: Array<{ date: Date; breakdown: unknown }>;
+  challengeDayScores: Array<{ date: Date; breakdown: unknown }>;
+  challengeActivityLogs: Array<{
+    activityId: string;
+    date: Date;
+    state: string | null;
+    tier: string | null;
+    value: number | null;
+    subPoints: unknown;
+  }>;
+  allUserLogs: Array<{
+    date: Date;
+    state: string | null;
+    tier: string | null;
+    value: number | null;
+    subPoints: unknown;
+  }>;
+  evaluationDay: Date;
+  timezone: string;
+  newStreak: number;
+  dayCounted: boolean;
+  allScoredLogged: boolean;
+  freezeConsumed: boolean;
+  streakFreezesUsed: number;
+}): MilestoneUnlockCandidate[] {
+  const candidates: MilestoneUnlockCandidate[] = [];
+
+  const streakDates = deriveStreakMilestoneDates(input.challengeDayScores);
   for (const { key, days } of STREAK_THRESHOLDS) {
-    if (
-      input.newStreak >= days &&
-      input.dayCounted &&
-      !context.existingKeys.has(key)
-    ) {
-      unlocked.push(key);
+    const historical = streakDates.get(key);
+    if (historical) {
+      candidates.push({ key, unlockedAt: historical });
+      continue;
+    }
+    if (input.dayCounted && input.newStreak >= days) {
+      candidates.push({ key, unlockedAt: input.evaluationDay });
     }
   }
 
-  if (
-    input.allScoredLogged &&
-    input.dayCounted &&
-    !context.existingKeys.has('first_perfect_day')
-  ) {
-    unlocked.push('first_perfect_day');
+  const firstPerfectDay = deriveFirstPerfectDayDate(
+    input.allFinalizedDayScores,
+  );
+  if (firstPerfectDay) {
+    candidates.push({ key: 'first_perfect_day', unlockedAt: firstPerfectDay });
+  } else if (input.dayCounted && input.allScoredLogged) {
+    candidates.push({
+      key: 'first_perfect_day',
+      unlockedAt: input.evaluationDay,
+    });
   }
 
-  if (
-    context.consecutivePerfectDays >= 7 &&
-    !context.existingKeys.has('first_perfect_week')
-  ) {
-    unlocked.push('first_perfect_week');
+  const firstPerfectWeek = deriveFirstPerfectWeekDate(
+    input.allFinalizedDayScores,
+    input.timezone,
+  );
+  if (firstPerfectWeek) {
+    candidates.push({
+      key: 'first_perfect_week',
+      unlockedAt: firstPerfectWeek,
+    });
+  } else if (input.dayCounted && input.allScoredLogged) {
+    const evaluationKey = formatLocalDateKey(
+      input.evaluationDay,
+      input.timezone,
+    );
+    const perfectKeys = input.allFinalizedDayScores
+      .filter((score) => isInterimDayCompleted({ ...score, finalized: true }))
+      .map((score) => formatLocalDateKey(score.date, input.timezone));
+    if (countConsecutivePerfectDays(perfectKeys, evaluationKey, true) >= 7) {
+      candidates.push({
+        key: 'first_perfect_week',
+        unlockedAt: input.evaluationDay,
+      });
+    }
   }
 
-  if (
-    context.totalLogCount >= 100 &&
-    !context.existingKeys.has('total_logs_100')
-  ) {
-    unlocked.push('total_logs_100');
+  const totalLogs = countLoggedActivityLogs(input.allUserLogs);
+  if (totalLogs >= 100) {
+    const at100 =
+      deriveTotalLogs100Date(input.allUserLogs) ?? input.evaluationDay;
+    candidates.push({ key: 'total_logs_100', unlockedAt: at100 });
   }
 
-  if (
-    context.longestHabitStreak >= 14 &&
-    !context.existingKeys.has('habit_streak_14')
+  const habitStreak14Date = deriveHabitStreak14Date(
+    input.challengeActivityLogs,
+    input.timezone,
+  );
+  if (habitStreak14Date) {
+    candidates.push({ key: 'habit_streak_14', unlockedAt: habitStreak14Date });
+  } else if (
+    computeLongestCompletedHabitStreak(
+      input.challengeActivityLogs,
+      input.timezone,
+    ) >= 14
   ) {
-    unlocked.push('habit_streak_14');
+    candidates.push({
+      key: 'habit_streak_14',
+      unlockedAt: input.evaluationDay,
+    });
   }
 
-  if (
-    input.dayCounted &&
-    context.dormantDaysBeforeEvaluation >= 3 &&
-    !context.existingKeys.has('comeback')
-  ) {
-    unlocked.push('comeback');
+  const comebackDate = deriveComebackDate(
+    input.challengeActivityLogs,
+    input.timezone,
+  );
+  const dormantDays = computeDormantDaysBefore(
+    input.challengeActivityLogs,
+    input.evaluationDay,
+    input.timezone,
+  );
+  const loggedToday = hasAnyActivityLogOnDay(
+    input.challengeActivityLogs,
+    input.evaluationDay,
+    input.timezone,
+  );
+
+  if (comebackDate) {
+    candidates.push({ key: 'comeback', unlockedAt: comebackDate });
+  } else if (loggedToday && dormantDays >= 3) {
+    candidates.push({ key: 'comeback', unlockedAt: input.evaluationDay });
   }
 
-  if (
-    input.freezeConsumed &&
-    !context.existingKeys.has('first_freeze_consumed')
-  ) {
-    unlocked.push('first_freeze_consumed');
+  const freezeDate = deriveFirstFreezeConsumedDate(input.challengeDayScores);
+  if (freezeDate) {
+    candidates.push({ key: 'first_freeze_consumed', unlockedAt: freezeDate });
+  } else if (input.freezeConsumed || input.streakFreezesUsed > 0) {
+    candidates.push({
+      key: 'first_freeze_consumed',
+      unlockedAt: input.evaluationDay,
+    });
   }
 
-  return unlocked;
+  const byKey = new Map<MilestoneKey, MilestoneUnlockCandidate>();
+  for (const candidate of candidates) {
+    const existing = byKey.get(candidate.key);
+    if (
+      !existing ||
+      candidate.unlockedAt.getTime() < existing.unlockedAt.getTime()
+    ) {
+      byKey.set(candidate.key, candidate);
+    }
+  }
+
+  return [...byKey.values()].sort((a, b) =>
+    compareMilestonePrestige(a.key, b.key),
+  );
 }
 
 export async function loadMilestoneEvaluationContext(
   prisma: PrismaService,
-  input: MilestoneEvaluationInput,
-): Promise<{
-  existingKeys: Set<string>;
-  totalLogCount: number;
-  consecutivePerfectDays: number;
-  longestHabitStreak: number;
-  dormantDaysBeforeEvaluation: number;
-}> {
-  const [existing, perfectDayScores, completionActivities, logs] =
-    await Promise.all([
-      prisma.userMilestone.findMany({
-        where: { userId: input.userId },
-        select: { milestoneKey: true },
-      }),
-      prisma.dayScore.findMany({
-        where: {
-          challengeId: input.challengeId,
-          finalized: true,
-        },
-        select: { date: true, breakdown: true, finalized: true },
-        orderBy: { date: 'desc' },
-        take: 14,
-      }),
-      prisma.activity.findMany({
-        where: {
-          OR: [
-            { ownerUserId: input.userId, isPersonal: true, active: true },
-            ...(input.groupId
-              ? [
-                  {
-                    groupId: input.groupId,
-                    scored: true,
-                    isPersonal: false,
-                    active: true,
-                  },
-                ]
-              : []),
-          ],
-          kind: { in: ['CHECKBOX', 'SUBPOINTS', 'TIERED'] },
-        },
-        select: { id: true },
-      }),
-      prisma.activityLog.findMany({
-        where: { userId: input.userId },
-        select: {
-          activityId: true,
-          date: true,
-          state: true,
-          tier: true,
-          value: true,
-          subPoints: true,
-        },
-        orderBy: { date: 'asc' },
-      }),
-    ]);
+  input: MilestoneEvaluationInput & { streakFreezesUsed?: number },
+): Promise<MilestoneHistoricalContext> {
+  const [
+    existing,
+    allFinalizedDayScores,
+    challengeDayScores,
+    challenge,
+    completionActivities,
+    allUserLogs,
+    challengeActivityLogs,
+  ] = await Promise.all([
+    prisma.userMilestone.findMany({
+      where: { userId: input.userId },
+      select: { milestoneKey: true },
+    }),
+    prisma.dayScore.findMany({
+      where: { userId: input.userId, finalized: true },
+      select: { date: true, breakdown: true },
+      orderBy: { date: 'asc' },
+    }),
+    prisma.dayScore.findMany({
+      where: { challengeId: input.challengeId, finalized: true },
+      select: { date: true, breakdown: true },
+      orderBy: { date: 'asc' },
+    }),
+    prisma.challenge.findUnique({
+      where: { id: input.challengeId },
+      select: { streakFreezesUsed: true },
+    }),
+    prisma.activity.findMany({
+      where: {
+        OR: [
+          { ownerUserId: input.userId, isPersonal: true, active: true },
+          ...(input.groupId
+            ? [
+                {
+                  groupId: input.groupId,
+                  scored: true,
+                  isPersonal: false,
+                  active: true,
+                },
+              ]
+            : []),
+        ],
+        kind: { in: ['CHECKBOX', 'SUBPOINTS', 'TIERED'] },
+      },
+      select: { id: true },
+    }),
+    prisma.activityLog.findMany({
+      where: { userId: input.userId },
+      select: {
+        date: true,
+        state: true,
+        tier: true,
+        value: true,
+        subPoints: true,
+      },
+      orderBy: { date: 'asc' },
+    }),
+    prisma.activityLog.findMany({
+      where: { userId: input.userId, challengeId: input.challengeId },
+      select: {
+        activityId: true,
+        date: true,
+        state: true,
+        tier: true,
+        value: true,
+        subPoints: true,
+      },
+      orderBy: { date: 'asc' },
+    }),
+  ]);
 
   const existingKeys = new Set(existing.map((row) => row.milestoneKey));
+  const streakFreezesUsed =
+    input.streakFreezesUsed ?? challenge?.streakFreezesUsed ?? 0;
 
-  const evaluationKey = formatLocalDateKey(input.evaluationDay, input.timezone);
-  const perfectDays = perfectDayScores
-    .filter((score) => isInterimDayCompleted(score))
-    .map((score) => formatLocalDateKey(score.date, input.timezone));
-
-  const consecutivePerfectDays = countConsecutivePerfectDays(
-    perfectDays,
-    evaluationKey,
-    input.allScoredLogged && input.dayCounted,
-  );
+  const pendingUnlocks = buildHistoricalUnlockCandidates({
+    allFinalizedDayScores,
+    challengeDayScores,
+    challengeActivityLogs,
+    allUserLogs,
+    evaluationDay: input.evaluationDay,
+    timezone: input.timezone,
+    newStreak: input.newStreak,
+    dayCounted: input.dayCounted,
+    allScoredLogged: input.allScoredLogged,
+    freezeConsumed: input.freezeConsumed,
+    streakFreezesUsed,
+  });
 
   const activityIds = new Set(completionActivities.map((a) => a.id));
-  const relevantLogs = logs.filter((log) => activityIds.has(log.activityId));
-  const longestHabitStreak = computeLongestHabitStreak(
-    relevantLogs.map((log) => ({
-      activityId: log.activityId,
-      dateKey: formatLocalDateKey(log.date, input.timezone),
-      logged: isActivityLogLogged(log),
-    })),
+  const relevantLogs = challengeActivityLogs.filter((log) =>
+    activityIds.has(log.activityId),
   );
-
-  const logsBeforeEvaluation = logs.filter(
-    (log) =>
-      formatLocalDateKey(log.date, input.timezone) < evaluationKey &&
-      isActivityLogLogged(log),
-  );
-  const lastLogBefore =
-    logsBeforeEvaluation.length > 0
-      ? logsBeforeEvaluation[logsBeforeEvaluation.length - 1]
-      : undefined;
-  const dormantDaysBeforeEvaluation = lastLogBefore
-    ? localCalendarDaysBetween(
-        lastLogBefore.date,
-        input.evaluationDay,
-        input.timezone,
-      )
-    : 0;
 
   return {
     existingKeys,
-    totalLogCount: countLoggedActivityLogs(logs),
-    consecutivePerfectDays,
-    longestHabitStreak,
-    dormantDaysBeforeEvaluation,
+    totalLogCount: countLoggedActivityLogs(allUserLogs),
+    longestHabitStreak: computeLongestCompletedHabitStreak(
+      relevantLogs,
+      input.timezone,
+    ),
+    dormantDaysBeforeEvaluation: computeDormantDaysBefore(
+      challengeActivityLogs,
+      input.evaluationDay,
+      input.timezone,
+    ),
+    loggedOnEvaluationDay: hasAnyActivityLogOnDay(
+      challengeActivityLogs,
+      input.evaluationDay,
+      input.timezone,
+    ),
+    pendingUnlocks,
   };
 }
 
 export async function evaluateAndUnlockMilestones(
   prisma: PrismaService,
-  input: MilestoneEvaluationInput,
+  input: MilestoneEvaluationInput & { streakFreezesUsed?: number },
 ): Promise<MilestoneEvaluationResult> {
   const context = await loadMilestoneEvaluationContext(prisma, input);
-  const candidates = evaluateMilestoneCandidates(input, context);
+  const candidateKeys = evaluateMilestoneCandidates(context);
+  const unlockByKey = new Map(
+    context.pendingUnlocks.map((candidate) => [candidate.key, candidate]),
+  );
 
   const newlyUnlocked: MilestoneKey[] = [];
-  for (const key of candidates) {
+  for (const key of candidateKeys) {
     if (!MILESTONE_KEYS.includes(key)) {
       continue;
     }
+    const candidate = unlockByKey.get(key);
     try {
       await prisma.userMilestone.create({
         data: {
           userId: input.userId,
           challengeId: input.challengeId,
           milestoneKey: key,
+          unlockedAt: candidate?.unlockedAt ?? new Date(),
         },
       });
       newlyUnlocked.push(key);
@@ -262,12 +389,39 @@ export function shapeEarnedMilestone(row: {
   };
 }
 
+function groupLatestUnlockBatch(earned: EarnedMilestone[]): {
+  latestUnlock: EarnedMilestone | null;
+  latestUnlockAdditionalCount: number;
+} {
+  if (earned.length === 0) {
+    return { latestUnlock: null, latestUnlockAdditionalCount: 0 };
+  }
+
+  const sorted = [...earned].sort(
+    (a, b) =>
+      new Date(b.unlockedAt).getTime() - new Date(a.unlockedAt).getTime(),
+  );
+  const latestAt = new Date(sorted[0]!.unlockedAt).getTime();
+  const batch = sorted.filter(
+    (row) => new Date(row.unlockedAt).getTime() === latestAt,
+  );
+  const primaryKey =
+    pickMostPrestigiousMilestone(batch.map((row) => row.key)) ?? batch[0]!.key;
+  const primary = batch.find((row) => row.key === primaryKey) ?? batch[0]!;
+
+  return {
+    latestUnlock: primary,
+    latestUnlockAdditionalCount: Math.max(0, batch.length - 1),
+  };
+}
+
 export async function getUserMilestones(
   prisma: PrismaService,
   userId: string,
 ): Promise<{
   earned: EarnedMilestone[];
   latestUnlock: EarnedMilestone | null;
+  latestUnlockAdditionalCount: number;
 }> {
   const rows = await prisma.userMilestone.findMany({
     where: { userId },
@@ -280,12 +434,16 @@ export async function getUserMilestones(
     )
     .map(shapeEarnedMilestone);
 
+  const batch = groupLatestUnlockBatch(earned);
+
   return {
     earned,
-    latestUnlock: earned[0] ?? null,
+    ...batch,
   };
 }
 
 export function listMilestoneCatalog() {
   return MILESTONE_KEYS.map((key) => MILESTONE_CATALOG[key]);
 }
+
+export { pickMostPrestigiousMilestone, replayChallengeStreak };

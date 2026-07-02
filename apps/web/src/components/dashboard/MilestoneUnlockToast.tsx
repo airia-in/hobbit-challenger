@@ -1,22 +1,27 @@
 import { useEffect } from 'react';
 import type { EarnedMilestone } from '@workspace-starter/types';
+import { milestoneBatchSummaryLine } from '@workspace-starter/types';
 import { PERFECT_DAY_DISMISS } from '../../lib/celebrations';
 
 const AUTO_DISMISS_MS = 8000;
 
 type MilestoneUnlockToastProps = {
   milestone: EarnedMilestone;
+  additionalUnlockCount?: number;
   onDismiss: () => void;
 };
 
 export function MilestoneUnlockToast({
   milestone,
+  additionalUnlockCount = 0,
   onDismiss,
 }: MilestoneUnlockToastProps) {
   useEffect(() => {
     const timer = window.setTimeout(onDismiss, AUTO_DISMISS_MS);
     return () => window.clearTimeout(timer);
   }, [onDismiss]);
+
+  const batchLine = milestoneBatchSummaryLine(additionalUnlockCount);
 
   return (
     <div
@@ -38,6 +43,11 @@ export function MilestoneUnlockToast({
           </p>
           <p className="text-sm text-[var(--text-muted)]">
             {milestone.unlockCopy}
+            {batchLine ? (
+              <span className="block pt-1 text-[var(--text-primary)]">
+                {batchLine}
+              </span>
+            ) : null}
           </p>
         </div>
         <button

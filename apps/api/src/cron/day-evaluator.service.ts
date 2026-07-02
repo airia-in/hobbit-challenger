@@ -6,7 +6,10 @@ import {
   mapLogToInput,
 } from '../services/activities.service';
 import { evaluateDayRollover } from '../services/day-finalizer';
-import { evaluateAndUnlockMilestones } from '../services/milestones.service';
+import {
+  evaluateAndUnlockMilestones,
+  pickMostPrestigiousMilestone,
+} from '../services/milestones.service';
 import { activeChallengeRelationArgs } from '../utils/challenge-query';
 import { fallbackScheduledEnd } from '../utils/challenge-range';
 import { isFreezeAbsorbed } from '../utils/day-completion';
@@ -136,9 +139,30 @@ export class DayEvaluatorService {
         challengeId: challenge.id,
         date: evaluationDay,
       },
+      select: { finalized: true, breakdown: true },
     });
 
     if (existingScore?.finalized) {
+      const breakdown = existingScore.breakdown as {
+        allScoredLogged?: boolean;
+        freezeConsumed?: boolean;
+      } | null;
+      await this.maybeEvaluateMilestones({
+        userId,
+        userName,
+        userPhone,
+        whatsappOptIn,
+        groupId,
+        challengeId: challenge.id,
+        evaluationDay,
+        challengeTimezone,
+        reminderTime,
+        newStreak: challenge.currentStreak,
+        dayCounted: breakdown?.allScoredLogged === true,
+        allScoredLogged: breakdown?.allScoredLogged === true,
+        freezeConsumed: breakdown?.freezeConsumed === true,
+        streakFreezesUsed: challenge.streakFreezesUsed,
+      });
       await this.maybeSendStreakFreezeConsumeMessage({
         userId,
         userName,
@@ -296,7 +320,9 @@ export class DayEvaluatorService {
         dayCounted: result.dayScore.breakdown.allScoredLogged,
         allScoredLogged: result.dayScore.breakdown.allScoredLogged,
         freezeConsumed: result.flags.freezeConsumed,
-        challengeActive: !result.challengeUpdate.completed,
+        streakFreezesUsed:
+          result.challengeUpdate.streakFreezesUsed ??
+          challenge.streakFreezesUsed,
       });
       await this.maybeSendStreakFreezeConsumeMessage({
         userId,
@@ -341,7 +367,7 @@ export class DayEvaluatorService {
     dayCounted: boolean;
     allScoredLogged: boolean;
     freezeConsumed: boolean;
-    challengeActive: boolean;
+    streakFreezesUsed: number;
   }): Promise<void> {
     try {
       const { newlyUnlocked } = await evaluateAndUnlockMilestones(this.prisma, {
@@ -354,35 +380,40 @@ export class DayEvaluatorService {
         dayCounted: input.dayCounted,
         allScoredLogged: input.allScoredLogged,
         freezeConsumed: input.freezeConsumed,
+        streakFreezesUsed: input.streakFreezesUsed,
       });
 
       if (
         !this.milestoneMessage ||
         !input.userPhone ||
         !input.whatsappOptIn ||
-        !input.challengeActive
+        newlyUnlocked.length === 0
       ) {
         return;
       }
 
-      for (const milestoneKey of newlyUnlocked) {
-        try {
-          await this.milestoneMessage.trySendUnlockMessage({
-            prisma: this.prisma,
-            userId: input.userId,
-            userName: input.userName,
-            phone: input.userPhone,
-            evaluationDay: input.evaluationDay,
-            milestoneKey,
-            timezone: input.challengeTimezone,
-            morningTime: input.reminderTime ?? undefined,
-          });
-        } catch (error) {
-          this.logger.error(
-            `Milestone message failed for user ${input.userId} (${milestoneKey}):`,
-            error,
-          );
-        }
+      const primary = pickMostPrestigiousMilestone(newlyUnlocked);
+      if (!primary) {
+        return;
+      }
+
+      try {
+        await this.milestoneMessage.trySendBatchUnlockMessage({
+          prisma: this.prisma,
+          userId: input.userId,
+          userName: input.userName,
+          phone: input.userPhone,
+          evaluationDay: input.evaluationDay,
+          primaryMilestoneKey: primary,
+          additionalUnlockCount: newlyUnlocked.length - 1,
+          timezone: input.challengeTimezone,
+          morningTime: input.reminderTime ?? undefined,
+        });
+      } catch (error) {
+        this.logger.error(
+          `Milestone message failed for user ${input.userId} (${primary}):`,
+          error,
+        );
       }
     } catch (error) {
       this.logger.error(

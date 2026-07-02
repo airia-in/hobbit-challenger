@@ -463,14 +463,24 @@ export function DashboardContent() {
     !allScoredComplete;
 
   const latestMilestone = stats?.milestones?.latestUnlock ?? null;
+  const latestMilestoneAdditionalCount =
+    stats?.milestones?.latestUnlockAdditionalCount ?? 0;
+  const latestMilestoneKey = latestMilestone
+    ? `${latestMilestone.key}:${new Date(latestMilestone.unlockedAt).toISOString()}`
+    : null;
+
+  useEffect(() => {
+    setMilestoneToastDismissed(false);
+  }, [latestMilestoneKey]);
+
   const showMilestoneToast =
     latestMilestone != null &&
     !milestoneToastDismissed &&
-    !isMilestoneToastDismissed(latestMilestone.key);
+    !isMilestoneToastDismissed(latestMilestone.key, latestMilestone.unlockedAt);
 
   const handleMilestoneToastDismiss = useCallback(() => {
     if (latestMilestone) {
-      dismissMilestoneToast(latestMilestone.key);
+      dismissMilestoneToast(latestMilestone.key, latestMilestone.unlockedAt);
     }
     setMilestoneToastDismissed(true);
   }, [latestMilestone]);
@@ -737,6 +747,7 @@ export function DashboardContent() {
         {showMilestoneToast && latestMilestone ? (
           <MilestoneUnlockToast
             milestone={latestMilestone}
+            additionalUnlockCount={latestMilestoneAdditionalCount}
             onDismiss={handleMilestoneToastDismiss}
           />
         ) : null}

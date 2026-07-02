@@ -4,8 +4,9 @@ import OpenAI from 'openai';
 import {
   BRAND_INTRO,
   type MilestoneKey,
+  MILESTONE_DAY_REMINDER_KIND,
   getMilestoneDefinition,
-  milestoneReminderKind,
+  milestoneBatchSummaryLine,
 } from '@workspace-starter/types';
 import { loadPromptFile } from '../services/prompt-loader';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -22,6 +23,7 @@ export type MilestoneMessageContext = {
   name: string;
   milestoneTitle: string;
   unlockCopy: string;
+  batchSummary?: string;
 };
 
 const PROMPT_FILE = 'milestone.jinja';
@@ -30,7 +32,8 @@ export function buildMilestoneFallback(
   context: MilestoneMessageContext,
   messaging: ReminderMessaging = buildReminderMessaging(),
 ): string {
-  return `${context.milestoneTitle} — ${context.unlockCopy} See your milestones: ${messaging.dashboardUrl}`;
+  const batchLine = context.batchSummary ? ` ${context.batchSummary}` : '';
+  return `${context.milestoneTitle} — ${context.unlockCopy}${batchLine} See your milestones: ${messaging.dashboardUrl}`;
 }
 
 export function interpolateMilestonePrompt(
@@ -41,7 +44,9 @@ export function interpolateMilestonePrompt(
   const replacements: Record<string, string> = {
     name: context.name,
     milestoneTitle: context.milestoneTitle,
-    unlockCopy: context.unlockCopy,
+    unlockCopy: context.batchSummary
+      ? `${context.unlockCopy} ${context.batchSummary}`
+      : context.unlockCopy,
     brandName: messaging.brandName,
     brandIntro: BRAND_INTRO,
     dashboardUrl: messaging.dashboardUrl,
@@ -57,10 +62,9 @@ export function interpolateMilestonePrompt(
 /**
  * Milestone WhatsApp precedence (#134):
  * - Sends at day finalization (event-driven), not the morning cron slot.
- * - Celebrates success; mutually exclusive with RECOVERY/WINBACK by construction
- *   (comeback requires logging after dormancy; recovery requires streak break).
- * - A milestone + MORNING reminder on the same local day is acceptable — separate
- *   triggers, separate ReminderLog kinds; no batching (different compose timing).
+ * - At most one message per user per local evaluation day; batched unlocks
+ *   celebrate the most prestigious milestone and fold the rest into one line.
+ * - Unsent unlocks do not queue retries on later days — dashboard is durable.
  */
 @Injectable()
 export class MilestoneMessageService {
@@ -131,22 +135,23 @@ export class MilestoneMessageService {
     }
   }
 
-  async trySendUnlockMessage(input: {
+  async trySendBatchUnlockMessage(input: {
     prisma: PrismaService;
     userId: string;
     userName: string;
     phone: string;
     evaluationDay: Date;
-    milestoneKey: MilestoneKey;
+    primaryMilestoneKey: MilestoneKey;
+    additionalUnlockCount: number;
     timezone: string;
     morningTime?: string;
     now?: Date;
   }): Promise<void> {
-    const definition = getMilestoneDefinition(input.milestoneKey);
+    const definition = getMilestoneDefinition(input.primaryMilestoneKey);
     const logKey = {
       userId: input.userId,
       date: input.evaluationDay,
-      kind: milestoneReminderKind(input.milestoneKey),
+      kind: MILESTONE_DAY_REMINDER_KIND,
     };
 
     const existing = await input.prisma.reminderLog.findUnique({
@@ -170,10 +175,12 @@ export class MilestoneMessageService {
       return;
     }
 
+    const batchSummary = milestoneBatchSummaryLine(input.additionalUnlockCount);
     const context: MilestoneMessageContext = {
       name: input.userName,
       milestoneTitle: definition.title,
       unlockCopy: definition.unlockCopy,
+      ...(batchSummary ? { batchSummary } : {}),
     };
 
     const text = await this.compose(context);
@@ -181,6 +188,25 @@ export class MilestoneMessageService {
     const status: MilestoneMessageStatus = result.ok ? 'SENT' : 'FAILED';
 
     await this.upsertMilestoneLog(input.prisma, logKey, status);
+  }
+
+  /** @deprecated Per-key sends replaced by trySendBatchUnlockMessage. */
+  async trySendUnlockMessage(input: {
+    prisma: PrismaService;
+    userId: string;
+    userName: string;
+    phone: string;
+    evaluationDay: Date;
+    milestoneKey: MilestoneKey;
+    timezone: string;
+    morningTime?: string;
+    now?: Date;
+  }): Promise<void> {
+    await this.trySendBatchUnlockMessage({
+      ...input,
+      primaryMilestoneKey: input.milestoneKey,
+      additionalUnlockCount: 0,
+    });
   }
 
   private async upsertMilestoneLog(

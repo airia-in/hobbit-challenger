@@ -1,105 +1,85 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildHistoricalUnlockCandidates,
   evaluateAndUnlockMilestones,
   evaluateMilestoneCandidates,
+  getUserMilestones,
   shapeEarnedMilestone,
 } from '../src/services/milestones.service';
 import {
-  computeLongestHabitStreak,
+  computeLongestCompletedHabitStreak,
   countConsecutivePerfectDays,
   countLoggedActivityLogs,
+  deriveComebackDate,
+  deriveFirstPerfectWeekDate,
+  replayChallengeStreak,
 } from '../src/utils/milestone-metrics';
-import { MILESTONE_CATALOG } from '@workspace-starter/types';
+import {
+  MILESTONE_CATALOG,
+  pickMostPrestigiousMilestone,
+} from '@workspace-starter/types';
 
-const baseInput = {
-  userId: 'user-1',
-  challengeId: 'challenge-1',
-  groupId: 'group-1',
-  evaluationDay: new Date('2026-07-03T00:00:00.000Z'),
-  timezone: 'UTC',
-  newStreak: 0,
-  dayCounted: false,
-  allScoredLogged: false,
-  freezeConsumed: false,
-};
+const evaluationDay = new Date('2026-07-25T00:00:00.000Z');
+const timezone = 'UTC';
 
-const emptyContext = {
-  existingKeys: new Set<string>(),
-  totalLogCount: 0,
-  consecutivePerfectDays: 0,
-  longestHabitStreak: 0,
-  dormantDaysBeforeEvaluation: 0,
-};
+function emptyContext() {
+  return {
+    existingKeys: new Set<string>(),
+    totalLogCount: 0,
+    longestHabitStreak: 0,
+    dormantDaysBeforeEvaluation: 0,
+    loggedOnEvaluationDay: false,
+    pendingUnlocks: [],
+  };
+}
 
 describe('evaluateMilestoneCandidates', () => {
-  it('unlocks streak thresholds exactly once when day counts', () => {
-    const unlocked = evaluateMilestoneCandidates(
-      { ...baseInput, newStreak: 7, dayCounted: true },
-      emptyContext,
-    );
-    expect(unlocked).toContain('streak_7');
-    expect(unlocked).not.toContain('streak_21');
-  });
-
-  it('does not unlock streak milestones when day did not count', () => {
-    const unlocked = evaluateMilestoneCandidates(
-      { ...baseInput, newStreak: 7, dayCounted: false },
-      emptyContext,
-    );
-    expect(unlocked).toEqual([]);
+  it('returns pending unlock keys not already earned', () => {
+    const unlocked = evaluateMilestoneCandidates({
+      ...emptyContext(),
+      pendingUnlocks: [
+        { key: 'streak_7', unlockedAt: evaluationDay },
+        { key: 'streak_21', unlockedAt: evaluationDay },
+      ],
+    });
+    expect(unlocked).toEqual(['streak_7', 'streak_21']);
   });
 
   it('skips already-earned keys (idempotent evaluation)', () => {
-    const unlocked = evaluateMilestoneCandidates(
-      { ...baseInput, newStreak: 7, dayCounted: true },
-      { ...emptyContext, existingKeys: new Set(['streak_7']) },
-    );
-    expect(unlocked).not.toContain('streak_7');
+    const unlocked = evaluateMilestoneCandidates({
+      ...emptyContext(),
+      existingKeys: new Set(['streak_7']),
+      pendingUnlocks: [
+        { key: 'streak_7', unlockedAt: evaluationDay },
+        { key: 'streak_21', unlockedAt: evaluationDay },
+      ],
+    });
+    expect(unlocked).toEqual(['streak_21']);
   });
+});
 
-  it('unlocks first perfect day and week', () => {
-    const unlocked = evaluateMilestoneCandidates(
-      {
-        ...baseInput,
-        dayCounted: true,
-        allScoredLogged: true,
-      },
-      { ...emptyContext, consecutivePerfectDays: 7 },
-    );
-    expect(unlocked).toContain('first_perfect_day');
-    expect(unlocked).toContain('first_perfect_week');
-  });
+describe('buildHistoricalUnlockCandidates', () => {
+  it('backfills streak milestones from full challenge history', () => {
+    const dayScores = Array.from({ length: 66 }, (_, index) => ({
+      date: new Date(Date.UTC(2026, 4, 1 + index)),
+      breakdown: { allScoredLogged: true },
+    }));
 
-  it('unlocks total logs, habit streak, comeback, and freeze consumed', () => {
-    const unlocked = evaluateMilestoneCandidates(
-      {
-        ...baseInput,
-        dayCounted: true,
-        freezeConsumed: true,
-      },
-      {
-        ...emptyContext,
-        totalLogCount: 100,
-        longestHabitStreak: 14,
-        dormantDaysBeforeEvaluation: 3,
-      },
-    );
-    expect(unlocked).toEqual(
-      expect.arrayContaining([
-        'total_logs_100',
-        'habit_streak_14',
-        'comeback',
-        'first_freeze_consumed',
-      ]),
-    );
-  });
+    const candidates = buildHistoricalUnlockCandidates({
+      allFinalizedDayScores: dayScores,
+      challengeDayScores: dayScores,
+      challengeActivityLogs: [],
+      allUserLogs: [],
+      evaluationDay,
+      timezone,
+      newStreak: 66,
+      dayCounted: true,
+      allScoredLogged: true,
+      freezeConsumed: false,
+      streakFreezesUsed: 0,
+    });
 
-  it('covers full unlock matrix for 66-day streak', () => {
-    const unlocked = evaluateMilestoneCandidates(
-      { ...baseInput, newStreak: 66, dayCounted: true },
-      emptyContext,
-    );
-    expect(unlocked).toEqual(
+    expect(candidates.map((c) => c.key)).toEqual(
       expect.arrayContaining([
         'streak_7',
         'streak_21',
@@ -107,6 +87,135 @@ describe('evaluateMilestoneCandidates', () => {
         'streak_66',
       ]),
     );
+    expect(pickMostPrestigiousMilestone(candidates.map((c) => c.key))).toBe(
+      'streak_66',
+    );
+  });
+
+  it('finds first perfect week beyond a 14-day lookback window', () => {
+    const perfectRun = Array.from({ length: 7 }, (_, index) => ({
+      date: new Date(Date.UTC(2026, 4, 5 + index)),
+      breakdown: { allScoredLogged: true },
+    }));
+    const gap = Array.from({ length: 14 }, (_, index) => ({
+      date: new Date(Date.UTC(2026, 4, 12 + index)),
+      breakdown: { allScoredLogged: false },
+    }));
+
+    const allScores = [...perfectRun, ...gap];
+    const firstWeek = deriveFirstPerfectWeekDate(allScores, timezone);
+    expect(firstWeek).toEqual(new Date(Date.UTC(2026, 4, 11)));
+
+    const candidates = buildHistoricalUnlockCandidates({
+      allFinalizedDayScores: allScores,
+      challengeDayScores: allScores,
+      challengeActivityLogs: [],
+      allUserLogs: [],
+      evaluationDay,
+      timezone,
+      newStreak: 0,
+      dayCounted: false,
+      allScoredLogged: false,
+      freezeConsumed: false,
+      streakFreezesUsed: 0,
+    });
+
+    expect(candidates.some((c) => c.key === 'first_perfect_week')).toBe(true);
+  });
+
+  it('retroactively awards first perfect day from history', () => {
+    const candidates = buildHistoricalUnlockCandidates({
+      allFinalizedDayScores: [
+        {
+          date: new Date(Date.UTC(2026, 5, 1)),
+          breakdown: { allScoredLogged: true },
+        },
+      ],
+      challengeDayScores: [
+        {
+          date: new Date(Date.UTC(2026, 5, 1)),
+          breakdown: { allScoredLogged: true },
+        },
+        {
+          date: new Date(Date.UTC(2026, 5, 2)),
+          breakdown: { allScoredLogged: false },
+        },
+      ],
+      challengeActivityLogs: [],
+      allUserLogs: [],
+      evaluationDay,
+      timezone,
+      newStreak: 0,
+      dayCounted: false,
+      allScoredLogged: false,
+      freezeConsumed: false,
+      streakFreezesUsed: 0,
+    });
+
+    expect(candidates.some((c) => c.key === 'first_perfect_day')).toBe(true);
+  });
+
+  it('retroactively awards first freeze consumed from history', () => {
+    const candidates = buildHistoricalUnlockCandidates({
+      allFinalizedDayScores: [],
+      challengeDayScores: [
+        {
+          date: new Date(Date.UTC(2026, 5, 10)),
+          breakdown: { allScoredLogged: false, freezeConsumed: true },
+        },
+      ],
+      challengeActivityLogs: [],
+      allUserLogs: [],
+      evaluationDay,
+      timezone,
+      newStreak: 5,
+      dayCounted: false,
+      allScoredLogged: false,
+      freezeConsumed: false,
+      streakFreezesUsed: 1,
+    });
+
+    expect(candidates.some((c) => c.key === 'first_freeze_consumed')).toBe(
+      true,
+    );
+  });
+
+  it('unlocks comeback on any activity log after dormancy (not dayCounted)', () => {
+    const lastLog = new Date(Date.UTC(2026, 6, 1));
+    const returnLog = new Date(Date.UTC(2026, 6, 5));
+
+    const candidates = buildHistoricalUnlockCandidates({
+      allFinalizedDayScores: [],
+      challengeDayScores: [],
+      challengeActivityLogs: [
+        {
+          activityId: 'a1',
+          date: lastLog,
+          state: 'DONE',
+          tier: null,
+          value: null,
+          subPoints: null,
+        },
+        {
+          activityId: 'a1',
+          date: returnLog,
+          state: 'UNLOGGED',
+          tier: null,
+          value: null,
+          subPoints: null,
+        },
+      ],
+      allUserLogs: [],
+      evaluationDay: returnLog,
+      timezone,
+      newStreak: 0,
+      dayCounted: false,
+      allScoredLogged: false,
+      freezeConsumed: false,
+      streakFreezesUsed: 0,
+    });
+
+    expect(candidates.some((c) => c.key === 'comeback')).toBe(true);
   });
 });
 
@@ -130,28 +239,72 @@ describe('milestone metrics helpers', () => {
     ).toBe(3);
   });
 
-  it('computes longest habit streak across activities', () => {
-    const longest = computeLongestHabitStreak([
-      { activityId: 'a1', dateKey: '2026-06-01', logged: true },
-      { activityId: 'a1', dateKey: '2026-06-02', logged: true },
-      { activityId: 'a2', dateKey: '2026-06-01', logged: true },
+  it('replays challenge streak from finalized scores', () => {
+    const timeline = replayChallengeStreak([
+      { date: new Date('2026-07-01'), breakdown: { allScoredLogged: true } },
+      { date: new Date('2026-07-02'), breakdown: { allScoredLogged: true } },
+      {
+        date: new Date('2026-07-03'),
+        breakdown: { allScoredLogged: false, freezeConsumed: true },
+      },
+      { date: new Date('2026-07-04'), breakdown: { allScoredLogged: true } },
     ]);
-    expect(longest).toBe(2);
+    expect(timeline.map((row) => row.streakAfter)).toEqual([1, 2, 2, 3]);
+  });
+
+  it('uses completed-day semantics for habit streak 14', () => {
+    const longest = computeLongestCompletedHabitStreak(
+      [
+        {
+          activityId: 'a1',
+          date: new Date('2026-06-01'),
+          state: 'DONE',
+          tier: null,
+          value: null,
+          subPoints: null,
+        },
+        {
+          activityId: 'a1',
+          date: new Date('2026-06-02'),
+          state: 'FAILED',
+          tier: null,
+          value: null,
+          subPoints: null,
+        },
+      ],
+      timezone,
+    );
+    expect(longest).toBe(1);
+  });
+
+  it('detects comeback from any activity log row', () => {
+    const comeback = deriveComebackDate(
+      [{ date: new Date('2026-06-01') }, { date: new Date('2026-06-05') }],
+      timezone,
+    );
+    expect(comeback).toEqual(new Date('2026-06-05'));
   });
 });
 
 describe('evaluateAndUnlockMilestones idempotency', () => {
   it('creates each milestone once across repeated evaluation', async () => {
-    const rows: Array<{ milestoneKey: string }> = [];
+    const rows: Array<{ milestoneKey: string; unlockedAt: Date }> = [];
     const prisma = {
       userMilestone: {
         findMany: async () =>
           rows.map((row) => ({ milestoneKey: row.milestoneKey })),
-        create: async ({ data }: { data: { milestoneKey: string } }) => {
+        create: async ({
+          data,
+        }: {
+          data: { milestoneKey: string; unlockedAt?: Date };
+        }) => {
           if (rows.some((row) => row.milestoneKey === data.milestoneKey)) {
             throw new Error('Unique constraint');
           }
-          rows.push({ milestoneKey: data.milestoneKey });
+          rows.push({
+            milestoneKey: data.milestoneKey,
+            unlockedAt: data.unlockedAt ?? new Date(),
+          });
           return data;
         },
       },
@@ -164,14 +317,17 @@ describe('evaluateAndUnlockMilestones idempotency', () => {
       activity: {
         findMany: async () => [],
       },
+      challenge: {
+        findUnique: async () => ({ streakFreezesUsed: 0 }),
+      },
     };
 
     const input = {
       userId: 'user-1',
       challengeId: 'challenge-1',
       groupId: null,
-      evaluationDay: new Date('2026-07-03T00:00:00.000Z'),
-      timezone: 'UTC',
+      evaluationDay,
+      timezone,
       newStreak: 7,
       dayCounted: true,
       allScoredLogged: true,
@@ -186,6 +342,72 @@ describe('evaluateAndUnlockMilestones idempotency', () => {
     expect(rows.filter((row) => row.milestoneKey === 'streak_7')).toHaveLength(
       1,
     );
+  });
+
+  it('backfill burst creates N rows from one evaluation', async () => {
+    const rows: Array<{ milestoneKey: string; unlockedAt: Date }> = [];
+    const dayScores = Array.from({ length: 66 }, (_, index) => ({
+      date: new Date(Date.UTC(2026, 4, 1 + index)),
+      breakdown: { allScoredLogged: true },
+    }));
+
+    const prisma = {
+      userMilestone: {
+        findMany: async () =>
+          rows.map((row) => ({ milestoneKey: row.milestoneKey })),
+        create: async ({
+          data,
+        }: {
+          data: { milestoneKey: string; unlockedAt?: Date };
+        }) => {
+          rows.push({
+            milestoneKey: data.milestoneKey,
+            unlockedAt: data.unlockedAt ?? new Date(),
+          });
+          return data;
+        },
+      },
+      activityLog: { findMany: async () => [] },
+      dayScore: { findMany: async () => dayScores },
+      activity: { findMany: async () => [] },
+      challenge: {
+        findUnique: async () => ({ streakFreezesUsed: 0 }),
+      },
+    };
+
+    const result = await evaluateAndUnlockMilestones(prisma as never, {
+      userId: 'user-1',
+      challengeId: 'challenge-1',
+      groupId: null,
+      evaluationDay,
+      timezone,
+      newStreak: 66,
+      dayCounted: true,
+      allScoredLogged: true,
+      freezeConsumed: false,
+    });
+
+    expect(result.newlyUnlocked.length).toBeGreaterThanOrEqual(4);
+    expect(rows.length).toBe(result.newlyUnlocked.length);
+  });
+});
+
+describe('getUserMilestones batch summary', () => {
+  it('returns most prestigious latest unlock with additional count', async () => {
+    const unlockedAt = new Date('2026-07-03T00:00:00.000Z');
+    const prisma = {
+      userMilestone: {
+        findMany: async () => [
+          { milestoneKey: 'streak_7', unlockedAt },
+          { milestoneKey: 'streak_21', unlockedAt },
+          { milestoneKey: 'first_perfect_day', unlockedAt },
+        ],
+      },
+    };
+
+    const result = await getUserMilestones(prisma as never, 'user-1');
+    expect(result.latestUnlock?.key).toBe('streak_21');
+    expect(result.latestUnlockAdditionalCount).toBe(2);
   });
 });
 

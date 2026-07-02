@@ -280,6 +280,7 @@ const dashboardStats = {
   milestones: {
     earned: [],
     latestUnlock: null,
+    latestUnlockAdditionalCount: 0,
   },
 };
 

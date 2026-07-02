@@ -144,6 +144,7 @@ const baseStats = {
   milestones: {
     earned: [milestone],
     latestUnlock: milestone,
+    latestUnlockAdditionalCount: 0,
   },
 };
 
@@ -206,6 +207,24 @@ describe('DashboardContent milestone toast', () => {
   it('dismisses milestone toast and records storage', () => {
     render(<DashboardContent />);
     fireEvent.click(screen.getByRole('button', { name: /onward/i }));
-    expect(dismissMilestoneToast).toHaveBeenCalledWith('streak_7');
+    expect(dismissMilestoneToast).toHaveBeenCalledWith(
+      'streak_7',
+      milestone.unlockedAt,
+    );
+  });
+
+  it('shows batch summary for multi-unlock toast', () => {
+    mockStatsGetDashboard.mockReturnValue(
+      idleQuery({
+        ...baseStats,
+        milestones: {
+          earned: [milestone],
+          latestUnlock: milestone,
+          latestUnlockAdditionalCount: 2,
+        },
+      }),
+    );
+    render(<DashboardContent />);
+    expect(screen.getByText(/2 more waypoints/i)).toBeInTheDocument();
   });
 });

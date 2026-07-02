@@ -7,7 +7,7 @@ import {
   shouldRetryMilestoneMessage,
 } from '../src/whatsapp/milestone-message.service';
 import { buildReminderMessaging } from '../src/whatsapp/openai-reminder.service';
-import { milestoneReminderKind } from '@workspace-starter/types';
+import { MILESTONE_DAY_REMINDER_KIND } from '@workspace-starter/types';
 
 const messaging = buildReminderMessaging('staging.hobbit.example');
 const timezone = 'America/New_York';
@@ -107,6 +107,17 @@ describe('MilestoneMessageService', () => {
     expect(text).toContain(context.milestoneTitle);
   });
 
+  it('renders batch summary in fallback', () => {
+    const text = buildMilestoneFallback(
+      {
+        ...context,
+        batchSummary: '...and 3 more waypoints marked on your map',
+      },
+      messaging,
+    );
+    expect(text).toContain('3 more waypoints');
+  });
+
   it('interpolates prompt template', () => {
     const rendered = interpolateMilestonePrompt(
       'Hi {{name}}, {{milestoneTitle}}, {{unlockCopy}}, {{dashboardUrl}}',
@@ -123,62 +134,73 @@ describe('MilestoneMessageService', () => {
     expect(shouldRetryMilestoneMessage({ status: 'SENT' })).toBe(false);
   });
 
-  it('sends once per milestone kind and records SENT', async () => {
+  it('sends one batched message per evaluation day', async () => {
     const store = createReminderLogStore();
     const { service, evolution } = createService(true);
-    const kind = milestoneReminderKind('streak_7');
 
-    await service.trySendUnlockMessage({
+    await service.trySendBatchUnlockMessage({
       prisma: store.prisma as never,
       userId: 'user-1',
       userName: 'Sam',
       phone: '+911234567890',
       evaluationDay,
-      milestoneKey: 'streak_7',
+      primaryMilestoneKey: 'streak_66',
+      additionalUnlockCount: 3,
       timezone,
     });
 
-    await service.trySendUnlockMessage({
+    await service.trySendBatchUnlockMessage({
       prisma: store.prisma as never,
       userId: 'user-1',
       userName: 'Sam',
       phone: '+911234567890',
       evaluationDay,
-      milestoneKey: 'streak_7',
+      primaryMilestoneKey: 'streak_7',
+      additionalUnlockCount: 0,
       timezone,
     });
 
     expect(evolution.sendText).toHaveBeenCalledTimes(1);
-    const key = reminderLogKey('user-1', evaluationDay, kind);
+    const key = reminderLogKey(
+      'user-1',
+      evaluationDay,
+      MILESTONE_DAY_REMINDER_KIND,
+    );
     expect(store.logs.get(key)?.status).toBe('SENT');
+    expect(evolution.sendText.mock.calls[0]?.[1]).toContain('3 more waypoints');
   });
 
   it('retries FAILED on a later attempt', async () => {
     const store = createReminderLogStore();
-    const kind = milestoneReminderKind('streak_21');
-    store.logs.set(reminderLogKey('user-1', evaluationDay, kind), {
-      userId: 'user-1',
-      date: evaluationDay,
-      kind,
-      status: 'FAILED',
-      sentAt: new Date('2026-06-13T12:00:00.000Z'),
-    });
+    store.logs.set(
+      reminderLogKey('user-1', evaluationDay, MILESTONE_DAY_REMINDER_KIND),
+      {
+        userId: 'user-1',
+        date: evaluationDay,
+        kind: MILESTONE_DAY_REMINDER_KIND,
+        status: 'FAILED',
+        sentAt: new Date('2026-06-13T12:00:00.000Z'),
+      },
+    );
 
     const { service, evolution } = createService(true);
-    await service.trySendUnlockMessage({
+    await service.trySendBatchUnlockMessage({
       prisma: store.prisma as never,
       userId: 'user-1',
       userName: 'Sam',
       phone: '+911234567890',
       evaluationDay,
-      milestoneKey: 'streak_21',
+      primaryMilestoneKey: 'streak_21',
+      additionalUnlockCount: 1,
       timezone,
       now: new Date('2026-06-14T12:00:00.000Z'),
     });
 
     expect(evolution.sendText).toHaveBeenCalledTimes(1);
     expect(
-      store.logs.get(reminderLogKey('user-1', evaluationDay, kind))?.status,
+      store.logs.get(
+        reminderLogKey('user-1', evaluationDay, MILESTONE_DAY_REMINDER_KIND),
+      )?.status,
     ).toBe('SENT');
   });
 });

@@ -105,13 +105,52 @@ export type EarnedMilestone = {
 
 export type MilestonesPayload = {
   earned: EarnedMilestone[];
-  /** Most recent unlock for dashboard toast; client dedupes via local storage */
+  /** Most prestigious unlock in the latest batch; client dedupes via local storage */
   latestUnlock: EarnedMilestone | null;
+  /** Additional unlocks in the same batch as latestUnlock (0 when solo) */
+  latestUnlockAdditionalCount: number;
 };
 
 export function getMilestoneDefinition(key: MilestoneKey): MilestoneDefinition {
   return MILESTONE_CATALOG[key];
 }
+
+/** Higher rank = more prestigious when batching unlock messages. */
+export const MILESTONE_PRESTIGE_RANK: Record<MilestoneKey, number> = {
+  streak_66: 100,
+  streak_30: 90,
+  streak_21: 80,
+  first_perfect_week: 70,
+  streak_7: 60,
+  habit_streak_14: 50,
+  total_logs_100: 40,
+  first_perfect_day: 30,
+  comeback: 20,
+  first_freeze_consumed: 10,
+};
+
+export function compareMilestonePrestige(
+  a: MilestoneKey,
+  b: MilestoneKey,
+): number {
+  return MILESTONE_PRESTIGE_RANK[b] - MILESTONE_PRESTIGE_RANK[a];
+}
+
+export function pickMostPrestigiousMilestone(
+  keys: MilestoneKey[],
+): MilestoneKey | null {
+  if (keys.length === 0) return null;
+  return [...keys].sort(compareMilestonePrestige)[0] ?? null;
+}
+
+export function milestoneBatchSummaryLine(additionalCount: number): string {
+  if (additionalCount <= 0) return '';
+  const noun = additionalCount === 1 ? 'waypoint' : 'waypoints';
+  return `...and ${additionalCount} more ${noun} marked on your map`;
+}
+
+/** One WhatsApp per user per local evaluation day (batched unlocks). */
+export const MILESTONE_DAY_REMINDER_KIND = 'MILESTONE:DAY';
 
 export function milestoneReminderKind(key: MilestoneKey): string {
   return `MILESTONE:${key}`;

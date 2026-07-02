@@ -17,10 +17,15 @@ import {
   ReminderContextService,
   shouldDeferEveningToStreakAtRisk,
 } from '../whatsapp/reminder-context.service';
+import { WINBACK_KIND } from '../utils/winback-dormancy';
 import {
   OpenAiReminderService,
   type ReminderKind,
 } from '../whatsapp/openai-reminder.service';
+import {
+  WinbackService,
+  type WinbackDeferBatchContext,
+} from './winback.service';
 
 const DEFAULT_MORNING_TIME = '08:00';
 const STREAK_AT_RISK_TIME = '18:00';
@@ -43,6 +48,7 @@ export class ReminderService {
     private readonly evolution: EvolutionApiClient,
     private readonly contextService: ReminderContextService,
     private readonly openAiReminder: OpenAiReminderService,
+    private readonly winbackService: WinbackService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -73,24 +79,35 @@ export class ReminderService {
       },
     });
 
+    const deferUsers = users.map((user) => ({
+      id: user.id,
+      reminderTime: user.reminderTime,
+      challengeTimezone: user.group?.challengeTimezone ?? user.timezone,
+    }));
+    const deferBatch =
+      await this.winbackService.loadDeferBatchContext(deferUsers);
+
     for (const user of users) {
       try {
-        await this.processUserReminders(user);
+        await this.processUserReminders(user, deferBatch);
       } catch (error) {
         this.logger.error(`Reminder failed for user ${user.id}:`, error);
       }
     }
   }
 
-  private async processUserReminders(user: {
-    id: string;
-    name: string;
-    phone: string | null;
-    timezone: string;
-    reminderTime: string | null;
-    whatsappOptIn: boolean;
-    group: { challengeTimezone: string | null } | null;
-  }): Promise<void> {
+  private async processUserReminders(
+    user: {
+      id: string;
+      name: string;
+      phone: string | null;
+      timezone: string;
+      reminderTime: string | null;
+      whatsappOptIn: boolean;
+      group: { challengeTimezone: string | null } | null;
+    },
+    deferBatch: WinbackDeferBatchContext,
+  ): Promise<void> {
     const reminderTimezone = user.group?.challengeTimezone ?? user.timezone;
 
     if (!user.phone || !user.whatsappOptIn) {
@@ -99,10 +116,15 @@ export class ReminderService {
       await this.recordSkippedOptout(user.id, localDate, 'RECOVERY');
       await this.recordSkippedOptout(user.id, localDate, 'STREAK_AT_RISK');
       await this.recordSkippedOptout(user.id, localDate, 'EVENING');
+      await this.recordSkippedOptout(user.id, localDate, WINBACK_KIND);
       return;
     }
 
     const localDate = getUserLocalDate(reminderTimezone);
+
+    if (this.shouldDeferToWinback(user, reminderTimezone, deferBatch)) {
+      return;
+    }
     const morningTime = user.reminderTime ?? DEFAULT_MORNING_TIME;
     const morningWindowActive =
       isLocalTimeMatch(reminderTimezone, morningTime) ||
@@ -232,6 +254,29 @@ export class ReminderService {
         await this.trySendReminder(user, localDate, 'EVENING', context);
       }
     }
+  }
+
+  /**
+   * WINBACK defers while it owns the actionable morning window or has SENT today.
+   */
+  private shouldDeferToWinback(
+    user: {
+      id: string;
+      reminderTime: string | null;
+      group: { challengeTimezone: string | null } | null;
+      timezone: string;
+    },
+    reminderTimezone: string,
+    deferBatch: WinbackDeferBatchContext,
+  ): boolean {
+    return this.winbackService.shouldDeferRemindersForUser(
+      {
+        userId: user.id,
+        challengeTimezone: reminderTimezone,
+        reminderTime: user.reminderTime,
+      },
+      deferBatch,
+    );
   }
 
   private async shouldProcessReminderSlot(
@@ -379,7 +424,7 @@ export class ReminderService {
   private async recordSkippedOptout(
     userId: string,
     localDate: Date,
-    kind: ReminderKind,
+    kind: ReminderKind | typeof WINBACK_KIND,
   ): Promise<void> {
     const existing = await this.prisma.reminderLog.findUnique({
       where: {

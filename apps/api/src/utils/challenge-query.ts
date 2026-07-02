@@ -12,7 +12,7 @@ export function latestChallengeRelationArgs() {
 
 export function activeChallengeRelationArgs() {
   return {
-    where: { isActive: true },
+    where: { isActive: true, stoppedAt: null },
     orderBy: { startDate: 'desc' as const },
     take: 1,
   } as const;

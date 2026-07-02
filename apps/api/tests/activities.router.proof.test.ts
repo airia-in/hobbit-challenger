@@ -62,6 +62,7 @@ describe('activitiesRouter attachProof proofUrl validation', () => {
       USER_ID,
       ACTIVITY_ID,
       '/uploads/abc-123.jpg',
+      undefined,
     );
   });
 });

@@ -11,6 +11,10 @@ function createCache(): GetTodayCache {
   return {
     currentDay: 3,
     date: '2026-07-02',
+    dateKey: '2026-07-02',
+    isViewingToday: true,
+    canNavigateBack: true,
+    canNavigateForward: false,
     canEdit: true,
     dayTotals: { netXp: 0, personalXp: 0, xpEarned: 0, xpDeducted: 0 },
     scoredActivities: [
@@ -27,6 +31,7 @@ function createCache(): GetTodayCache {
         deductMultiplier: 2,
         log: null,
         canAttachProof: true,
+        canEdit: true,
         currentStreak: 2,
       },
     ],

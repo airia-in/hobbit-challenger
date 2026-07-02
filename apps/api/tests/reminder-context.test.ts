@@ -34,6 +34,10 @@ function emptyToday(overrides: Partial<GetTodayResult> = {}): GetTodayResult {
   return {
     currentDay: 5,
     date: new Date('2026-06-15T00:00:00.000Z'),
+    dateKey: '2026-06-15',
+    isViewingToday: true,
+    canNavigateBack: true,
+    canNavigateForward: false,
     canEdit: true,
     dayTotals: { netXp: 0, personalXp: 0, xpEarned: 0, xpDeducted: 0 },
     scoredActivities: [],

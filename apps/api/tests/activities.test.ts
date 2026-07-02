@@ -1225,6 +1225,7 @@ describe('activities service', () => {
       userId: USER_ID,
       timezone: 'UTC',
       groupId: GROUP_ID,
+      date: getUserLocalDate('UTC'),
     });
 
     expect(totals.xpDeducted).toBe(0);
@@ -1251,5 +1252,84 @@ describe('activities service', () => {
     expect(stored?.finalized).toBe(false);
     expect(stored?.netXp).toBe(0);
     expect(stored?.xpDeducted).toBe(0);
+  });
+
+  it('getToday exposes date navigation and read-only logged activities for a past day', async () => {
+    const today = getUserLocalDate('UTC');
+    const yesterday = addUtcDays(today, -1);
+    const yesterdayKey = yesterday.toISOString().slice(0, 10);
+    const challenge = fake.stores.challenges.get(CHALLENGE_ID);
+    expect(challenge).toBeDefined();
+    fake.stores.challenges.set(CHALLENGE_ID, {
+      ...challenge!,
+      startDate: addUtcDays(today, -5),
+    });
+
+    fake.stores.activityLogs.set(
+      activityLogKey(CHALLENGE_ID, CHECKBOX_ACTIVITY_ID, yesterday),
+      createActivityLog({
+        activityId: CHECKBOX_ACTIVITY_ID,
+        date: yesterday,
+        id: 'photo-yesterday',
+      }),
+    );
+
+    const result = await service.getToday(fake.prisma, USER_ID, yesterdayKey);
+
+    expect(result.dateKey).toBe(yesterdayKey);
+    expect(result.isViewingToday).toBe(false);
+    expect(result.canNavigateForward).toBe(true);
+    const progressPhoto = result.scoredActivities.find(
+      (activity) => activity.id === CHECKBOX_ACTIVITY_ID,
+    );
+    const diet = result.scoredActivities.find(
+      (activity) => activity.id === DIET_ACTIVITY_ID,
+    );
+    expect(progressPhoto?.canEdit).toBe(false);
+    expect(diet?.canEdit).toBe(true);
+  });
+
+  it('markActivity rejects backfill when a past-day entry already exists', async () => {
+    const today = getUserLocalDate('UTC');
+    const yesterday = addUtcDays(today, -1);
+    const yesterdayKey = yesterday.toISOString().slice(0, 10);
+
+    fake.stores.activityLogs.set(
+      activityLogKey(CHALLENGE_ID, CHECKBOX_ACTIVITY_ID, yesterday),
+      createActivityLog({
+        activityId: CHECKBOX_ACTIVITY_ID,
+        date: yesterday,
+        id: 'photo-yesterday',
+      }),
+    );
+
+    await expect(
+      service.markActivity(
+        fake.prisma,
+        USER_ID,
+        CHECKBOX_ACTIVITY_ID,
+        yesterdayKey,
+      ),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Entry already recorded for this date',
+    });
+  });
+
+  it('markActivity allows backfill for an unlogged activity on a past day', async () => {
+    const today = getUserLocalDate('UTC');
+    const yesterday = addUtcDays(today, -1);
+    const yesterdayKey = yesterday.toISOString().slice(0, 10);
+
+    const result = await service.markActivity(
+      fake.prisma,
+      USER_ID,
+      DIET_ACTIVITY_ID,
+      yesterdayKey,
+    );
+
+    expect(result.log.activityId).toBe(DIET_ACTIVITY_ID);
+    expect(result.log.state).toBe('DONE');
+    expect(result.dayTotals.netXp).toBeGreaterThan(0);
   });
 });

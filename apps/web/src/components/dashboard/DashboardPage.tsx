@@ -32,22 +32,42 @@ import {
 
 const apiUrl = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
 
-function useTodayMutations() {
+function shiftDateKey(dateKey: string, deltaDays: number): string {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const utc = new Date(Date.UTC(year, month - 1, day + deltaDays));
+  return utc.toISOString().slice(0, 10);
+}
+
+function formatActivitiesHeading(day: GetTodayCache): string {
+  if (day.isViewingToday) {
+    return "Today's Activities";
+  }
+  const label = new Date(`${day.dateKey}T12:00:00`).toLocaleDateString(
+    undefined,
+    { weekday: 'short', month: 'short', day: 'numeric' },
+  );
+  return `Activities · ${label}`;
+}
+
+function useTodayMutations(viewedDateKey?: string) {
   const utils = trpc.useUtils();
+  const queryInput = viewedDateKey ? { date: viewedDateKey } : undefined;
+  const mutationDate =
+    viewedDateKey !== undefined ? { date: viewedDateKey } : {};
 
   function settle() {
     void utils.activities.getToday.invalidate();
     void utils.stats.getDashboard.invalidate();
   }
 
-  function createHandlers<TInput extends { activityId: string }>(
+  function createHandlers<TInput extends { activityId: string; date?: string }>(
     optimisticPatch: (data: GetTodayCache, input: TInput) => GetTodayCache,
   ) {
     return {
       async onMutate(input: TInput) {
-        await utils.activities.getToday.cancel();
-        const previous = utils.activities.getToday.getData();
-        utils.activities.getToday.setData(undefined, (old) =>
+        await utils.activities.getToday.cancel(queryInput);
+        const previous = utils.activities.getToday.getData(queryInput);
+        utils.activities.getToday.setData(queryInput, (old) =>
           old ? optimisticPatch(old, input) : old,
         );
         return { previous };
@@ -56,7 +76,7 @@ function useTodayMutations() {
         data: Parameters<typeof applyMutationResult>[2],
         input: TInput,
       ) {
-        utils.activities.getToday.setData(undefined, (old) =>
+        utils.activities.getToday.setData(queryInput, (old) =>
           old ? applyMutationResult(old, input.activityId, data) : old,
         );
       },
@@ -66,7 +86,7 @@ function useTodayMutations() {
         context: { previous?: GetTodayCache } | undefined,
       ) {
         if (context?.previous) {
-          utils.activities.getToday.setData(undefined, context.previous);
+          utils.activities.getToday.setData(queryInput, context.previous);
         }
       },
       onSettled: settle,
@@ -107,9 +127,9 @@ function useTodayMutations() {
 
   const attachProof = trpc.activities.attachProof.useMutation({
     async onMutate(input) {
-      await utils.activities.getToday.cancel();
-      const previous = utils.activities.getToday.getData();
-      utils.activities.getToday.setData(undefined, (old) =>
+      await utils.activities.getToday.cancel(queryInput);
+      const previous = utils.activities.getToday.getData(queryInput);
+      utils.activities.getToday.setData(queryInput, (old) =>
         old
           ? optimisticProofAttached(old, input.activityId, input.proofUrl)
           : old,
@@ -122,10 +142,15 @@ function useTodayMutations() {
       context: { previous?: GetTodayCache } | undefined,
     ) {
       if (context?.previous) {
-        utils.activities.getToday.setData(undefined, context.previous);
+        utils.activities.getToday.setData(queryInput, context.previous);
       }
     },
     onSettled: settle,
+  });
+
+  const withDate = <T extends { activityId: string }>(input: T) => ({
+    ...input,
+    ...mutationDate,
   });
 
   const isPending =
@@ -137,23 +162,47 @@ function useTodayMutations() {
     attachProof.isPending;
 
   return {
-    markActivity,
-    undoActivity,
-    logNumber,
-    setTier,
-    setSubPoints,
-    attachProof,
+    markActivity: {
+      ...markActivity,
+      mutate: (input: { activityId: string }) =>
+        markActivity.mutate(withDate(input)),
+    },
+    undoActivity: {
+      ...undoActivity,
+      mutate: (input: { activityId: string }) =>
+        undoActivity.mutate(withDate(input)),
+    },
+    logNumber: {
+      ...logNumber,
+      mutate: (input: { activityId: string; value: number }) =>
+        logNumber.mutate(withDate(input)),
+    },
+    setTier: {
+      ...setTier,
+      mutate: (input: { activityId: string; tier: string }) =>
+        setTier.mutate(withDate(input)),
+    },
+    setSubPoints: {
+      ...setSubPoints,
+      mutate: (input: {
+        activityId: string;
+        states: Record<string, SubPointState>;
+      }) => setSubPoints.mutate(withDate(input)),
+    },
+    attachProof: {
+      ...attachProof,
+      mutate: (input: { activityId: string; proofUrl: string }) =>
+        attachProof.mutate(withDate(input)),
+    },
     isPending,
   };
 }
 
 function ProofSection({
   activity,
-  canEdit,
   onAttach,
 }: {
   activity: TodayActivity;
-  canEdit: boolean;
   onAttach: (proofUrl: string) => void;
 }) {
   if (!activity.canAttachProof) return null;
@@ -169,7 +218,7 @@ function ProofSection({
         authToken={getToken()}
         value={activity.log?.proofUrl}
         capture="environment"
-        disabled={!canEdit}
+        disabled={!activity.canEdit}
         onUploaded={onAttach}
         buttonClassName="text-xs"
       />
@@ -195,12 +244,10 @@ function ProofSection({
 
 function ActivityCard({
   activity,
-  canEdit,
   mutations,
   variant = 'scored',
 }: {
   activity: TodayActivity;
-  canEdit: boolean;
   mutations: ReturnType<typeof useTodayMutations>;
   variant?: 'scored' | 'personal';
 }) {
@@ -222,7 +269,7 @@ function ActivityCard({
       title={activity.title}
       kind={activity.kind}
       log={activity.log}
-      canEdit={canEdit}
+      canEdit={activity.canEdit}
       xpComplete={activity.xpComplete}
       unitLabel={activity.unitLabel}
       xpPerUnit={activity.xpPerUnit}
@@ -254,7 +301,6 @@ function ActivityCard({
         activity.canAttachProof ? (
           <ProofSection
             activity={activity}
-            canEdit={canEdit}
             onAttach={(proofUrl) =>
               attachProof.mutate({ activityId: activity.id, proofUrl })
             }
@@ -267,9 +313,13 @@ function ActivityCard({
 
 export function DashboardContent() {
   const [rulesOpen, setRulesOpen] = useState(false);
-  const mutations = useTodayMutations();
+  const [viewedDateKey, setViewedDateKey] = useState<string | undefined>(
+    undefined,
+  );
+  const queryInput = viewedDateKey ? { date: viewedDateKey } : undefined;
+  const mutations = useTodayMutations(viewedDateKey);
 
-  const activitiesQuery = trpc.activities.getToday.useQuery();
+  const activitiesQuery = trpc.activities.getToday.useQuery(queryInput);
   const statsQuery = trpc.stats.getDashboard.useQuery();
   const heatmapQuery = trpc.heatmap.get.useQuery();
 
@@ -341,12 +391,38 @@ export function DashboardContent() {
 
         {today && (
           <section className="space-y-3">
-            <h2
-              className="text-lg uppercase tracking-wider text-[var(--text-muted)]"
-              style={{ fontFamily: 'var(--font-mono)' }}
-            >
-              Today&apos;s Activities
-            </h2>
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                data-testid="dashboard-date-prev"
+                disabled={!today.canNavigateBack}
+                onClick={() =>
+                  setViewedDateKey(shiftDateKey(today.dateKey, -1))
+                }
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm uppercase tracking-wider text-[var(--text-primary)] transition hover:border-[var(--accent-red)]/50 disabled:cursor-not-allowed disabled:opacity-40"
+                style={{ fontFamily: 'var(--font-mono)' }}
+                aria-label="Previous day"
+              >
+                ←
+              </button>
+              <h2
+                className="min-w-0 flex-1 text-center text-lg uppercase tracking-wider text-[var(--text-muted)]"
+                style={{ fontFamily: 'var(--font-mono)' }}
+              >
+                {formatActivitiesHeading(today)}
+              </h2>
+              <button
+                type="button"
+                data-testid="dashboard-date-next"
+                disabled={!today.canNavigateForward}
+                onClick={() => setViewedDateKey(shiftDateKey(today.dateKey, 1))}
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm uppercase tracking-wider text-[var(--text-primary)] transition hover:border-[var(--accent-red)]/50 disabled:cursor-not-allowed disabled:opacity-40"
+                style={{ fontFamily: 'var(--font-mono)' }}
+                aria-label="Next day"
+              >
+                →
+              </button>
+            </div>
 
             <XpTotalBar
               netXp={today.dayTotals.netXp}
@@ -361,7 +437,6 @@ export function DashboardContent() {
               <ActivityCard
                 key={activity.id}
                 activity={activity}
-                canEdit={today.canEdit}
                 mutations={mutations}
               />
             ))}
@@ -378,7 +453,6 @@ export function DashboardContent() {
                   <ActivityCard
                     key={activity.id}
                     activity={activity}
-                    canEdit={today.canEdit}
                     mutations={mutations}
                     variant="personal"
                   />

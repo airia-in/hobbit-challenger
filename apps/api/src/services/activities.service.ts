@@ -10,12 +10,17 @@ import type { PrismaService } from '../prisma/prisma.service';
 
 type PrismaClientLike = PrismaService | Prisma.TransactionClient;
 import { deriveChallengeProgress } from '../utils/challenge-range';
-import { computeDayLoggingStatus } from '../utils/day-completion';
+import {
+  computeDayLoggingStatus,
+  isActivityLogLogged,
+} from '../utils/day-completion';
 import {
   addLocalDays,
   formatLocalDateKey,
   getUserLocalDate,
   isBeforeMidnight,
+  isLocalDateKey,
+  parseLocalDateKey,
 } from '../utils/day-window';
 import {
   clampDateRange,
@@ -101,12 +106,17 @@ export type TodayActivity = {
   deductMultiplier: number;
   log: TodayActivityLog | null;
   canAttachProof: boolean;
+  canEdit: boolean;
   currentStreak?: number;
 };
 
 export type GetTodayResult = {
   currentDay: number;
   date: Date;
+  dateKey: string;
+  isViewingToday: boolean;
+  canNavigateBack: boolean;
+  canNavigateForward: boolean;
   canEdit: boolean;
   dayTotals: DayTotals;
   scoredActivities: TodayActivity[];
@@ -156,6 +166,7 @@ function emptyDayTotals(): DayTotals {
 function mapActivityToToday(
   activity: Activity,
   log: ActivityLog | null,
+  canEdit: boolean,
   currentStreak?: number,
 ): TodayActivity {
   const scored = mapActivityToScored(activity);
@@ -190,8 +201,37 @@ function mapActivityToToday(
         }
       : null,
     canAttachProof: activity.seedKey !== 'DIET',
+    canEdit,
     ...(currentStreak === undefined ? {} : { currentStreak }),
   };
+}
+
+function computeActivityCanEdit(
+  log: ActivityLog | null,
+  isViewingToday: boolean,
+  todayWindowOpen: boolean,
+): boolean {
+  if (isViewingToday) {
+    return todayWindowOpen;
+  }
+  if (!log) {
+    return true;
+  }
+  return !isActivityLogLogged({
+    state: log.state,
+    tier: log.tier,
+    value: log.value,
+    subPoints: log.subPoints,
+  });
+}
+
+function dayNumberForDateKey(
+  startDate: Date,
+  dateKey: string,
+  timezone: string,
+): number {
+  const startKey = formatLocalDateKey(startDate, timezone);
+  return countDaysInclusive(startKey, dateKey);
 }
 
 function fullCompletionNumberValue(activity: ScoredActivity): number {
@@ -250,10 +290,11 @@ export function buildMarkActivityPayload(
 }
 
 type RecomputeParams = {
-  challenge: Pick<Challenge, 'id' | 'currentDay' | 'userId'>;
+  challenge: Pick<Challenge, 'id' | 'currentDay' | 'userId' | 'startDate'>;
   userId: string;
   timezone: string;
   groupId: string | null;
+  date: Date;
 };
 
 export function mapActivityToEditorRow(activity: Activity): ActivityEditorRow {
@@ -451,9 +492,10 @@ async function assertPersonalActivityOwnership(
 
 export async function recomputeLiveDayScore(
   prisma: PrismaClientLike,
-  { challenge, userId, timezone, groupId }: RecomputeParams,
+  { challenge, userId, timezone, groupId, date }: RecomputeParams,
 ): Promise<DayTotals> {
-  const today = getUserLocalDate(timezone);
+  const targetDate = date;
+  const dateKey = formatLocalDateKey(targetDate, timezone);
 
   const activities = await loadUserActivities(prisma, {
     userId,
@@ -461,7 +503,7 @@ export async function recomputeLiveDayScore(
   });
 
   const logs = await prisma.activityLog.findMany({
-    where: { challengeId: challenge.id, userId, date: today },
+    where: { challengeId: challenge.id, userId, date: targetDate },
   });
 
   const logsById = Object.fromEntries(
@@ -499,15 +541,25 @@ export async function recomputeLiveDayScore(
         ? allPersonalLogged
         : false;
 
+  const existingScore = await prisma.dayScore.findFirst({
+    where: {
+      challengeId: challenge.id,
+      date: targetDate,
+    },
+    select: { finalized: true, netXp: true },
+  });
+
+  const dayNumber = dayNumberForDateKey(challenge.startDate, dateKey, timezone);
+
   await prisma.dayScore.upsert({
     where: {
-      challengeId_date: { challengeId: challenge.id, date: today },
+      challengeId_date: { challengeId: challenge.id, date: targetDate },
     },
     create: {
       challengeId: challenge.id,
       userId,
-      date: today,
-      dayNumber: challenge.currentDay,
+      date: targetDate,
+      dayNumber,
       xpEarned: score.xpEarned,
       xpDeducted: score.xpDeducted,
       netXp: score.netXp,
@@ -516,14 +568,25 @@ export async function recomputeLiveDayScore(
       finalized: false,
     },
     update: {
+      dayNumber,
       xpEarned: score.xpEarned,
       xpDeducted: score.xpDeducted,
       netXp: score.netXp,
       personalXp: score.personalXp,
       breakdown: { allScoredLogged: dayCounted, entries: score.breakdown },
-      finalized: false,
+      finalized: existingScore?.finalized ?? false,
     },
   });
+
+  if (existingScore?.finalized) {
+    const delta = score.netXp - existingScore.netXp;
+    if (delta !== 0) {
+      await prisma.challenge.update({
+        where: { id: challenge.id },
+        data: { totalXp: { increment: delta } },
+      });
+    }
+  }
 
   return {
     netXp: score.netXp,
@@ -656,30 +719,105 @@ async function assertActivityAccess(
   });
 }
 
-async function assertCanMutate(
+async function assertCanMutateForDate(
   prisma: PrismaService,
   challengeId: string,
   timezone: string,
+  targetDate: Date,
+  activityId: string,
+  options: { allowUndo?: boolean } = {},
 ) {
-  if (!isBeforeMidnight(timezone)) {
+  const todayDate = getUserLocalDate(timezone);
+  const todayKey = formatLocalDateKey(todayDate, timezone);
+  const targetKey = formatLocalDateKey(targetDate, timezone);
+
+  if (targetKey > todayKey) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
-      message: 'Submissions are locked after midnight',
+      message: 'Cannot log activities for a future date',
     });
   }
 
-  const today = getUserLocalDate(timezone);
-  const todayScore = await prisma.dayScore.findFirst({
-    where: { challengeId, date: today },
-    select: { finalized: true },
+  const isViewingToday = targetKey === todayKey;
+
+  if (isViewingToday) {
+    if (!isBeforeMidnight(timezone)) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Submissions are locked after midnight',
+      });
+    }
+
+    const todayScore = await prisma.dayScore.findFirst({
+      where: { challengeId, date: todayDate },
+      select: { finalized: true },
+    });
+
+    if (todayScore?.finalized) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: "Today's score is finalized",
+      });
+    }
+    return;
+  }
+
+  if (options.allowUndo) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Cannot undo entries on past dates',
+    });
+  }
+
+  const existing = await prisma.activityLog.findFirst({
+    where: { challengeId, activityId, date: targetDate },
   });
 
-  if (todayScore?.finalized) {
+  if (
+    existing &&
+    isActivityLogLogged({
+      state: existing.state,
+      tier: existing.tier,
+      value: existing.value,
+      subPoints: existing.subPoints,
+    })
+  ) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
-      message: "Today's score is finalized",
+      message: 'Entry already recorded for this date',
     });
   }
+}
+
+function resolveViewedDateKey(
+  dateKey: string | undefined,
+  timezone: string,
+): { viewedDate: Date; viewedKey: string; todayKey: string } {
+  const todayDate = getUserLocalDate(timezone);
+  const todayKey = formatLocalDateKey(todayDate, timezone);
+
+  if (dateKey === undefined) {
+    return { viewedDate: todayDate, viewedKey: todayKey, todayKey };
+  }
+
+  if (!isLocalDateKey(dateKey)) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'date must be YYYY-MM-DD',
+    });
+  }
+
+  const viewedDate = parseLocalDateKey(dateKey, timezone);
+  const viewedKey = formatLocalDateKey(viewedDate, timezone);
+
+  if (viewedKey > todayKey) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Cannot view a future date',
+    });
+  }
+
+  return { viewedDate, viewedKey, todayKey };
 }
 
 function computeXpAwarded(
@@ -706,6 +844,7 @@ export class ActivitiesService {
   async getToday(
     prisma: PrismaService,
     userId: string,
+    dateKey?: string,
   ): Promise<GetTodayResult> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -715,15 +854,23 @@ export class ActivitiesService {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
     }
 
-    const todayDate = getUserLocalDate(user.timezone);
-    const canEditBeforeDeadline = isBeforeMidnight(user.timezone);
+    const { viewedDate, viewedKey, todayKey } = resolveViewedDateKey(
+      dateKey,
+      user.timezone,
+    );
+    const isViewingToday = viewedKey === todayKey;
+    const todayWindowOpen = isBeforeMidnight(user.timezone);
 
     const challenge = await findActiveChallenge(prisma, userId);
     if (!challenge) {
       return {
         currentDay: 1,
-        date: todayDate,
-        canEdit: canEditBeforeDeadline,
+        date: viewedDate,
+        dateKey: viewedKey,
+        isViewingToday,
+        canNavigateBack: false,
+        canNavigateForward: false,
+        canEdit: isViewingToday && todayWindowOpen,
         dayTotals: emptyDayTotals(),
         scoredActivities: [],
         personalActivities: [],
@@ -731,19 +878,46 @@ export class ActivitiesService {
     }
 
     const challengeTimezone = user.group?.challengeTimezone ?? user.timezone;
+    const startKey = formatLocalDateKey(challenge.startDate, challengeTimezone);
+
+    if (viewedKey < startKey) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Date is before the challenge started',
+      });
+    }
+
     const progress = deriveChallengeProgress(challenge, challengeTimezone);
     const isWithinRange =
       progress.currentDay >= 1 && progress.currentDay <= progress.lengthDays;
-    if (!isWithinRange) {
+    const viewedDayNumber = dayNumberForDateKey(
+      challenge.startDate,
+      viewedKey,
+      challengeTimezone,
+    );
+
+    if (!isWithinRange && isViewingToday) {
       return {
         currentDay: progress.currentDay,
-        date: todayDate,
+        date: viewedDate,
+        dateKey: viewedKey,
+        isViewingToday,
+        canNavigateBack: viewedKey > startKey,
+        canNavigateForward: false,
         canEdit: false,
         dayTotals: emptyDayTotals(),
         scoredActivities: [],
         personalActivities: [],
       };
     }
+
+    if (viewedDayNumber < 1 || viewedDayNumber > progress.lengthDays) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Date is outside the challenge range',
+      });
+    }
+
     const runtimeChallenge = {
       ...challenge,
       currentDay: progress.currentDay,
@@ -759,7 +933,7 @@ export class ActivitiesService {
       where: {
         challengeId: challenge.id,
         userId,
-        date: todayDate,
+        date: viewedDate,
       },
     });
 
@@ -767,22 +941,22 @@ export class ActivitiesService {
     const streakByActivityId = await loadActivityStreaks(prisma, {
       activities,
       challenge,
-      todayDate,
+      todayDate: getUserLocalDate(user.timezone),
       timezone: user.timezone,
       userId,
     });
 
-    const todayScore = await prisma.dayScore.findFirst({
-      where: { challengeId: challenge.id, date: todayDate },
+    const viewedScore = await prisma.dayScore.findFirst({
+      where: { challengeId: challenge.id, date: viewedDate },
     });
 
     let dayTotals: DayTotals;
-    if (todayScore && !todayScore.finalized) {
+    if (viewedScore && (!viewedScore.finalized || !isViewingToday)) {
       dayTotals = {
-        netXp: todayScore.netXp,
-        personalXp: todayScore.personalXp,
-        xpEarned: todayScore.xpEarned,
-        xpDeducted: todayScore.xpDeducted,
+        netXp: viewedScore.netXp,
+        personalXp: viewedScore.personalXp,
+        xpEarned: viewedScore.xpEarned,
+        xpDeducted: viewedScore.xpDeducted,
       };
     } else if (activities.length > 0) {
       dayTotals = await recomputeLiveDayScore(prisma, {
@@ -790,31 +964,49 @@ export class ActivitiesService {
         userId,
         timezone: user.timezone,
         groupId: user.groupId,
+        date: viewedDate,
       });
     } else {
       dayTotals = emptyDayTotals();
     }
 
+    const todayWindowOpenForEdit =
+      isViewingToday && todayWindowOpen && isWithinRange;
     const scoredActivities: TodayActivity[] = [];
     const personalActivities: TodayActivity[] = [];
 
     for (const activity of activities) {
-      const today = mapActivityToToday(
+      const log = logByActivityId.get(activity.id) ?? null;
+      const activityCanEdit = computeActivityCanEdit(
+        log,
+        isViewingToday,
+        todayWindowOpenForEdit,
+      );
+      const mapped = mapActivityToToday(
         activity,
-        logByActivityId.get(activity.id) ?? null,
+        log,
+        activityCanEdit,
         streakByActivityId.get(activity.id),
       );
       if (activity.isPersonal) {
-        personalActivities.push(today);
+        personalActivities.push(mapped);
       } else {
-        scoredActivities.push(today);
+        scoredActivities.push(mapped);
       }
     }
 
+    const dayCanEdit =
+      scoredActivities.some((a) => a.canEdit) ||
+      personalActivities.some((a) => a.canEdit);
+
     return {
-      currentDay: progress.currentDay,
-      date: todayDate,
-      canEdit: canEditBeforeDeadline && isWithinRange,
+      currentDay: viewedDayNumber,
+      date: viewedDate,
+      dateKey: viewedKey,
+      isViewingToday,
+      canNavigateBack: viewedKey > startKey,
+      canNavigateForward: viewedKey < todayKey,
+      canEdit: dayCanEdit,
       dayTotals,
       scoredActivities,
       personalActivities,
@@ -825,6 +1017,7 @@ export class ActivitiesService {
     prisma: PrismaService,
     userId: string,
     activityId: string,
+    dateKey?: string,
   ): Promise<MutationResult> {
     return this.upsertActivityLog(
       prisma,
@@ -832,6 +1025,7 @@ export class ActivitiesService {
       activityId,
       (activity) => buildMarkActivityPayload(mapActivityToScored(activity)),
       'replace',
+      dateKey,
     );
   }
 
@@ -840,6 +1034,7 @@ export class ActivitiesService {
     userId: string,
     activityId: string,
     value: number,
+    dateKey?: string,
   ): Promise<MutationResult> {
     return this.upsertActivityLog(
       prisma,
@@ -855,6 +1050,7 @@ export class ActivitiesService {
         return { value };
       },
       'number',
+      dateKey,
     );
   }
 
@@ -863,6 +1059,7 @@ export class ActivitiesService {
     userId: string,
     activityId: string,
     states: Record<string, ActivityLogState>,
+    dateKey?: string,
   ): Promise<MutationResult> {
     return this.upsertActivityLog(
       prisma,
@@ -878,6 +1075,7 @@ export class ActivitiesService {
         return { subPoints: states };
       },
       'mergeSubPoints',
+      dateKey,
     );
   }
 
@@ -886,6 +1084,7 @@ export class ActivitiesService {
     userId: string,
     activityId: string,
     tier: string,
+    dateKey?: string,
   ): Promise<MutationResult> {
     return this.upsertActivityLog(
       prisma,
@@ -908,6 +1107,7 @@ export class ActivitiesService {
         return { tier };
       },
       'tier',
+      dateKey,
     );
   }
 
@@ -915,11 +1115,18 @@ export class ActivitiesService {
     prisma: PrismaService,
     userId: string,
     activityId: string,
+    dateKey?: string,
   ): Promise<MutationResult> {
     const ctx = await this.loadMutationContext(prisma, userId, activityId);
-    await assertCanMutate(prisma, ctx.challenge.id, ctx.user.timezone);
-
-    const today = getUserLocalDate(ctx.user.timezone);
+    const { viewedDate } = resolveViewedDateKey(dateKey, ctx.user.timezone);
+    await assertCanMutateForDate(
+      prisma,
+      ctx.challenge.id,
+      ctx.user.timezone,
+      viewedDate,
+      activityId,
+      { allowUndo: true },
+    );
 
     return prisma.$transaction(async (tx) => {
       const log = await tx.activityLog.upsert({
@@ -927,14 +1134,14 @@ export class ActivitiesService {
           challengeId_activityId_date: {
             challengeId: ctx.challenge.id,
             activityId,
-            date: today,
+            date: viewedDate,
           },
         },
         create: {
           challengeId: ctx.challenge.id,
           userId,
           activityId,
-          date: today,
+          date: viewedDate,
           state: null,
           value: null,
           tier: null,
@@ -955,6 +1162,7 @@ export class ActivitiesService {
         userId,
         timezone: ctx.user.timezone,
         groupId: ctx.user.groupId,
+        date: viewedDate,
       });
 
       return { log, dayTotals };
@@ -966,6 +1174,7 @@ export class ActivitiesService {
     userId: string,
     activityId: string,
     proofUrl: string,
+    dateKey?: string,
   ): Promise<{ log: ActivityLog }> {
     const ctx = await this.loadMutationContext(prisma, userId, activityId);
 
@@ -976,15 +1185,20 @@ export class ActivitiesService {
       });
     }
 
-    await assertCanMutate(prisma, ctx.challenge.id, ctx.user.timezone);
-
-    const today = getUserLocalDate(ctx.user.timezone);
+    const { viewedDate } = resolveViewedDateKey(dateKey, ctx.user.timezone);
+    await assertCanMutateForDate(
+      prisma,
+      ctx.challenge.id,
+      ctx.user.timezone,
+      viewedDate,
+      activityId,
+    );
 
     const existing = await prisma.activityLog.findFirst({
       where: {
         challengeId: ctx.challenge.id,
         activityId,
-        date: today,
+        date: viewedDate,
       },
     });
 
@@ -993,14 +1207,14 @@ export class ActivitiesService {
         challengeId_activityId_date: {
           challengeId: ctx.challenge.id,
           activityId,
-          date: today,
+          date: viewedDate,
         },
       },
       create: {
         challengeId: ctx.challenge.id,
         userId,
         activityId,
-        date: today,
+        date: viewedDate,
         proofUrl,
         xpAwarded: 0,
       },
@@ -1089,11 +1303,18 @@ export class ActivitiesService {
       activity: Activity,
     ) => Pick<ActivityLogInput, 'state' | 'value' | 'tier' | 'subPoints'>,
     mode: 'replace' | 'number' | 'mergeSubPoints' | 'tier' = 'replace',
+    dateKey?: string,
   ): Promise<MutationResult> {
     const ctx = await this.loadMutationContext(prisma, userId, activityId);
-    await assertCanMutate(prisma, ctx.challenge.id, ctx.user.timezone);
+    const { viewedDate } = resolveViewedDateKey(dateKey, ctx.user.timezone);
+    await assertCanMutateForDate(
+      prisma,
+      ctx.challenge.id,
+      ctx.user.timezone,
+      viewedDate,
+      activityId,
+    );
 
-    const today = getUserLocalDate(ctx.user.timezone);
     const scored = mapActivityToScored(ctx.activity);
     const payload = buildPayload(ctx.activity);
 
@@ -1101,7 +1322,7 @@ export class ActivitiesService {
       where: {
         challengeId: ctx.challenge.id,
         activityId,
-        date: today,
+        date: viewedDate,
       },
     });
 
@@ -1154,14 +1375,14 @@ export class ActivitiesService {
           challengeId_activityId_date: {
             challengeId: ctx.challenge.id,
             activityId,
-            date: today,
+            date: viewedDate,
           },
         },
         create: {
           challengeId: ctx.challenge.id,
           userId,
           activityId,
-          date: today,
+          date: viewedDate,
           state,
           value,
           tier,
@@ -1182,6 +1403,7 @@ export class ActivitiesService {
         userId,
         timezone: ctx.user.timezone,
         groupId: ctx.user.groupId,
+        date: viewedDate,
       });
 
       return { log, dayTotals };

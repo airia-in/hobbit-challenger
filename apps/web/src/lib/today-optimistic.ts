@@ -45,12 +45,17 @@ export type TodayActivity = {
   deductMultiplier: number;
   log: TodayActivityLog | null;
   canAttachProof: boolean;
+  canEdit: boolean;
   currentStreak?: number;
 };
 
 export type GetTodayCache = {
   currentDay: number;
   date: string;
+  dateKey: string;
+  isViewingToday: boolean;
+  canNavigateBack: boolean;
+  canNavigateForward: boolean;
   canEdit: boolean;
   dayTotals: DayTotals;
   scoredActivities: TodayActivity[];

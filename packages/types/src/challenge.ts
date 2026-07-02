@@ -1,3 +1,5 @@
+import type { MilestonesPayload } from './milestones';
+
 export type ChallengeRange = {
   startDate: string;
   endDate: string;
@@ -28,4 +30,5 @@ export type DashboardStats = {
   streakBreak: StreakBreak;
   streakFreezesAvailable: number;
   streakFreezesUsed: number;
+  milestones: MilestonesPayload;
 };

@@ -6,20 +6,42 @@ import {
   mapLogToInput,
 } from '../services/activities.service';
 import { evaluateDayRollover } from '../services/day-finalizer';
+import {
+  evaluateAndUnlockMilestones,
+  pickMostPrestigiousMilestone,
+} from '../services/milestones.service';
 import { activeChallengeRelationArgs } from '../utils/challenge-query';
 import { fallbackScheduledEnd } from '../utils/challenge-range';
 import { isFreezeAbsorbed } from '../utils/day-completion';
-import { addLocalDays, getUserLocalDate } from '../utils/day-window';
+import {
+  addLocalDays,
+  formatLocalDateKey,
+  getUserLocalDate,
+} from '../utils/day-window';
+import { MilestoneMessageService } from '../whatsapp/milestone-message.service';
 import { StreakFreezeMessageService } from '../whatsapp/streak-freeze-message.service';
 
 @Injectable()
 export class DayEvaluatorService {
   private readonly logger = new Logger(DayEvaluatorService.name);
 
+  /**
+   * Keys `${challengeId}:${localDate}` for finalized-day milestone self-heal already
+   * attempted this process lifetime. Steady-state cron ticks skip the expensive
+   * full-history scan once a key is present (~1440×/day → 1×/day per finalized day).
+   *
+   * Trade-off: a process restart clears this set, so the next cron tick re-runs
+   * self-heal once (intentional). Missed unlocks are also picked up on the next
+   * day's fresh finalization path, which always evaluates regardless of this set.
+   */
+  private readonly milestoneSelfHealAttempted = new Set<string>();
+
   constructor(
     private readonly prisma: PrismaService,
     @Optional()
     private readonly streakFreezeMessage?: StreakFreezeMessageService,
+    @Optional()
+    private readonly milestoneMessage?: MilestoneMessageService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -132,9 +154,30 @@ export class DayEvaluatorService {
         challengeId: challenge.id,
         date: evaluationDay,
       },
+      select: { finalized: true, breakdown: true },
     });
 
     if (existingScore?.finalized) {
+      const breakdown = existingScore.breakdown as {
+        allScoredLogged?: boolean;
+        freezeConsumed?: boolean;
+      } | null;
+      await this.maybeSelfHealMilestonesForFinalizedDay({
+        userId,
+        userName,
+        userPhone,
+        whatsappOptIn,
+        groupId,
+        challengeId: challenge.id,
+        evaluationDay,
+        challengeTimezone,
+        reminderTime,
+        newStreak: challenge.currentStreak,
+        dayCounted: breakdown?.allScoredLogged === true,
+        allScoredLogged: breakdown?.allScoredLogged === true,
+        freezeConsumed: breakdown?.freezeConsumed === true,
+        streakFreezesUsed: challenge.streakFreezesUsed,
+      });
       await this.maybeSendStreakFreezeConsumeMessage({
         userId,
         userName,
@@ -278,6 +321,29 @@ export class DayEvaluatorService {
     });
 
     if (finalized) {
+      this.markMilestoneSelfHealAttempted(
+        challenge.id,
+        evaluationDay,
+        challengeTimezone,
+      );
+      await this.maybeEvaluateMilestones({
+        userId,
+        userName,
+        userPhone,
+        whatsappOptIn,
+        groupId,
+        challengeId: challenge.id,
+        evaluationDay,
+        challengeTimezone,
+        reminderTime,
+        newStreak: result.challengeUpdate.currentStreak,
+        dayCounted: result.dayScore.breakdown.allScoredLogged,
+        allScoredLogged: result.dayScore.breakdown.allScoredLogged,
+        freezeConsumed: result.flags.freezeConsumed,
+        streakFreezesUsed:
+          result.challengeUpdate.streakFreezesUsed ??
+          challenge.streakFreezesUsed,
+      });
       await this.maybeSendStreakFreezeConsumeMessage({
         userId,
         userName,
@@ -304,6 +370,122 @@ export class DayEvaluatorService {
         reminderTime,
         challengeActive: !result.challengeUpdate.completed,
       });
+    }
+  }
+
+  private milestoneSelfHealKey(
+    challengeId: string,
+    evaluationDay: Date,
+    timezone: string,
+  ): string {
+    return `${challengeId}:${formatLocalDateKey(evaluationDay, timezone)}`;
+  }
+
+  private markMilestoneSelfHealAttempted(
+    challengeId: string,
+    evaluationDay: Date,
+    timezone: string,
+  ): void {
+    this.milestoneSelfHealAttempted.add(
+      this.milestoneSelfHealKey(challengeId, evaluationDay, timezone),
+    );
+  }
+
+  private async maybeSelfHealMilestonesForFinalizedDay(input: {
+    userId: string;
+    userName: string;
+    userPhone: string | null;
+    whatsappOptIn: boolean;
+    groupId: string | null;
+    challengeId: string;
+    evaluationDay: Date;
+    challengeTimezone: string;
+    reminderTime: string | null;
+    newStreak: number;
+    dayCounted: boolean;
+    allScoredLogged: boolean;
+    freezeConsumed: boolean;
+    streakFreezesUsed: number;
+  }): Promise<void> {
+    const key = this.milestoneSelfHealKey(
+      input.challengeId,
+      input.evaluationDay,
+      input.challengeTimezone,
+    );
+    if (this.milestoneSelfHealAttempted.has(key)) {
+      return;
+    }
+    this.milestoneSelfHealAttempted.add(key);
+    await this.maybeEvaluateMilestones(input);
+  }
+
+  private async maybeEvaluateMilestones(input: {
+    userId: string;
+    userName: string;
+    userPhone: string | null;
+    whatsappOptIn: boolean;
+    groupId: string | null;
+    challengeId: string;
+    evaluationDay: Date;
+    challengeTimezone: string;
+    reminderTime: string | null;
+    newStreak: number;
+    dayCounted: boolean;
+    allScoredLogged: boolean;
+    freezeConsumed: boolean;
+    streakFreezesUsed: number;
+  }): Promise<void> {
+    try {
+      const { newlyUnlocked } = await evaluateAndUnlockMilestones(this.prisma, {
+        userId: input.userId,
+        challengeId: input.challengeId,
+        groupId: input.groupId,
+        evaluationDay: input.evaluationDay,
+        timezone: input.challengeTimezone,
+        newStreak: input.newStreak,
+        dayCounted: input.dayCounted,
+        allScoredLogged: input.allScoredLogged,
+        freezeConsumed: input.freezeConsumed,
+        streakFreezesUsed: input.streakFreezesUsed,
+      });
+
+      if (
+        !this.milestoneMessage ||
+        !input.userPhone ||
+        !input.whatsappOptIn ||
+        newlyUnlocked.length === 0
+      ) {
+        return;
+      }
+
+      const primary = pickMostPrestigiousMilestone(newlyUnlocked);
+      if (!primary) {
+        return;
+      }
+
+      try {
+        await this.milestoneMessage.trySendBatchUnlockMessage({
+          prisma: this.prisma,
+          userId: input.userId,
+          userName: input.userName,
+          phone: input.userPhone,
+          evaluationDay: input.evaluationDay,
+          primaryMilestoneKey: primary,
+          additionalUnlockCount: newlyUnlocked.length - 1,
+          timezone: input.challengeTimezone,
+          morningTime: input.reminderTime ?? undefined,
+        });
+      } catch (error) {
+        this.logger.error(
+          `Milestone message failed for user ${input.userId} (${primary}):`,
+          error,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Milestone evaluation failed for user ${input.userId}:`,
+        error,
+      );
     }
   }
 

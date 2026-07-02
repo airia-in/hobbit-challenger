@@ -4,6 +4,7 @@ import { EvolutionApiClient } from './evolution.client';
 import { OpenAiReminderService } from './openai-reminder.service';
 import { ReminderContextService } from './reminder-context.service';
 import { StreakFreezeMessageService } from './streak-freeze-message.service';
+import { MilestoneMessageService } from './milestone-message.service';
 import { WinbackMessageService } from './winback-message.service';
 
 @Module({
@@ -13,6 +14,7 @@ import { WinbackMessageService } from './winback-message.service';
     ReminderContextService,
     OpenAiReminderService,
     StreakFreezeMessageService,
+    MilestoneMessageService,
     WinbackMessageService,
   ],
   exports: [
@@ -20,6 +22,7 @@ import { WinbackMessageService } from './winback-message.service';
     ReminderContextService,
     OpenAiReminderService,
     StreakFreezeMessageService,
+    MilestoneMessageService,
     WinbackMessageService,
   ],
 })

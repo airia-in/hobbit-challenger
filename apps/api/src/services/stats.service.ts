@@ -15,6 +15,7 @@ import {
 } from '../utils/day-window';
 import { getLiveStreak } from '../utils/live-streak';
 import { computeStreakBreak } from '../utils/streak-break';
+import { getUserMilestones } from './milestones.service';
 import {
   clampDateRange,
   isCompletionActivityKind,
@@ -119,6 +120,8 @@ export async function getDashboardStats(
     getUserLocalDate(challengeTimezone),
   );
 
+  const milestones = await getUserMilestones(prisma, userId);
+
   return {
     totalXp,
     todayNetXp,
@@ -136,6 +139,7 @@ export async function getDashboardStats(
     streakBreak,
     streakFreezesAvailable: challenge?.streakFreezesAvailable ?? 0,
     streakFreezesUsed: challenge?.streakFreezesUsed ?? 0,
+    milestones,
   };
 }
 

@@ -9,6 +9,7 @@ import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
+import { EarnedMilestonesSection } from './EarnedMilestonesSection';
 
 type ActivityOption = {
   id: string;
@@ -183,6 +184,10 @@ export function ProgressContent() {
           </p>
         ) : null}
       </header>
+
+      <EarnedMilestonesSection
+        milestones={dashboard.data?.milestones?.earned ?? []}
+      />
 
       <section className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
         <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)]">

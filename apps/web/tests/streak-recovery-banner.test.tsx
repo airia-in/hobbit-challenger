@@ -134,6 +134,11 @@ const baseStats = {
     brokeOnDate: '2026-07-02',
     daysSinceBreak: 1,
   },
+  milestones: {
+    earned: [],
+    latestUnlock: null,
+    latestUnlockAdditionalCount: 0,
+  },
 };
 
 describe('getStreakRecoveryMessage', () => {

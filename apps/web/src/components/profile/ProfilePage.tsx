@@ -138,7 +138,7 @@ export function ProfileContent() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'drcode-export.csv';
+      a.download = 'hobbit-export.csv';
       a.click();
       URL.revokeObjectURL(url);
     });

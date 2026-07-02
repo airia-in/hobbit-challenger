@@ -9,7 +9,7 @@ export type PromptContent = {
 
 const promptCache = new Map<string, PromptContent>();
 
-export function parsePromptMarkdown(raw: string): PromptContent {
+export function parsePromptJinja(raw: string): PromptContent {
   const systemMatch = raw.match(/## System\s+([\s\S]*?)(?=## User|$)/i);
   const userMatch = raw.match(/## User\s+([\s\S]*?)$/i);
 
@@ -18,12 +18,15 @@ export function parsePromptMarkdown(raw: string): PromptContent {
 
   if (!system || !user) {
     throw new Error(
-      'Prompt markdown must include ## System and ## User sections',
+      'Prompt templates must include ## System and ## User sections',
     );
   }
 
   return { system, user };
 }
+
+/** @deprecated Use parsePromptJinja — kept for existing imports/tests. */
+export const parsePromptMarkdown = parsePromptJinja;
 
 export function getPromptsDir(): string {
   const candidates = [
@@ -50,7 +53,7 @@ export async function loadPromptFile(filename: string): Promise<PromptContent> {
 
   const promptPath = path.join(getPromptsDir(), filename);
   const raw = await readFile(promptPath, 'utf8');
-  const parsed = parsePromptMarkdown(raw);
+  const parsed = parsePromptJinja(raw);
   promptCache.set(filename, parsed);
   return parsed;
 }

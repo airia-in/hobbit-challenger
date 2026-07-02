@@ -4,10 +4,10 @@ def androidVersionName = (System.getenv('ANDROID_VERSION_NAME') ?: '1.0').replac
 def androidVersionCode = (System.getenv('ANDROID_VERSION_CODE') ?: '1').toInteger()
 
 android {
-    namespace "com.drcode.hard75"
+    namespace "com.drcode.hobbit"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.drcode.hard75"
+        applicationId "com.drcode.hobbit"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode androidVersionCode

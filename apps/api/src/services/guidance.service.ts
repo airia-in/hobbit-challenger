@@ -1,7 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TRPCError } from '@trpc/server';
-import { getGuidance, type ActivityGuidance } from '@workspace-starter/types';
+import {
+  BRAND_INTRO,
+  BRAND_NAME,
+  BRAND_TAGLINE,
+  buildDashboardUrl,
+  getGuidance,
+  type ActivityGuidance,
+} from '@workspace-starter/types';
 import type { Activity } from '@workspace-starter/db';
 import OpenAI from 'openai';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -23,7 +30,7 @@ export type GuidanceAskResult = {
   answer: string | null;
 };
 
-const GUIDANCE_ASK_PROMPT = 'guidance-ask.md';
+const GUIDANCE_ASK_PROMPT = 'guidance-ask.jinja';
 
 @Injectable()
 export class GuidanceService {
@@ -63,9 +70,15 @@ export class GuidanceService {
     );
     const prompt = await loadPromptFile(GUIDANCE_ASK_PROMPT);
     const context = buildGuidanceContext(activity.title, activity.seedKey);
+    const webDomain =
+      this.config.get<string>('WEB_DOMAIN') ?? 'hobbit.drcode.ai';
     const systemPrompt = interpolateGuidancePrompt(prompt.system, {
       activityTitle: activity.title,
       ...context,
+      brandName: BRAND_NAME,
+      brandIntro: BRAND_INTRO,
+      brandTagline: BRAND_TAGLINE,
+      dashboardUrl: buildDashboardUrl(webDomain),
       question: input.question,
     });
 

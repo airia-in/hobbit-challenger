@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.drcode.hard75',
-  appName: 'DRCODE',
+  appId: 'com.drcode.hobbit',
+  appName: 'HOBBIT',
   webDir: 'www',
   server: {
     androidScheme: 'https',

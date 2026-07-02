@@ -81,7 +81,7 @@ describe('LoginForm', () => {
       screen.getByPlaceholderText('9876543210 or you@example.com'),
     ).toBeInTheDocument();
     expect(screen.getByText('+91')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'DRCODE' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'HOBBIT' })).toBeInTheDocument();
     expect(screen.queryByText('Checking session…')).not.toBeInTheDocument();
     expect(mockMeUseQuery).toHaveBeenCalledWith(undefined, {
       enabled: false,

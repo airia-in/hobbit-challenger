@@ -6,6 +6,7 @@ export type StatsRowProps = {
   currentStreak: number;
   longestStreak: number;
   successRate: number;
+  labels?: Partial<Record<(typeof STAT_ITEMS)[number]['key'], string>>;
   className?: string;
   itemClassName?: string;
   labelClassName?: string;
@@ -14,8 +15,8 @@ export type StatsRowProps = {
 
 const STAT_ITEMS = [
   { key: 'totalXp', label: 'Total XP' },
-  { key: 'todayNetXp', label: "Today's XP" },
-  { key: 'currentStreak', label: 'Current Streak' },
+  { key: 'todayNetXp', label: 'Path XP today' },
+  { key: 'currentStreak', label: 'Trail streak' },
   { key: 'longestStreak', label: 'Longest Streak' },
   { key: 'successRate', label: 'Success Rate' },
 ] as const;
@@ -26,6 +27,7 @@ export function StatsRow({
   currentStreak,
   longestStreak,
   successRate,
+  labels,
   className,
   itemClassName,
   labelClassName,
@@ -61,7 +63,7 @@ export function StatsRow({
             )}
             style={{ fontFamily: 'var(--font-mono)' }}
           >
-            {item.label}
+            {labels?.[item.key] ?? item.label}
           </p>
           <p
             className={cn(

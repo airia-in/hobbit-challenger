@@ -17,6 +17,7 @@ const mockLeaderboardSeries = vi.fn();
 const mockGroupsGetMine = vi.fn();
 const mockGroupsGetChallengeRange = vi.fn();
 const mockAuthMe = vi.fn();
+const mockProfileGet = vi.fn();
 const mockUseMutation = vi.fn((..._args: unknown[]) => ({
   mutate: vi.fn(),
   isPending: false,
@@ -178,6 +179,11 @@ vi.mock('../src/lib/trpc', () => ({
         useMutation: (...args: unknown[]) => mockUseMutation(...args),
       },
     },
+    profile: {
+      get: {
+        useQuery: (...args: unknown[]) => mockProfileGet(...args),
+      },
+    },
   },
 }));
 
@@ -193,6 +199,7 @@ afterEach(() => {
   mockGroupsGetMine.mockReset();
   mockGroupsGetChallengeRange.mockReset();
   mockAuthMe.mockReset();
+  mockProfileGet.mockReset();
   mockUseMutation.mockClear();
   mockInvalidate.mockClear();
   mockRemoveMemberMutate.mockReset();
@@ -262,6 +269,12 @@ const dashboardStats = {
   currentStreak: 3,
   longestStreak: 3,
   successRate: 75,
+  streakBreak: {
+    occurred: false,
+    previousStreak: 0,
+    brokeOnDate: null,
+    daysSinceBreak: 0,
+  },
 };
 
 const emptyToday = {
@@ -359,6 +372,7 @@ describe('query error surfaces', () => {
     const refetch = vi.fn();
     mockActivitiesGetToday.mockReturnValue(idleQuery(emptyToday));
     mockStatsGetDashboard.mockReturnValue(idleQuery(dashboardStats));
+    mockProfileGet.mockReturnValue(idleQuery({ reminderTime: null }));
     mockHeatmapGet.mockReturnValue(
       errorQuery('Unable to load heatmap', refetch),
     );

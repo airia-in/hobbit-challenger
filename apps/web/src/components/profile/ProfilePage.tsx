@@ -57,6 +57,8 @@ export function ProfileContent() {
   const [message, setMessage] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const phoneInputRef = useRef<HTMLInputElement>(null);
+  const reminderInputRef = useRef<HTMLInputElement>(null);
+  const reminderFocusHandledRef = useRef(false);
 
   const utils = trpc.useUtils();
   const profile = trpc.profile.get.useQuery();
@@ -112,6 +114,19 @@ export function ProfileContent() {
       block: 'center',
     });
   }, [needsPhoneMigration]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (reminderFocusHandledRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('focus') !== 'reminder' || !reminderInputRef.current) return;
+    reminderFocusHandledRef.current = true;
+    reminderInputRef.current.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    });
+    reminderInputRef.current.focus();
+  }, [profile.data]);
 
   function handleWhatsappOptInChange(enabled: boolean) {
     setWhatsappOptIn(enabled);
@@ -389,11 +404,13 @@ export function ProfileContent() {
           </button>
         </div>
 
-        <div>
+        <div id="reminder-time">
           <label className="mb-1 block text-xs uppercase tracking-wider text-[var(--text-muted)]">
             Morning reminder time
           </label>
           <input
+            id="reminder-time-input"
+            ref={reminderInputRef}
             type="time"
             value={reminderTime}
             onChange={(e) => setReminderTime(e.target.value)}

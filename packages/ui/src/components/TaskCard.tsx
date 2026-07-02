@@ -81,6 +81,8 @@ export type TaskCardProps = {
     history: GuidanceChatMessage[];
   }) => Promise<GuidanceAskResult>;
   disabled?: boolean;
+  celebrationLine?: string;
+  domId?: string;
   className?: string;
 };
 
@@ -95,7 +97,7 @@ const STATUS_STYLES: Record<TaskStatus, string> = {
     'border-[var(--accent-red)]/30 bg-[var(--accent-red)]/10 text-[var(--accent-red)]',
 };
 
-function deriveStatus(
+export function deriveTaskStatus(
   kind: ActivityKind,
   log: ActivityLogView | null,
   canEdit: boolean,
@@ -381,12 +383,14 @@ export function TaskCard({
   guidance,
   onAskGuidance,
   disabled = false,
+  celebrationLine,
+  domId,
   className,
 }: TaskCardProps) {
   const showExpand = hasExpandableContent(kind, expandedContent);
   const [expanded, setExpanded] = useState(() => defaultExpanded && showExpand);
   const [guidanceOpen, setGuidanceOpen] = useState(false);
-  const status = deriveStatus(kind, log, canEdit);
+  const status = deriveTaskStatus(kind, log, canEdit);
   const xpAwarded = log?.xpAwarded ?? 0;
   const isComplete = status === 'COMPLETED';
   const canBodyTap = bodyTapEnabled(kind) && canEdit && !disabled;
@@ -420,6 +424,7 @@ export function TaskCard({
 
   return (
     <div
+      id={domId}
       className={cn(
         'overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)]',
         isComplete && 'border-[var(--success)]/20',
@@ -458,7 +463,16 @@ export function TaskCard({
                 style={{ fontFamily: 'var(--font-mono)' }}
               >
                 <span aria-hidden>🔥 </span>
-                {currentStreak} day streak
+                {currentStreak}{' '}
+                {currentStreak === 1 ? 'day on the trail' : 'days on the trail'}
+              </span>
+            )}
+            {isComplete && celebrationLine && (
+              <span
+                className="mt-1 block text-xs italic text-[var(--success)]"
+                aria-live="polite"
+              >
+                {celebrationLine}
               </span>
             )}
           </span>

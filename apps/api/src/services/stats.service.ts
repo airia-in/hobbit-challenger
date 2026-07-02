@@ -1,4 +1,5 @@
 import { TRPCError } from '@trpc/server';
+import type { StreakBreak } from '@workspace-starter/types';
 import type { Activity } from '@workspace-starter/db';
 import type { PrismaService } from '../prisma/prisma.service';
 import { challengeDisplayOrderBy } from '../utils/challenge-query';
@@ -13,6 +14,7 @@ import {
   getUserLocalDate,
 } from '../utils/day-window';
 import { getLiveStreak } from '../utils/live-streak';
+import { computeStreakBreak } from '../utils/streak-break';
 import {
   clampDateRange,
   isCompletionActivityKind,
@@ -35,6 +37,7 @@ export type DashboardStats = {
   longestStreak: number;
   totalDaysCompleted: number;
   successRate: number;
+  streakBreak: StreakBreak;
 };
 
 export async function getDashboardStats(
@@ -112,6 +115,23 @@ export async function getDashboardStats(
         ? todayDate
         : null;
 
+  const challengeTimezone = user.group?.challengeTimezone ?? user.timezone;
+
+  const finalizedScoresForBreak = challenge
+    ? await prisma.dayScore.findMany({
+        where: { challengeId: challenge.id, finalized: true },
+        select: { date: true, breakdown: true, finalized: true },
+        orderBy: { date: 'desc' },
+        take: lengthDays,
+      })
+    : [];
+
+  const streakBreak = computeStreakBreak(
+    finalizedScoresForBreak,
+    challengeTimezone,
+    getUserLocalDate(challengeTimezone),
+  );
+
   return {
     totalXp,
     todayNetXp,
@@ -126,6 +146,7 @@ export async function getDashboardStats(
       : 0,
     totalDaysCompleted,
     successRate,
+    streakBreak,
   };
 }
 

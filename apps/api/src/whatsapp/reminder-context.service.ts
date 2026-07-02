@@ -10,8 +10,25 @@ import {
   type ScoredActivity,
 } from '../services/scoring.service';
 import { getDashboardStats } from '../services/stats.service';
-import { isActivityLogLogged } from '../utils/day-completion';
+import { challengeDisplayOrderBy } from '../utils/challenge-query';
+import {
+  isActivityLogLogged,
+  isInterimDayFailed,
+} from '../utils/day-completion';
+import { addLocalDays, getUserLocalDate } from '../utils/day-window';
 import type { PrismaService } from '../prisma/prisma.service';
+
+export const UNLOGGED_HABITS_CAP = 3;
+export const STREAK_AT_RISK_MIN = 3;
+
+/** Challenge-local yesterday (midnight anchor in challenge TZ, not user TZ). */
+export function getChallengeYesterdayDate(
+  challengeTimezone: string,
+  now = new Date(),
+): Date {
+  const todayInChallenge = getUserLocalDate(challengeTimezone, now);
+  return addLocalDays(todayInChallenge, -1, challengeTimezone);
+}
 
 export type ReminderContext = {
   name: string;
@@ -22,6 +39,14 @@ export type ReminderContext = {
   xpAtRisk: number;
   rank: number | null;
   totalXp: number;
+  topActivityStreak: number;
+  topActivityName: string | null;
+  unloggedHabitNames: string[];
+  missedYesterday: boolean;
+  streakAtRisk: boolean;
+  journeyMilestone: 7 | 21 | 30 | null;
+  currentStreak: number;
+  longestStreak: number;
 };
 
 function todayActivityToScored(activity: TodayActivity): ScoredActivity {
@@ -40,6 +65,56 @@ function todayActivityToScored(activity: TodayActivity): ScoredActivity {
     subPoints: activity.subPoints,
     tiers: activity.tiers,
   };
+}
+
+export function pickTopActivityStreak(scoredActivities: TodayActivity[]): {
+  topActivityStreak: number;
+  topActivityName: string | null;
+} {
+  let topActivityStreak = 0;
+  let topActivityName: string | null = null;
+
+  for (const activity of scoredActivities) {
+    if (!activity.scored || activity.currentStreak === undefined) {
+      continue;
+    }
+    if (activity.currentStreak > topActivityStreak) {
+      topActivityStreak = activity.currentStreak;
+      topActivityName = activity.title;
+    }
+  }
+
+  return { topActivityStreak, topActivityName };
+}
+
+export function collectUnloggedHabitNames(
+  scoredActivities: TodayActivity[],
+  cap = UNLOGGED_HABITS_CAP,
+): string[] {
+  const names: string[] = [];
+
+  for (const activity of scoredActivities) {
+    if (!activity.scored) {
+      continue;
+    }
+    const log = activity.log;
+    if (log && isActivityLogLogged(log)) {
+      continue;
+    }
+    names.push(activity.title);
+    if (names.length >= cap) {
+      break;
+    }
+  }
+
+  return names;
+}
+
+export function resolveJourneyMilestone(dayNumber: number): 7 | 21 | 30 | null {
+  if (dayNumber === 7 || dayNumber === 21 || dayNumber === 30) {
+    return dayNumber;
+  }
+  return null;
 }
 
 export function countTasksFromToday(scoredActivities: TodayActivity[]): {
@@ -96,13 +171,26 @@ export function computeXpAtRisk(scoredActivities: TodayActivity[]): number {
 export function buildReminderContextFromToday(
   name: string,
   today: GetTodayResult,
-  stats: { todayNetXp: number; totalXp: number },
+  stats: {
+    todayNetXp: number;
+    totalXp: number;
+    currentStreak: number;
+    longestStreak: number;
+  },
   rank: number | null,
+  missedYesterday: boolean,
 ): ReminderContext {
   const { tasksDone, tasksRemaining } = countTasksFromToday(
     today.scoredActivities,
   );
   const xpAtRisk = computeXpAtRisk(today.scoredActivities);
+  const { topActivityStreak, topActivityName } = pickTopActivityStreak(
+    today.scoredActivities,
+  );
+  const unloggedHabitNames = collectUnloggedHabitNames(today.scoredActivities);
+  const journeyMilestone = resolveJourneyMilestone(today.currentDay);
+  const streakAtRisk =
+    stats.currentStreak >= STREAK_AT_RISK_MIN && tasksRemaining > 0;
 
   return {
     name,
@@ -113,6 +201,14 @@ export function buildReminderContextFromToday(
     xpAtRisk,
     rank,
     totalXp: stats.totalXp,
+    topActivityStreak,
+    topActivityName,
+    unloggedHabitNames,
+    missedYesterday,
+    streakAtRisk,
+    journeyMilestone,
+    currentStreak: stats.currentStreak,
+    longestStreak: stats.longestStreak,
   };
 }
 
@@ -141,9 +237,48 @@ export class ReminderContextService {
       // User has no group — rank remains null
     }
 
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { group: { select: { challengeTimezone: true } } },
+    });
+
+    let missedYesterday = false;
+    if (user) {
+      const challenge = await prisma.challenge.findFirst({
+        where: { userId },
+        orderBy: challengeDisplayOrderBy,
+      });
+      if (challenge) {
+        const timezone = user.group?.challengeTimezone ?? user.timezone;
+        const yesterday = getChallengeYesterdayDate(timezone);
+        const yesterdayScore = await prisma.dayScore.findFirst({
+          where: {
+            challengeId: challenge.id,
+            date: yesterday,
+            finalized: true,
+          },
+          select: { finalized: true, breakdown: true },
+        });
+        missedYesterday = yesterdayScore
+          ? isInterimDayFailed(yesterdayScore)
+          : false;
+      }
+    }
+
     const today = await this.activitiesService.getToday(prisma, userId);
 
-    return buildReminderContextFromToday(userName, today, stats, rank);
+    return buildReminderContextFromToday(
+      userName,
+      today,
+      {
+        todayNetXp: stats.todayNetXp,
+        totalXp: stats.totalXp,
+        currentStreak: stats.currentStreak,
+        longestStreak: stats.longestStreak,
+      },
+      rank,
+      missedYesterday,
+    );
   }
 }
 
@@ -152,12 +287,21 @@ export function buildReminderContextFromFixture(input: {
   today: GetTodayResult;
   todayNetXp: number;
   totalXp: number;
+  currentStreak?: number;
+  longestStreak?: number;
   rank?: number | null;
+  missedYesterday?: boolean;
 }): ReminderContext {
   return buildReminderContextFromToday(
     input.name,
     input.today,
-    { todayNetXp: input.todayNetXp, totalXp: input.totalXp },
+    {
+      todayNetXp: input.todayNetXp,
+      totalXp: input.totalXp,
+      currentStreak: input.currentStreak ?? 0,
+      longestStreak: input.longestStreak ?? 0,
+    },
     input.rank ?? null,
+    input.missedYesterday ?? false,
   );
 }

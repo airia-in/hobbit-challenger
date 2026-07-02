@@ -1,5 +1,5 @@
 import { getGuidance } from '@workspace-starter/types';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DayCounter,
   HeatmapGrid,
@@ -13,10 +13,33 @@ import {
 import { AuthGateInner } from '../auth/AuthGate';
 import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
+import { FirstWeekChecklist } from '../onboarding/FirstWeekChecklist';
 import { BRAND_NAME, BRAND_SUBTITLE } from '../../lib/brand';
+import {
+  getPerfectDayBanner,
+  getStreakRecoveryCta,
+  JOURNEY_LABELS,
+  pickEasiestUnloggedScoredHabit,
+  taskCardDomId,
+} from '../../lib/celebrations';
+import {
+  clearPerfectDayCelebrated,
+  hasPerfectDayBeenCelebrated,
+  markPerfectDayCelebrated,
+} from '../../lib/perfect-day-storage';
+import {
+  dismissStreakRecovery,
+  isStreakRecoveryDismissed,
+} from '../../lib/streak-recovery-storage';
 import { TrpcProvider } from '../TrpcProvider';
 import { getToken } from '../../lib/auth';
 import { trpc } from '../../lib/trpc';
+import {
+  allScoredActivitiesCompleted,
+  anyActivityCompleted,
+  isActivityCompleted,
+} from '../../lib/today-completion';
+import { useActivityCelebrations } from '../../lib/use-activity-celebrations';
 import {
   applyMutationResult,
   optimisticMarkDone,
@@ -28,6 +51,9 @@ import {
   type GetTodayCache,
   type TodayActivity,
 } from '../../lib/today-optimistic';
+import { PerfectDayBanner } from './PerfectDayBanner';
+import { PerfectDayCelebration } from './PerfectDayCelebration';
+import { StreakRecoveryBanner } from './StreakRecoveryBanner';
 
 const apiUrl = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -238,10 +264,14 @@ function ActivityCard({
   activity,
   mutations,
   variant = 'scored',
+  celebrationLine,
+  highlighted = false,
 }: {
   activity: TodayActivity;
   mutations: ReturnType<typeof useTodayMutations>;
   variant?: 'scored' | 'personal';
+  celebrationLine?: string;
+  highlighted?: boolean;
 }) {
   const {
     markActivity,
@@ -257,6 +287,7 @@ function ActivityCard({
 
   return (
     <TaskCard
+      domId={taskCardDomId(activity.id)}
       icon={activity.emoji ?? '✅'}
       title={activity.title}
       kind={activity.kind}
@@ -267,11 +298,20 @@ function ActivityCard({
       xpPerUnit={activity.xpPerUnit}
       xpCap={activity.xpCap}
       currentStreak={activity.currentStreak}
+      celebrationLine={celebrationLine}
       subPoints={activity.subPoints}
       tiers={activity.tiers}
       defaultExpanded
       disabled={isPending}
-      className={variant === 'personal' ? 'border-dashed' : undefined}
+      className={
+        highlighted
+          ? variant === 'personal'
+            ? 'border-dashed ring-2 ring-[var(--accent-red)]/60 ring-offset-2 ring-offset-[var(--bg-black)]'
+            : 'ring-2 ring-[var(--accent-red)]/60 ring-offset-2 ring-offset-[var(--bg-black)]'
+          : variant === 'personal'
+            ? 'border-dashed'
+            : undefined
+      }
       onMarkDone={() => markActivity.mutate({ activityId: activity.id })}
       onUndo={() => undoActivity.mutate({ activityId: activity.id })}
       onNumberCommit={(value) =>
@@ -308,12 +348,113 @@ export function DashboardContent() {
   const [viewedDateKey, setViewedDateKey] = useState<string | undefined>(
     undefined,
   );
+  const [perfectDayBannerDismissed, setPerfectDayBannerDismissed] =
+    useState(false);
+  const [recoveryDismissedSession, setRecoveryDismissedSession] =
+    useState(false);
+  const [confettiActive, setConfettiActive] = useState(false);
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(
+    null,
+  );
+  const confettiTriggeredRef = useRef(false);
+  const prevAllScoredCompleteRef = useRef<boolean | null>(null);
   const queryInput = viewedDateKey ? { date: viewedDateKey } : undefined;
   const mutations = useTodayMutations(viewedDateKey);
 
   const activitiesQuery = trpc.activities.getToday.useQuery(queryInput);
   const statsQuery = trpc.stats.getDashboard.useQuery();
   const heatmapQuery = trpc.heatmap.get.useQuery();
+  const profileQuery = trpc.profile.get.useQuery();
+
+  const stats = statsQuery.data;
+  const today = activitiesQuery.data;
+
+  const { celebrationLines } = useActivityCelebrations(
+    today,
+    stats?.currentStreak,
+  );
+
+  const allScoredComplete =
+    today != null &&
+    today.isViewingToday &&
+    allScoredActivitiesCompleted(today);
+
+  const brokeOnDate = stats?.streakBreak?.brokeOnDate ?? null;
+  const recoveryDismissedStorage =
+    brokeOnDate != null ? isStreakRecoveryDismissed(brokeOnDate) : false;
+
+  const easiestUnloggedHabit =
+    today != null
+      ? pickEasiestUnloggedScoredHabit(
+          today.scoredActivities,
+          isActivityCompleted,
+        )
+      : null;
+  const recoveryCtaLabel = easiestUnloggedHabit
+    ? getStreakRecoveryCta(easiestUnloggedHabit.title)
+    : "See today's habits";
+
+  useEffect(() => {
+    confettiTriggeredRef.current = false;
+    prevAllScoredCompleteRef.current = null;
+  }, [today?.dateKey]);
+
+  useEffect(() => {
+    setRecoveryDismissedSession(false);
+  }, [brokeOnDate]);
+
+  useEffect(() => {
+    if (!today?.isViewingToday) return;
+    const prev = prevAllScoredCompleteRef.current;
+    prevAllScoredCompleteRef.current = allScoredComplete;
+    if (prev === true && !allScoredComplete) {
+      clearPerfectDayCelebrated(today.dateKey);
+      confettiTriggeredRef.current = false;
+      setPerfectDayBannerDismissed(false);
+    }
+  }, [today, allScoredComplete]);
+
+  useEffect(() => {
+    if (!today?.isViewingToday || !allScoredComplete) return;
+    if (today.scoredActivities.length === 0) return;
+    if (hasPerfectDayBeenCelebrated(today.dateKey)) return;
+    if (confettiTriggeredRef.current) return;
+
+    confettiTriggeredRef.current = true;
+    markPerfectDayCelebrated(today.dateKey);
+    setConfettiActive(true);
+  }, [today, allScoredComplete]);
+
+  const handleConfettiDone = useCallback(() => {
+    setConfettiActive(false);
+  }, []);
+
+  const handleRecoveryDismiss = useCallback(() => {
+    if (brokeOnDate) dismissStreakRecovery(brokeOnDate);
+    setRecoveryDismissedSession(true);
+  }, [brokeOnDate]);
+
+  const handleScrollToEasiestHabit = useCallback(() => {
+    const targetId = easiestUnloggedHabit
+      ? taskCardDomId(easiestUnloggedHabit.id)
+      : 'today-tasks';
+    document.getElementById(targetId)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+    if (easiestUnloggedHabit) {
+      setHighlightedTaskId(easiestUnloggedHabit.id);
+      window.setTimeout(() => setHighlightedTaskId(null), 2500);
+    }
+  }, [easiestUnloggedHabit]);
+
+  const showRecoveryBanner =
+    stats?.streakBreak?.occurred === true &&
+    today?.isViewingToday === true &&
+    brokeOnDate != null &&
+    !recoveryDismissedSession &&
+    !recoveryDismissedStorage &&
+    !allScoredComplete;
 
   if (activitiesQuery.isLoading || statsQuery.isLoading) {
     return (
@@ -343,9 +484,6 @@ export function DashboardContent() {
     );
   }
 
-  const stats = statsQuery.data;
-  const today = activitiesQuery.data;
-
   const activityTitles = today
     ? [...today.scoredActivities, ...today.personalActivities].map(
         (a) => a.title,
@@ -368,9 +506,23 @@ export function DashboardContent() {
             </p>
           </div>
           {stats && (
-            <StreakBadge streak={stats.currentStreak} label="day streak" />
+            <StreakBadge
+              streak={stats.currentStreak}
+              label={JOURNEY_LABELS.streakPlural}
+            />
           )}
         </header>
+
+        {showRecoveryBanner && stats && (
+          <StreakRecoveryBanner
+            previousStreak={stats.streakBreak.previousStreak}
+            longestStreak={stats.longestStreak}
+            daysSinceBreak={stats.streakBreak.daysSinceBreak}
+            ctaLabel={recoveryCtaLabel}
+            onDismiss={handleRecoveryDismiss}
+            onScrollToTasks={handleScrollToEasiestHabit}
+          />
+        )}
 
         {stats && (
           <DayCounter
@@ -381,8 +533,16 @@ export function DashboardContent() {
           />
         )}
 
+        {stats && today && (
+          <FirstWeekChecklist
+            currentDay={stats.currentDay}
+            hasReminder={Boolean(profileQuery.data?.reminderTime)}
+            hasCompletedHabit={anyActivityCompleted(today)}
+          />
+        )}
+
         {today && (
-          <section className="space-y-3">
+          <section id="today-tasks" className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <button
                 type="button"
@@ -425,11 +585,22 @@ export function DashboardContent() {
               }
             />
 
+            {allScoredComplete &&
+              !perfectDayBannerDismissed &&
+              today.scoredActivities.length > 0 && (
+                <PerfectDayBanner
+                  message={getPerfectDayBanner(today.dateKey)}
+                  onDismiss={() => setPerfectDayBannerDismissed(true)}
+                />
+              )}
+
             {today.scoredActivities.map((activity) => (
               <ActivityCard
                 key={activity.id}
                 activity={activity}
                 mutations={mutations}
+                celebrationLine={celebrationLines[activity.id]}
+                highlighted={highlightedTaskId === activity.id}
               />
             ))}
 
@@ -447,6 +618,7 @@ export function DashboardContent() {
                     activity={activity}
                     mutations={mutations}
                     variant="personal"
+                    celebrationLine={celebrationLines[activity.id]}
                   />
                 ))}
               </div>
@@ -468,6 +640,10 @@ export function DashboardContent() {
               currentStreak={stats.currentStreak}
               longestStreak={stats.longestStreak}
               successRate={stats.successRate}
+              labels={{
+                todayNetXp: JOURNEY_LABELS.pathXpToday,
+                currentStreak: JOURNEY_LABELS.trailStreak,
+              }}
             />
           </section>
         )}
@@ -532,6 +708,11 @@ export function DashboardContent() {
             Manage group →
           </a>
         </footer>
+
+        <PerfectDayCelebration
+          active={confettiActive}
+          onDone={handleConfettiDone}
+        />
       </div>
     </div>
   );

@@ -8,7 +8,7 @@ export type StreakBadgeProps = {
 
 export function StreakBadge({
   streak,
-  label = 'day streak',
+  label = 'days on the trail',
   className,
 }: StreakBadgeProps) {
   return (

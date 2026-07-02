@@ -70,7 +70,7 @@ export function XpTotalBar({
           )}
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          Today&apos;s XP
+          Path XP today
         </p>
         <p
           className={cn('text-3xl text-[var(--accent-red)]', valueClassName)}

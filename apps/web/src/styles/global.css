@@ -44,3 +44,55 @@
     }
   }
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes confetti-fall {
+    0% {
+      transform: translate3d(0, -10vh, 0) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translate3d(0, 110vh, 0) rotate(720deg);
+      opacity: 0;
+    }
+  }
+
+  @keyframes confetti-drift-left-keyframes {
+    0% {
+      transform: translate3d(0, -10vh, 0) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translate3d(-12vw, 110vh, 0) rotate(540deg);
+      opacity: 0;
+    }
+  }
+
+  @keyframes confetti-drift-right-keyframes {
+    0% {
+      transform: translate3d(0, -10vh, 0) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translate3d(12vw, 110vh, 0) rotate(-540deg);
+      opacity: 0;
+    }
+  }
+
+  .confetti-particle {
+    position: absolute;
+    top: 0;
+    border-radius: 1px;
+    animation-name: confetti-fall;
+    animation-timing-function: ease-in;
+    animation-fill-mode: forwards;
+  }
+
+  .confetti-drift-left {
+    animation-name: confetti-drift-left-keyframes;
+  }
+
+  .confetti-drift-right {
+    animation-name: confetti-drift-right-keyframes;
+  }
+}

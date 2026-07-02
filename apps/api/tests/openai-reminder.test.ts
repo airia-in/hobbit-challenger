@@ -3,10 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import {
   OpenAiReminderService,
   buildFallbackMessage,
+  buildReminderCopyLines,
   buildReminderMessaging,
+  FALLBACK_VARIANT_TEMPLATES,
+  fallbackSeed,
   interpolatePrompt,
 } from '../src/whatsapp/openai-reminder.service';
 import type { ReminderContext } from '../src/whatsapp/reminder-context.service';
+import { STREAK_AT_RISK_MIN } from '../src/whatsapp/reminder-context.service';
 
 const baseContext: ReminderContext = {
   name: 'Sam',
@@ -17,6 +21,14 @@ const baseContext: ReminderContext = {
   xpAtRisk: 75,
   rank: 4,
   totalXp: 2000,
+  topActivityStreak: 6,
+  topActivityName: 'Water',
+  unloggedHabitNames: ['Diet', 'Walk'],
+  missedYesterday: false,
+  streakAtRisk: true,
+  journeyMilestone: null,
+  currentStreak: STREAK_AT_RISK_MIN + 2,
+  longestStreak: 15,
 };
 
 const messaging = buildReminderMessaging('staging.hobbit.example');
@@ -80,7 +92,7 @@ describe('OpenAiReminderService', () => {
 describe('interpolatePrompt', () => {
   it('substitutes context values, brand fields, and rank line', () => {
     const template =
-      'Hi {{name}}, {{brandName}}, remaining {{tasksRemaining}}. Dashboard: {{dashboardUrl}}. {{rankLine}}';
+      'Hi {{name}}, {{brandName}}, remaining {{tasksRemaining}}. Dashboard: {{dashboardUrl}}. {{rankLine}} {{streakLine}}';
     const result = interpolatePrompt(
       template,
       baseContext,
@@ -92,6 +104,7 @@ describe('interpolatePrompt', () => {
     expect(result).toContain('3');
     expect(result).toContain('https://staging.hobbit.example/dashboard');
     expect(result).toContain('rank: 4');
+    expect(result).toContain('Water is on a 6-day trail streak');
   });
 
   it('omits rank line when rank is null', () => {
@@ -104,6 +117,31 @@ describe('interpolatePrompt', () => {
     );
     expect(result).not.toContain('rank');
   });
+
+  it('strips unknown placeholders', () => {
+    const template = 'Hello {{name}} {{unknownSlot}}';
+    const result = interpolatePrompt(
+      template,
+      baseContext,
+      'MORNING',
+      messaging,
+    );
+    expect(result).toBe('Hello Sam');
+  });
+});
+
+describe('buildReminderCopyLines', () => {
+  it('builds milestone and streak-at-risk lines', () => {
+    const lines = buildReminderCopyLines({
+      ...baseContext,
+      journeyMilestone: 21,
+      streakAtRisk: true,
+      currentStreak: 8,
+    });
+    expect(lines.milestoneLine).toContain('21');
+    expect(lines.streakAtRiskLine).toContain('8-day streak');
+    expect(lines.unloggedHabitsLine).toContain('Diet');
+  });
 });
 
 describe('buildFallbackMessage', () => {
@@ -114,7 +152,7 @@ describe('buildFallbackMessage', () => {
 
     const evening = buildFallbackMessage('EVENING', baseContext, messaging);
     expect(evening).toContain('HOBBIT');
-    expect(evening).toContain('XP at risk');
+    expect(evening).toContain('XP');
     expect(evening).toContain('https://staging.hobbit.example/dashboard');
   });
 
@@ -124,7 +162,43 @@ describe('buildFallbackMessage', () => {
       { ...baseContext, tasksRemaining: 0 },
       messaging,
     );
-    expect(message).toContain('looking clear');
     expect(message).not.toContain('/dashboard');
+  });
+
+  it('exposes at least fifteen distinct fallback templates', () => {
+    expect(new Set(FALLBACK_VARIANT_TEMPLATES).size).toBeGreaterThanOrEqual(15);
+  });
+
+  it('selects fallbacks deterministically from name and day', () => {
+    const a = buildFallbackMessage('MORNING', baseContext, messaging, 0);
+    const b = buildFallbackMessage('MORNING', baseContext, messaging, 0);
+    const c = buildFallbackMessage(
+      'MORNING',
+      { ...baseContext, name: 'Other' },
+      messaging,
+      fallbackSeed({ ...baseContext, name: 'Other' }, 'MORNING'),
+    );
+    expect(a).toBe(b);
+    expect(a).not.toBe(c);
+  });
+
+  it('includes dashboard URL for evening buckets with open tasks', () => {
+    const contexts: ReminderContext[] = [
+      { ...baseContext, journeyMilestone: 30 },
+      { ...baseContext, streakAtRisk: true, currentStreak: 10 },
+      {
+        ...baseContext,
+        tasksRemaining: 0,
+        xpAtRisk: 40,
+        streakAtRisk: false,
+      },
+    ];
+
+    for (const context of contexts) {
+      const message = buildFallbackMessage('EVENING', context, messaging);
+      if (context.tasksRemaining > 0) {
+        expect(message).toContain(messaging.dashboardUrl);
+      }
+    }
   });
 });

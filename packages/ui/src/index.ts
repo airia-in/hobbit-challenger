@@ -47,7 +47,7 @@ export type { StatsRowProps } from './components/StatsRow';
 export { StreakBadge } from './components/StreakBadge';
 export type { StreakBadgeProps } from './components/StreakBadge';
 
-export { TaskCard } from './components/TaskCard';
+export { TaskCard, deriveTaskStatus } from './components/TaskCard';
 export type {
   ActivityKind,
   ActivityLogView,

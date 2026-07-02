@@ -68,6 +68,7 @@ type ProfileFixture = {
   timezone: string;
   reminderTime: string | null;
   whatsappOptIn: boolean;
+  weeklyRecapOptIn: boolean;
   needsPhoneMigration: boolean;
   groupId: string | null;
   groupName: string | null;
@@ -85,6 +86,7 @@ const legacyProfile: ProfileFixture = {
   timezone: 'Asia/Kolkata',
   reminderTime: null,
   whatsappOptIn: true,
+  weeklyRecapOptIn: true,
   needsPhoneMigration: true,
   groupId: null,
   groupName: null,
@@ -152,9 +154,10 @@ describe('ProfileContent WhatsApp opt-in gating', () => {
   it('disables WhatsApp opt-in when no phone is stored', () => {
     render(<ProfileContent />);
 
-    const toggle = screen.getByRole('switch', { name: '' });
-    expect(toggle).toHaveAttribute('aria-disabled', 'true');
-    expect(toggle).toBeDisabled();
+    const toggles = screen.getAllByRole('switch');
+    const whatsappToggle = toggles[0];
+    expect(whatsappToggle).toHaveAttribute('aria-disabled', 'true');
+    expect(whatsappToggle).toBeDisabled();
     expect(
       screen.getByText(
         /add your phone number above to enable WhatsApp reminders/i,
@@ -166,7 +169,7 @@ describe('ProfileContent WhatsApp opt-in gating', () => {
     const user = userEvent.setup();
     const { rerender } = render(<ProfileContent />);
 
-    expect(screen.getByRole('switch')).toBeDisabled();
+    expect(screen.getAllByRole('switch')[0]).toBeDisabled();
 
     mockProfileQuery({
       ...legacyProfile,
@@ -175,13 +178,79 @@ describe('ProfileContent WhatsApp opt-in gating', () => {
     });
     rerender(<ProfileContent />);
 
-    const toggle = screen.getByRole('switch');
-    expect(toggle).not.toBeDisabled();
-    expect(toggle).toHaveAttribute('aria-disabled', 'false');
+    const whatsappToggle = screen.getAllByRole('switch')[0];
+    expect(whatsappToggle).not.toBeDisabled();
+    expect(whatsappToggle).toHaveAttribute('aria-disabled', 'false');
 
-    await user.click(toggle);
+    await user.click(whatsappToggle!);
     expect(mockUpdateMutate).toHaveBeenCalledWith(
       { whatsappOptIn: false },
+      expect.any(Object),
+    );
+  });
+});
+
+describe('ProfileContent weekly recap opt-in gating', () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+    HTMLInputElement.prototype.focus = vi.fn();
+    mockProfileQuery({
+      ...legacyProfile,
+      phone: '+919876543210',
+      needsPhoneMigration: false,
+    });
+    mockUpdateUseMutation.mockReturnValue({
+      mutate: mockUpdateMutate,
+      isPending: false,
+      error: null,
+    });
+    mockLeaveUseMutation.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      error: null,
+    });
+    mockLogoutUseMutation.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    });
+    mockExportCsvUseQuery.mockReturnValue({
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    mockProfileUseQuery.mockReset();
+    mockUpdateUseMutation.mockReset();
+    mockUpdateMutate.mockReset();
+  });
+
+  it('disables weekly recap when whatsapp reminders are off', () => {
+    mockProfileQuery({
+      ...legacyProfile,
+      phone: '+919876543210',
+      whatsappOptIn: false,
+      needsPhoneMigration: false,
+    });
+    render(<ProfileContent />);
+
+    const toggles = screen.getAllByRole('switch');
+    const recapToggle = toggles[1];
+    expect(recapToggle).toBeDisabled();
+  });
+
+  it('enables weekly recap toggle when phone and whatsapp are on', async () => {
+    const user = userEvent.setup();
+    render(<ProfileContent />);
+
+    const toggles = screen.getAllByRole('switch');
+    const recapToggle = toggles[1];
+    expect(recapToggle).not.toBeDisabled();
+
+    await user.click(recapToggle!);
+    expect(mockUpdateMutate).toHaveBeenCalledWith(
+      { weeklyRecapOptIn: false },
       expect.any(Object),
     );
   });

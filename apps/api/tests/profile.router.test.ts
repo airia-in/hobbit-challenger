@@ -19,6 +19,7 @@ type StoredUser = {
   groupId: string | null;
   reminderTime: string | null;
   whatsappOptIn: boolean;
+  weeklyRecapOptIn: boolean;
 };
 
 function createProfileContext(stores: {
@@ -129,6 +130,7 @@ function legacyUserStore(): {
     groupId: null,
     reminderTime: null,
     whatsappOptIn: true,
+    weeklyRecapOptIn: true,
   };
 
   return {
@@ -174,6 +176,7 @@ describe('profileRouter update phone', () => {
       groupId: null,
       reminderTime: null,
       whatsappOptIn: true,
+      weeklyRecapOptIn: true,
     };
     stores.users.set(OTHER_ID, other);
     stores.usersByPhone.set(OTHER_PHONE, other);
@@ -251,6 +254,54 @@ describe('profileRouter whatsappOptIn', () => {
     const afterUpdate = await caller.get();
     expect(afterUpdate.whatsappOptIn).toBe(false);
     expect(afterUpdate.needsPhoneMigration).toBe(true);
+  });
+});
+
+describe('profileRouter weeklyRecapOptIn', () => {
+  it('defaults weeklyRecapOptIn to true on get', async () => {
+    const stores = legacyUserStore();
+    stores.users.get(USER_ID)!.phone = PHONE;
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const profile = await caller.get();
+    expect(profile.weeklyRecapOptIn).toBe(true);
+  });
+
+  it('rejects enabling weeklyRecapOptIn without phone and whatsapp', async () => {
+    const stores = legacyUserStore();
+    stores.users.get(USER_ID)!.weeklyRecapOptIn = false;
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    await expect(
+      caller.update({ weeklyRecapOptIn: true }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message:
+        'Add a phone number and enable WhatsApp reminders before enabling weekly recap',
+    });
+  });
+
+  it('allows weeklyRecapOptIn when phone and whatsapp are enabled', async () => {
+    const stores = legacyUserStore();
+    const user = stores.users.get(USER_ID)!;
+    user.phone = PHONE;
+    user.weeklyRecapOptIn = false;
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const updated = await caller.update({ weeklyRecapOptIn: true });
+    expect(updated.weeklyRecapOptIn).toBe(true);
+  });
+
+  it('round-trips weeklyRecapOptIn off through get and update', async () => {
+    const stores = legacyUserStore();
+    stores.users.get(USER_ID)!.phone = PHONE;
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const updated = await caller.update({ weeklyRecapOptIn: false });
+    expect(updated.weeklyRecapOptIn).toBe(false);
+
+    const afterUpdate = await caller.get();
+    expect(afterUpdate.weeklyRecapOptIn).toBe(false);
   });
 });
 
@@ -590,6 +641,7 @@ function memberLeaveStores(): {
     groupId: GROUP_ID,
     reminderTime: null,
     whatsappOptIn: true,
+    weeklyRecapOptIn: true,
   };
 
   const groups = new Map<string, StoredGroup>([
@@ -690,6 +742,7 @@ describe('profileRouter leaveGroup', () => {
       groupId: GROUP_ID,
       reminderTime: null,
       whatsappOptIn: true,
+      weeklyRecapOptIn: true,
     };
     stores.users.set(OTHER_ID, otherMember);
     stores.usersByEmail.set('other-member@example.com', otherMember);

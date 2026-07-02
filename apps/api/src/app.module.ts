@@ -5,6 +5,7 @@ import path from 'node:path';
 import { DayEvaluatorService } from './cron/day-evaluator.service';
 import { ReminderService } from './cron/reminder.service';
 import { WinbackService } from './cron/winback.service';
+import { WeeklyRecapService } from './cron/weekly-recap.service';
 import { AuthModule } from './modules/auth.module';
 import { ActivitiesModule } from './modules/activities.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -24,6 +25,11 @@ const repoRoot = path.resolve(__dirname, '../../..');
     ActivitiesModule,
     WhatsappModule,
   ],
-  providers: [DayEvaluatorService, ReminderService, WinbackService],
+  providers: [
+    DayEvaluatorService,
+    ReminderService,
+    WinbackService,
+    WeeklyRecapService,
+  ],
 })
 export class AppModule {}

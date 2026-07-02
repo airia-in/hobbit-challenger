@@ -53,6 +53,7 @@ export function ProfileContent() {
   const [reminderTime, setReminderTime] = useState('');
   const [timezone, setTimezone] = useState('UTC');
   const [whatsappOptIn, setWhatsappOptIn] = useState(true);
+  const [weeklyRecapOptIn, setWeeklyRecapOptIn] = useState(true);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -99,11 +100,13 @@ export function ProfileContent() {
       setReminderTime(profile.data.reminderTime ?? '');
       setTimezone(profile.data.timezone);
       setWhatsappOptIn(profile.data.whatsappOptIn);
+      setWeeklyRecapOptIn(profile.data.weeklyRecapOptIn);
     }
   }, [profile.data]);
 
   const needsPhoneMigration = profile.data?.needsPhoneMigration ?? false;
   const hasStoredPhone = Boolean(profile.data?.phone);
+  const canUseWhatsappRecaps = hasStoredPhone && whatsappOptIn;
 
   useEffect(() => {
     if (!needsPhoneMigration || !phoneInputRef.current) return;
@@ -135,6 +138,19 @@ export function ProfileContent() {
       {
         onError: () => {
           setWhatsappOptIn(!enabled);
+        },
+      },
+    );
+  }
+
+  function handleWeeklyRecapOptInChange(enabled: boolean) {
+    setWeeklyRecapOptIn(enabled);
+    setMessage(null);
+    updateProfile.mutate(
+      { weeklyRecapOptIn: enabled },
+      {
+        onError: () => {
+          setWeeklyRecapOptIn(!enabled);
         },
       },
     );
@@ -464,6 +480,57 @@ export function ProfileContent() {
             <span
               className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${
                 whatsappOptIn ? 'left-6' : 'left-0.5'
+              }`}
+            />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-sm text-[var(--text-primary)]">
+              Weekly Story So Far recap
+            </span>
+            <p className="text-xs text-[var(--text-muted)]">
+              Sunday WhatsApp summary of your week on the trail
+            </p>
+            {!canUseWhatsappRecaps && (
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                Add your phone and enable WhatsApp reminders to receive weekly
+                recaps.{' '}
+                {!hasStoredPhone ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      phoneInputRef.current?.focus();
+                      phoneInputRef.current?.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center',
+                      });
+                    }}
+                    className="text-[var(--accent-red)] hover:underline"
+                  >
+                    Add phone
+                  </button>
+                ) : null}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={weeklyRecapOptIn}
+            aria-disabled={!canUseWhatsappRecaps}
+            onClick={() => handleWeeklyRecapOptInChange(!weeklyRecapOptIn)}
+            disabled={!canUseWhatsappRecaps || updateProfile.isPending}
+            className={`relative h-7 w-12 shrink-0 rounded-full border transition disabled:cursor-not-allowed disabled:opacity-50 ${
+              weeklyRecapOptIn
+                ? 'border-[var(--accent-red)] bg-[var(--accent-red)]'
+                : 'border-[var(--border)] bg-[var(--surface-raised)]'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${
+                weeklyRecapOptIn ? 'left-6' : 'left-0.5'
               }`}
             />
           </button>

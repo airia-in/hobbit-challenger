@@ -147,7 +147,10 @@ export function LeaderboardTable({
         ))}
       </div>
 
-      <div className="hidden overflow-x-auto rounded-lg border border-[var(--border)] md:block">
+      <div
+        className="max-md:hidden overflow-x-auto rounded-lg border border-[var(--border)]"
+        data-testid="leaderboard-desktop-table"
+      >
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--surface)]">

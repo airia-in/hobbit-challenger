@@ -13,8 +13,8 @@ import type { ReminderContext } from './reminder-context.service';
 export type ReminderKind = 'MORNING' | 'EVENING';
 
 const PROMPT_FILES: Record<ReminderKind, string> = {
-  MORNING: 'reminder-morning.md',
-  EVENING: 'reminder-evening.md',
+  MORNING: 'reminder-morning.jinja',
+  EVENING: 'reminder-evening.jinja',
 };
 
 const DEFAULT_WEB_DOMAIN = 'hobbit.drcode.ai';

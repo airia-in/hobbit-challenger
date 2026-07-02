@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.drcode.hard75',
+  appId: 'com.drcode.hobbit',
   appName: 'HOBBIT',
   webDir: 'www',
   server: {

@@ -7,6 +7,7 @@ import type { LegacyTaskType } from './activities.service';
 import {
   getPromptsDir,
   loadPromptFile,
+  parsePromptJinja,
   parsePromptMarkdown,
   type PromptContent,
 } from './prompt-loader';
@@ -18,10 +19,10 @@ export type VerificationResult = {
 };
 
 const PROMPT_FILES: Partial<Record<LegacyTaskType, string>> = {
-  OUTDOOR_WORKOUT: 'outdoor-workout.md',
-  INDOOR_WORKOUT: 'indoor-workout.md',
-  WATER: 'water.md',
-  PROGRESS_PHOTO: 'progress-photo.md',
+  OUTDOOR_WORKOUT: 'outdoor-workout.jinja',
+  INDOOR_WORKOUT: 'indoor-workout.jinja',
+  WATER: 'water.jinja',
+  PROGRESS_PHOTO: 'progress-photo.jinja',
 };
 
 @Injectable()
@@ -160,5 +161,5 @@ export function resolveUploadFilePath(
   return resolved;
 }
 
-// Re-export for tests that may import parsePromptMarkdown from here
-export { getPromptsDir, parsePromptMarkdown };
+// Re-export for tests that may import parsePromptJinja from here
+export { getPromptsDir, parsePromptJinja, parsePromptMarkdown };

@@ -1,4 +1,4 @@
-package com.drcode.hard75;
+package com.drcode.hobbit;
 
 import com.getcapacitor.BridgeActivity;
 

@@ -30,7 +30,7 @@ export type GuidanceAskResult = {
   answer: string | null;
 };
 
-const GUIDANCE_ASK_PROMPT = 'guidance-ask.md';
+const GUIDANCE_ASK_PROMPT = 'guidance-ask.jinja';
 
 @Injectable()
 export class GuidanceService {

@@ -100,10 +100,14 @@ pnpm --filter @workspace-starter/mobile build
 Useful Docker commands:
 
 ```bash
+pnpm nginx:certs          # generate initial TLS material for compose nginx
 docker compose up --build
 ```
 
-The compose file runs the web host (bundled Astro frontends) and the API. See [docs/guides/deployment.md](docs/guides/deployment.md).
+The compose file runs nginx (ports 80/443), the web host (bundled Astro frontends
+on `:4321`), and the API (`:3001`) on an internal network. See
+[docs/guides/production-hosting.md](docs/guides/production-hosting.md) and
+[docs/guides/deployment.md](docs/guides/deployment.md).
 
 ## Quality Gates
 

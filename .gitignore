@@ -54,6 +54,9 @@ test-results
 # Capacitor staged web bundle (copied from apps/web/dist)
 apps/mobile/www/
 
+# TLS material for nginx compose (generate via scripts/nginx/generate-self-signed-certs.sh)
+nginx/certs/*.pem
+
 # Local data (SQLite DB + uploads)
 data/*.db
 data/*.db-journal

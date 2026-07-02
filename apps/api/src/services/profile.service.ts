@@ -19,6 +19,7 @@ export type ProfileData = {
   timezone: string;
   reminderTime: string | null;
   whatsappOptIn: boolean;
+  needsPhoneMigration: boolean;
   groupId: string | null;
   groupName: string | null;
   isGroupAdmin: boolean;
@@ -72,6 +73,8 @@ export async function getProfile(
     timezone: user.timezone,
     reminderTime: user.reminderTime,
     whatsappOptIn: user.whatsappOptIn,
+    needsPhoneMigration:
+      user.phone === null && (user.email !== null || user.whatsappOptIn),
     groupId: user.groupId,
     groupName: user.group?.name ?? null,
     isGroupAdmin: adminUserIds.includes(userId),
@@ -143,10 +146,6 @@ export async function updateProfile(
     data.reminderTime = input.reminderTime;
   }
 
-  if (input.whatsappOptIn !== undefined) {
-    data.whatsappOptIn = input.whatsappOptIn;
-  }
-
   if (input.phone !== undefined) {
     let normalizedPhone: string;
     try {
@@ -173,6 +172,27 @@ export async function updateProfile(
     }
 
     data.phone = normalizedPhone;
+  }
+
+  if (input.whatsappOptIn !== undefined) {
+    if (input.whatsappOptIn) {
+      const effectivePhone =
+        data.phone ??
+        (
+          await prisma.user.findUnique({
+            where: { id: userId },
+            select: { phone: true },
+          })
+        )?.phone;
+
+      if (!effectivePhone) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Add a phone number before enabling WhatsApp reminders',
+        });
+      }
+    }
+    data.whatsappOptIn = input.whatsappOptIn;
   }
 
   if (input.email !== undefined) {

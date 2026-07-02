@@ -102,9 +102,8 @@ export function ProfileContent() {
     }
   }, [profile.data]);
 
-  const needsPhoneMigration = Boolean(
-    profile.data?.email && !profile.data?.phone,
-  );
+  const needsPhoneMigration = profile.data?.needsPhoneMigration ?? false;
+  const hasStoredPhone = Boolean(profile.data?.phone);
 
   useEffect(() => {
     if (!needsPhoneMigration || !phoneInputRef.current) return;
@@ -224,7 +223,8 @@ export function ProfileContent() {
           </p>
           <p className="mt-1 text-sm text-[var(--text-muted)]">
             We&apos;re moving to phone-based sign-in. Add your number below so
-            you can log in with it next time.
+            you can log in with it next time
+            {data.whatsappOptIn ? ' and receive WhatsApp reminders' : ''}.
           </p>
         </div>
       )}
@@ -429,14 +429,33 @@ export function ProfileContent() {
             <p className="text-xs text-[var(--text-muted)]">
               Morning and evening nudges via WhatsApp
             </p>
+            {!hasStoredPhone && (
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                Add your phone number above to enable WhatsApp reminders.{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    phoneInputRef.current?.focus();
+                    phoneInputRef.current?.scrollIntoView({
+                      behavior: 'smooth',
+                      block: 'center',
+                    });
+                  }}
+                  className="text-[var(--accent-red)] hover:underline"
+                >
+                  Add phone
+                </button>
+              </p>
+            )}
           </div>
           <button
             type="button"
             role="switch"
             aria-checked={whatsappOptIn}
+            aria-disabled={!hasStoredPhone}
             onClick={() => handleWhatsappOptInChange(!whatsappOptIn)}
-            disabled={updateProfile.isPending}
-            className={`relative h-7 w-12 shrink-0 rounded-full border transition disabled:opacity-50 ${
+            disabled={!hasStoredPhone || updateProfile.isPending}
+            className={`relative h-7 w-12 shrink-0 rounded-full border transition disabled:cursor-not-allowed disabled:opacity-50 ${
               whatsappOptIn
                 ? 'border-[var(--accent-red)] bg-[var(--accent-red)]'
                 : 'border-[var(--border)] bg-[var(--surface-raised)]'

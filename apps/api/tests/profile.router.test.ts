@@ -188,7 +188,56 @@ describe('profileRouter update phone', () => {
 });
 
 describe('profileRouter whatsappOptIn', () => {
-  it('round-trips whatsappOptIn through get and update', async () => {
+  it('exposes needsPhoneMigration for legacy email-only users', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const profile = await caller.get();
+
+    expect(profile.needsPhoneMigration).toBe(true);
+    expect(profile.whatsappOptIn).toBe(true);
+  });
+
+  it('rejects enabling whatsappOptIn without a stored phone', async () => {
+    const stores = legacyUserStore();
+    stores.users.get(USER_ID)!.whatsappOptIn = false;
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    await expect(caller.update({ whatsappOptIn: true })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Add a phone number before enabling WhatsApp reminders',
+    } satisfies Partial<TRPCError>);
+  });
+
+  it('allows whatsappOptIn when phone is saved in the same update', async () => {
+    const stores = legacyUserStore();
+    stores.users.get(USER_ID)!.whatsappOptIn = false;
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const updated = await caller.update({
+      phone: '9876543210',
+      whatsappOptIn: true,
+    });
+
+    expect(updated.phone).toBe(PHONE);
+    expect(updated.whatsappOptIn).toBe(true);
+  });
+
+  it('allows whatsappOptIn when the account already has a phone', async () => {
+    const stores = legacyUserStore();
+    const user = stores.users.get(USER_ID)!;
+    user.phone = PHONE;
+    user.whatsappOptIn = false;
+    stores.users.set(USER_ID, user);
+    stores.usersByPhone.set(PHONE, user);
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const updated = await caller.update({ whatsappOptIn: true });
+
+    expect(updated.whatsappOptIn).toBe(true);
+  });
+
+  it('round-trips whatsappOptIn off through get and update', async () => {
     const stores = legacyUserStore();
     const caller = profileRouter.createCaller(createProfileContext(stores));
 
@@ -201,9 +250,36 @@ describe('profileRouter whatsappOptIn', () => {
 
     const afterUpdate = await caller.get();
     expect(afterUpdate.whatsappOptIn).toBe(false);
+    expect(afterUpdate.needsPhoneMigration).toBe(true);
+  });
+});
 
-    await caller.update({ whatsappOptIn: true });
-    expect((await caller.get()).whatsappOptIn).toBe(true);
+describe('profileRouter phone normalization', () => {
+  it('normalizes bare digits to E.164 on update', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const result = await caller.update({ phone: '9876543210' });
+
+    expect(result.phone).toBe(PHONE);
+  });
+
+  it('passes through already-normalized E.164 on update', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const result = await caller.update({ phone: PHONE });
+
+    expect(result.phone).toBe(PHONE);
+  });
+
+  it('normalizes formatted phone input on update', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const result = await caller.update({ phone: '+91 98765 43210' });
+
+    expect(result.phone).toBe(PHONE);
   });
 });
 

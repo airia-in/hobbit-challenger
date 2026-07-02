@@ -29,6 +29,8 @@ function createCache(): GetTodayCache {
         xpComplete: 200,
         xpMiss: -200,
         deductMultiplier: 2,
+        allowsProof: true,
+        autoCompleteOnProof: true,
         log: null,
         canAttachProof: true,
         canEdit: true,

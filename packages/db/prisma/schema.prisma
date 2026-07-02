@@ -114,9 +114,11 @@ model Activity {
   missXp           Int?
   subPoints        Json?
   tiers            Json?
-  deductMultiplier Float         @default(2)
-  sortOrder        Int           @default(0)
-  active           Boolean       @default(true)
+  deductMultiplier     Float   @default(2)
+  allowsProof          Boolean @default(false)
+  autoCompleteOnProof  Boolean @default(false)
+  sortOrder            Int     @default(0)
+  active               Boolean @default(true)
   createdAt        DateTime      @default(now())
   logs             ActivityLog[]
 

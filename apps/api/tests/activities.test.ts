@@ -16,7 +16,6 @@ import {
   recomputeLiveDayScore,
 } from '../src/services/activities.service';
 import { computeDayScore } from '../src/services/scoring.service';
-import { ProofVerifierService } from '../src/services/proof-verifier.service';
 import { getUserLocalDate } from '../src/utils/day-window';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
@@ -520,6 +519,8 @@ function createActivitiesFixture() {
       subPoints: null,
       tiers: null,
       deductMultiplier: 2,
+      allowsProof: false,
+      autoCompleteOnProof: false,
       sortOrder: 0,
       active: true,
       createdAt: new Date(),
@@ -543,6 +544,8 @@ function createActivitiesFixture() {
       subPoints: null,
       tiers: null,
       deductMultiplier: 2,
+      allowsProof: true,
+      autoCompleteOnProof: true,
       sortOrder: 5,
       active: true,
       createdAt: new Date(),
@@ -566,6 +569,8 @@ function createActivitiesFixture() {
       subPoints: null,
       tiers: null,
       deductMultiplier: 2,
+      allowsProof: true,
+      autoCompleteOnProof: false,
       sortOrder: 2,
       active: true,
       createdAt: new Date(),
@@ -589,6 +594,8 @@ function createActivitiesFixture() {
       subPoints: null,
       tiers: null,
       deductMultiplier: 2,
+      allowsProof: false,
+      autoCompleteOnProof: false,
       sortOrder: 0,
       active: true,
       createdAt: new Date(),
@@ -603,13 +610,7 @@ function createActivitiesFixture() {
 }
 
 function createService() {
-  return new ActivitiesService({
-    verifyProof: async () => ({
-      passed: true,
-      confidence: 1,
-      reason: 'SKIPPED',
-    }),
-  } as unknown as ProofVerifierService);
+  return new ActivitiesService();
 }
 
 describe('activities helpers', () => {
@@ -725,6 +726,8 @@ describe('activities helpers', () => {
       subPoints: null,
       tiers: null,
       deductMultiplier: 2,
+      allowsProof: true,
+      autoCompleteOnProof: false,
       sortOrder: 1,
       active: true,
       createdAt: new Date(),
@@ -870,32 +873,18 @@ describe('activities service', () => {
     expect(fake.stores.activityLogs.size).toBe(0);
   });
 
-  it('attachProof stores ERROR aiVerdict for configured verifier failures', async () => {
-    service = new ActivitiesService({
-      verifyProof: async () => ({
-        passed: false,
-        confidence: 0,
-        reason: 'ERROR',
-      }),
-    } as unknown as ProofVerifierService);
-
-    await service.attachProof(
+  it('attachProof auto-completes checkbox activities when configured', async () => {
+    const result = await service.attachProof(
       fake.prisma,
       USER_ID,
       CHECKBOX_ACTIVITY_ID,
       '/uploads/abc-def_123.jpg',
     );
-    await Promise.resolve();
 
-    const today = getUserLocalDate('UTC');
-    const log = await fake.prisma.activityLog.findFirst({
-      where: {
-        challengeId: CHALLENGE_ID,
-        activityId: CHECKBOX_ACTIVITY_ID,
-        date: today,
-      },
-    });
-    expect(log?.aiVerdict).toBe('ERROR');
+    expect(result.log.state).toBe('DONE');
+    expect(result.log.proofUrl).toBe('/uploads/abc-def_123.jpg');
+    expect(result.log.xpAwarded).toBeGreaterThan(0);
+    expect(result.dayTotals.netXp).toBeGreaterThan(0);
   });
 
   it('personal activity xp is excluded from netXp', async () => {
@@ -956,6 +945,8 @@ describe('activities service', () => {
       subPoints: null,
       tiers: null,
       deductMultiplier: 2,
+      allowsProof: false,
+      autoCompleteOnProof: false,
       sortOrder: 0,
       active: true,
       createdAt: new Date(),
@@ -1183,6 +1174,8 @@ describe('activities service', () => {
       subPoints: null,
       tiers: null,
       deductMultiplier: 2,
+      allowsProof: false,
+      autoCompleteOnProof: false,
       sortOrder: 0,
       active: true,
       createdAt: new Date(),

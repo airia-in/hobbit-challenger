@@ -15,7 +15,6 @@ import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { BRAND_NAME, BRAND_SUBTITLE } from '../../lib/brand';
 import { TrpcProvider } from '../TrpcProvider';
-import { verdictClass, verdictLabel } from '../../lib/ai-verdict';
 import { getToken } from '../../lib/auth';
 import { trpc } from '../../lib/trpc';
 import {
@@ -207,7 +206,6 @@ function ProofSection({
 }) {
   if (!activity.canAttachProof) return null;
 
-  const verdict = activity.log?.aiVerdict ?? null;
   const hasProof = Boolean(activity.log?.proofUrl);
 
   return (
@@ -222,21 +220,15 @@ function ProofSection({
         onUploaded={onAttach}
         buttonClassName="text-xs"
       />
-      {hasProof && verdict == null && (
+      {hasProof && (
         <p
-          className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]"
+          className="text-[10px] uppercase tracking-wider text-[var(--success)]"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          AI check pending
+          {activity.autoCompleteOnProof
+            ? 'Proof attached — marked done'
+            : 'Proof attached'}
         </p>
-      )}
-      {hasProof && verdict != null && (
-        <span
-          className={`rounded border px-2 py-0.5 text-[10px] uppercase tracking-wider ${verdictClass(verdict)}`}
-          style={{ fontFamily: 'var(--font-mono)' }}
-        >
-          {verdictLabel(verdict)}
-        </span>
       )}
     </div>
   );

@@ -64,6 +64,8 @@ function buildCreatePayload(
     title: values.title.trim(),
     emoji: values.emoji.trim() || null,
     deductMultiplier: Number(values.deductMultiplier) as 2 | 3,
+    allowsProof: false,
+    autoCompleteOnProof: false,
     ...(sortOrder !== undefined && !Number.isNaN(sortOrder)
       ? { sortOrder }
       : {}),

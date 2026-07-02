@@ -52,19 +52,39 @@ const createActivityBaseSchema = z.object({
   title: activityTitleSchema,
   emoji: activityEmojiSchema,
   deductMultiplier: deductMultiplierSchema.default(2),
+  allowsProof: z.boolean().default(false),
+  autoCompleteOnProof: z.boolean().default(false),
   sortOrder: sortOrderSchema.optional(),
 });
 
-export const createCustomActivityInputSchema = z.discriminatedUnion('kind', [
-  createActivityBaseSchema.extend({
-    kind: z.literal('CHECKBOX'),
-    ...checkboxXpFieldsSchema.shape,
-  }),
-  createActivityBaseSchema.extend({
-    kind: z.literal('NUMBER'),
-    ...numberXpFieldsSchema.shape,
-  }),
-]);
+export const createCustomActivityInputSchema = z
+  .discriminatedUnion('kind', [
+    createActivityBaseSchema.extend({
+      kind: z.literal('CHECKBOX'),
+      ...checkboxXpFieldsSchema.shape,
+    }),
+    createActivityBaseSchema.extend({
+      kind: z.literal('NUMBER'),
+      ...numberXpFieldsSchema.shape,
+    }),
+  ])
+  .superRefine((data, ctx) => {
+    if (data.autoCompleteOnProof && !data.allowsProof) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'autoCompleteOnProof requires allowsProof',
+        path: ['autoCompleteOnProof'],
+      });
+    }
+    if (data.autoCompleteOnProof && data.kind !== 'CHECKBOX') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'autoCompleteOnProof is only supported for CHECKBOX activities',
+        path: ['autoCompleteOnProof'],
+      });
+    }
+  });
 
 export type CreateCustomActivityInput = z.infer<
   typeof createCustomActivityInputSchema
@@ -76,6 +96,8 @@ export const updateActivityInputSchema = z
     title: activityTitleSchema.optional(),
     emoji: activityEmojiSchema,
     deductMultiplier: deductMultiplierSchema.optional(),
+    allowsProof: z.boolean().optional(),
+    autoCompleteOnProof: z.boolean().optional(),
     sortOrder: sortOrderSchema.optional(),
     xpComplete: nonNegativeInt.optional(),
     xpMiss: negativeXpInputSchema.optional(),
@@ -89,7 +111,16 @@ export const updateActivityInputSchema = z
   .refine(
     (data) => Object.keys(data).filter((k) => k !== 'activityId').length > 0,
     { message: 'At least one field must be provided to update' },
-  );
+  )
+  .superRefine((data, ctx) => {
+    if (data.autoCompleteOnProof === true && data.allowsProof === false) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'autoCompleteOnProof requires allowsProof',
+        path: ['autoCompleteOnProof'],
+      });
+    }
+  });
 
 export type UpdateActivityInput = z.infer<typeof updateActivityInputSchema>;
 
@@ -129,6 +160,8 @@ export type ActivityEditorRow = {
   subPoints: SubPointConfigInput[] | null;
   tiers: TierConfigInput[] | null;
   deductMultiplier: number;
+  allowsProof: boolean;
+  autoCompleteOnProof: boolean;
   sortOrder: number;
   active: boolean;
 };

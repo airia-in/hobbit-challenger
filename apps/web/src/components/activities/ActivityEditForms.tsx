@@ -32,6 +32,64 @@ type BuiltinActivityEditorProps = {
   isSubmitting?: boolean;
 };
 
+function ProofRuleFields({
+  activityId,
+  kind,
+  allowsProof,
+  autoCompleteOnProof,
+  onAllowsProofChange,
+  onAutoCompleteChange,
+  errors: fieldErrors,
+}: {
+  activityId: string;
+  kind: ActivityEditorRow['kind'];
+  allowsProof: boolean;
+  autoCompleteOnProof: boolean;
+  onAllowsProofChange: (value: boolean) => void;
+  onAutoCompleteChange: (value: boolean) => void;
+  errors: Record<string, string>;
+}) {
+  const err = (key: string) => fieldErrors[key];
+
+  return (
+    <div className="space-y-3 rounded border border-[var(--border)] p-3">
+      <p className={fieldLabelClass}>Proof rules</p>
+      <label className="flex items-center gap-2 text-sm text-[var(--text)]">
+        <input
+          id={`edit-allows-proof-${activityId}`}
+          type="checkbox"
+          checked={allowsProof}
+          onChange={(e) => {
+            const next = e.target.checked;
+            onAllowsProofChange(next);
+            if (!next) onAutoCompleteChange(false);
+          }}
+        />
+        Allow photo proof uploads
+      </label>
+      {allowsProof && kind === 'CHECKBOX' && (
+        <label className="flex items-center gap-2 text-sm text-[var(--text)]">
+          <input
+            id={`edit-auto-complete-proof-${activityId}`}
+            type="checkbox"
+            checked={autoCompleteOnProof}
+            onChange={(e) => onAutoCompleteChange(e.target.checked)}
+          />
+          Mark complete when proof is uploaded
+        </label>
+      )}
+      {err('allowsProof') && (
+        <p className="text-xs text-[var(--accent-red)]">{err('allowsProof')}</p>
+      )}
+      {err('autoCompleteOnProof') && (
+        <p className="text-xs text-[var(--accent-red)]">
+          {err('autoCompleteOnProof')}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function BuiltinActivityEditor({
   activity,
   onSave,
@@ -48,6 +106,10 @@ export function BuiltinActivityEditor({
     activity.subPoints ?? [],
   );
   const [tiers, setTiers] = useState<TierConfigInput[]>(activity.tiers ?? []);
+  const [allowsProof, setAllowsProof] = useState(activity.allowsProof);
+  const [autoCompleteOnProof, setAutoCompleteOnProof] = useState(
+    activity.autoCompleteOnProof,
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   function handleSubmit(e: FormEvent) {
@@ -58,6 +120,8 @@ export function BuiltinActivityEditor({
       emoji: emoji.trim() || null,
       deductMultiplier: Number(deductMultiplier) as 2 | 3,
       sortOrder: Number.parseInt(sortOrder, 10),
+      allowsProof,
+      autoCompleteOnProof: allowsProof ? autoCompleteOnProof : false,
     };
 
     if (activity.kind === 'SUBPOINTS') {
@@ -150,6 +214,16 @@ export function BuiltinActivityEditor({
           />
         </div>
       </div>
+
+      <ProofRuleFields
+        activityId={activity.id}
+        kind={activity.kind}
+        allowsProof={allowsProof}
+        autoCompleteOnProof={autoCompleteOnProof}
+        onAllowsProofChange={setAllowsProof}
+        onAutoCompleteChange={setAutoCompleteOnProof}
+        errors={errors}
+      />
 
       {activity.kind === 'SUBPOINTS' && (
         <div className="space-y-3">
@@ -304,6 +378,10 @@ export function CustomActivityEditForm({
   const [xpPerUnit, setXpPerUnit] = useState(String(activity.xpPerUnit ?? 0));
   const [xpCap, setXpCap] = useState(String(activity.xpCap ?? 0));
   const [missXp, setMissXp] = useState(String(activity.missXp ?? 0));
+  const [allowsProof, setAllowsProof] = useState(activity.allowsProof);
+  const [autoCompleteOnProof, setAutoCompleteOnProof] = useState(
+    activity.autoCompleteOnProof,
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   function handleSubmit(e: FormEvent) {
@@ -314,6 +392,8 @@ export function CustomActivityEditForm({
       emoji: emoji.trim() || null,
       deductMultiplier: Number(deductMultiplier) as 2 | 3,
       sortOrder: Number.parseInt(sortOrder, 10),
+      allowsProof,
+      autoCompleteOnProof: allowsProof ? autoCompleteOnProof : false,
     };
 
     if (activity.kind === 'CHECKBOX') {
@@ -483,6 +563,16 @@ export function CustomActivityEditForm({
           />
         </div>
       </div>
+
+      <ProofRuleFields
+        activityId={activity.id}
+        kind={activity.kind}
+        allowsProof={allowsProof}
+        autoCompleteOnProof={autoCompleteOnProof}
+        onAllowsProofChange={setAllowsProof}
+        onAutoCompleteChange={setAutoCompleteOnProof}
+        errors={errors}
+      />
 
       <div className="flex gap-3">
         <button

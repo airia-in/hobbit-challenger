@@ -43,6 +43,8 @@ export type TodayActivity = {
   subPoints?: SubPointConfig[];
   tiers?: TierConfig[];
   deductMultiplier: number;
+  allowsProof: boolean;
+  autoCompleteOnProof: boolean;
   log: TodayActivityLog | null;
   canAttachProof: boolean;
   canEdit: boolean;
@@ -359,15 +361,18 @@ export function optimisticProofAttached<T extends GetTodayCache>(
   proofUrl: string,
 ): T {
   const activity = findActivity(data, activityId);
+  const autoComplete = activity?.autoCompleteOnProof ?? false;
   const patch = (a: TodayActivity): TodayActivity => ({
     ...a,
     log: {
       id: activity?.log?.id ?? 'optimistic',
-      state: activity?.log?.state ?? null,
+      state: autoComplete ? 'DONE' : (activity?.log?.state ?? null),
       value: activity?.log?.value ?? null,
       tier: activity?.log?.tier ?? null,
       subPoints: activity?.log?.subPoints ?? null,
-      xpAwarded: activity?.log?.xpAwarded ?? 0,
+      xpAwarded: autoComplete
+        ? (activity?.xpComplete ?? activity?.log?.xpAwarded ?? 0)
+        : (activity?.log?.xpAwarded ?? 0),
       proofUrl,
       aiVerdict: null,
     },

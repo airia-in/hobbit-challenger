@@ -15,7 +15,8 @@ Frontends and backends are different problems, so they deploy differently:
   own image and deploys independently, with its own runtime and scaling.
 
 A reverse proxy / ingress in front routes hostnames or paths to the web-host
-image and to each backend.
+image and to each backend. For the stock VPS setup with nginx in compose, see
+[production-hosting.md](./production-hosting.md).
 
 ```
 proxy ── /, /admin, … ─► web-host image (all frontends)

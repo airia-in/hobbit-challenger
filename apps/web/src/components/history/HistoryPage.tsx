@@ -53,7 +53,7 @@ export function HistoryContent() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'drcode-history.csv';
+      a.download = 'hobbit-history.csv';
       a.click();
       URL.revokeObjectURL(url);
     });

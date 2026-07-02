@@ -1,8 +1,8 @@
-# DRCODE Discipline Challenge
+# HOBBIT
 
 Group accountability tracker for discipline and habit challenges. Users join groups via invite links, complete daily tasks with proof submissions, and compete on a shared leaderboard. Miss one task and you restart from Day 1.
 
-**Tagline:** _Daily tasks. Proof required. No exceptions._
+**Tagline:** _Here to annoy you into great habits._
 
 ## What's Inside
 

@@ -24,6 +24,7 @@ services:
       NODE_ENV: production
       PORT: 3001
       CORS_ORIGIN: ${CORS_ORIGIN:-https://${WEB_DOMAIN:-hobbit.drcode.ai}}
+      WEB_DOMAIN: ${WEB_DOMAIN:-hobbit.drcode.ai}
       DATABASE_URL: ${DATABASE_URL:-file:/app/data/prod.db}
       DATABASE_AUTH_TOKEN: ${DATABASE_AUTH_TOKEN:-}
       JWT_SECRET: ${JWT_SECRET:-change-me}

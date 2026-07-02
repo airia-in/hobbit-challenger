@@ -22,7 +22,7 @@ function createTestContext(overrides: Partial<Context> = {}): Context {
 }
 
 describe('appRouter', () => {
-  it('exposes DRCODE routers', () => {
+  it('exposes application routers', () => {
     expect(appRouter._def.procedures).toHaveProperty('auth.register');
     expect(appRouter._def.procedures).toHaveProperty('groups.create');
     expect(appRouter._def.procedures).toHaveProperty('activities.getToday');

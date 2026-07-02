@@ -148,6 +148,11 @@ test('release workflow publishes mobile web bundle and Android debug APK', async
   assert.match(releaseStep, /files:\s*\|/);
   assert.match(releaseStep, /mobile-web-bundle\.tar\.gz/);
   assert.match(releaseStep, /app-debug\.apk/);
+  assert.match(workflow, /default: 'https:\/\/hobbit-api\.drcode\.ai'/);
+  assert.doesNotMatch(workflow, /api\.drcode\.app/);
+  assert.match(workflow, /name: HOBBIT \$\{\{ inputs\.version \}\}/);
+  assert.doesNotMatch(workflow, /DRCODE/);
+  assert.match(workflow, /PUBLIC_API_URL=\$\{\{ inputs\.public_api_url \}\}/);
 });
 
 test('deployment is convention-driven by apps/<name>/Dockerfile', async () => {

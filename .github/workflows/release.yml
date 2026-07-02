@@ -16,10 +16,10 @@ on:
         type: boolean
         default: false
       public_api_url:
-        description: 'PUBLIC_API_URL baked into mobile web bundle'
+        description: 'PUBLIC_API_URL baked into mobile web bundle (default production HOBBIT API at hobbit-api.drcode.ai)'
         required: true
         type: string
-        default: 'https://api.drcode.app'
+        default: 'https://hobbit-api.drcode.ai'
 
 concurrency:
   group: release-${{ github.ref }}
@@ -209,7 +209,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.version }}
-          name: DRCODE ${{ inputs.version }}
+          name: HOBBIT ${{ inputs.version }}
+          body: |
+            Mobile assets were built with `PUBLIC_API_URL=${{ inputs.public_api_url }}`.
+            Override the `public_api_url` workflow input when the default production API host is not correct.
           generate_release_notes: true
           files: |
             mobile-web-bundle.tar.gz

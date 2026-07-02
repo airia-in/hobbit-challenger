@@ -27,7 +27,8 @@ function run(command, args, options = {}) {
   });
 }
 
-const apiUrl = process.env.PUBLIC_API_URL ?? 'https://api.drcode.app';
+// Default matches packages/types/src/web-url.ts and docker-compose API_DOMAIN.
+const apiUrl = process.env.PUBLIC_API_URL ?? 'https://hobbit-api.drcode.ai';
 
 await run('pnpm', ['--filter', '@workspace-starter/web', 'build'], {
   env: {

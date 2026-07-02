@@ -46,7 +46,7 @@ describe('TaskCard', () => {
       />,
     );
 
-    expect(screen.getByText(/5 day streak/i)).toBeInTheDocument();
+    expect(screen.getByText(/5 days on the trail/i)).toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole('button', { name: /tap to complete/i }),
@@ -65,7 +65,7 @@ describe('TaskCard', () => {
       />,
     );
 
-    expect(screen.queryByText(/day streak/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/days on the trail/i)).not.toBeInTheDocument();
   });
 
   it('calls onUndo when completed checkbox is tapped', async () => {
@@ -88,7 +88,7 @@ describe('TaskCard', () => {
       />,
     );
 
-    expect(screen.getByText(/3 day streak/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 days on the trail/i)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /done ✓/i }));
     expect(onUndo).toHaveBeenCalledOnce();
@@ -116,6 +116,27 @@ describe('TaskCard', () => {
     expect(onMarkDone).not.toHaveBeenCalled();
     expect(screen.getByText('Healthy')).toBeInTheDocument();
     expect(screen.getByText('No junk')).toBeInTheDocument();
+  });
+
+  it('renders celebration line when complete', () => {
+    render(
+      <TaskCard
+        icon="✅"
+        title="Water"
+        kind="CHECKBOX"
+        log={{
+          state: 'DONE',
+          value: null,
+          tier: null,
+          subPoints: null,
+          xpAwarded: 50,
+        }}
+        canEdit
+        celebrationLine="Hydration secured — onward."
+      />,
+    );
+
+    expect(screen.getByText('Hydration secured — onward.')).toBeInTheDocument();
   });
 
   it('can render expandable activity controls open by default', async () => {

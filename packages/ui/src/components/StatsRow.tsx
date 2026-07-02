@@ -14,8 +14,8 @@ export type StatsRowProps = {
 
 const STAT_ITEMS = [
   { key: 'totalXp', label: 'Total XP' },
-  { key: 'todayNetXp', label: "Today's XP" },
-  { key: 'currentStreak', label: 'Current Streak' },
+  { key: 'todayNetXp', label: 'Path XP today' },
+  { key: 'currentStreak', label: 'Trail streak' },
   { key: 'longestStreak', label: 'Longest Streak' },
   { key: 'successRate', label: 'Success Rate' },
 ] as const;

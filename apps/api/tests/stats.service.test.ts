@@ -56,8 +56,25 @@ function createFakePrisma(seed: FakePrismaSeed) {
 
   const prisma = {
     user: {
-      findUnique: async ({ where }: { where: { id: string } }) =>
-        users.get(where.id) ?? null,
+      findUnique: async ({
+        where,
+        include,
+      }: {
+        where: { id: string };
+        include?: { group?: { select: { challengeTimezone: true } } };
+      }) => {
+        const user = users.get(where.id);
+        if (!user) return null;
+        if (include?.group) {
+          return {
+            ...user,
+            group: user.groupId
+              ? { challengeTimezone: 'UTC' as string | null }
+              : null,
+          };
+        }
+        return user;
+      },
     },
     challenge: {
       findFirst: async ({
@@ -169,19 +186,54 @@ function createFakePrisma(seed: FakePrismaSeed) {
     dayScore: {
       findMany: async ({
         where,
+        orderBy,
+        take,
       }: {
-        where: { challenge?: { userId?: string } };
+        where: {
+          challenge?: { userId?: string };
+          challengeId?: string;
+          finalized?: boolean;
+        };
+        orderBy?: { date: 'asc' | 'desc' };
+        take?: number;
       }) => {
-        return dayScores
-          .filter((day) => {
-            if (where.challenge?.userId === undefined) return true;
+        let result = dayScores.filter((day) => {
+          if (where.challenge?.userId !== undefined) {
             const challenge = challenges.get(day.challengeId);
-            return challenge?.userId === where.challenge.userId;
-          })
-          .map((day) => ({
-            finalized: day.finalized,
-            breakdown: day.breakdown,
-          }));
+            if (challenge?.userId !== where.challenge.userId) {
+              return false;
+            }
+          }
+          if (
+            where.challengeId !== undefined &&
+            day.challengeId !== where.challengeId
+          ) {
+            return false;
+          }
+          if (
+            where.finalized !== undefined &&
+            day.finalized !== where.finalized
+          ) {
+            return false;
+          }
+          return true;
+        });
+
+        if (orderBy?.date === 'desc') {
+          result = result.sort((a, b) => b.date.getTime() - a.date.getTime());
+        } else if (orderBy?.date === 'asc') {
+          result = result.sort((a, b) => a.date.getTime() - b.date.getTime());
+        }
+
+        if (take !== undefined) {
+          result = result.slice(0, take);
+        }
+
+        return result.map((day) => ({
+          date: day.date,
+          finalized: day.finalized,
+          breakdown: day.breakdown,
+        }));
       },
       findFirst: async ({
         where,
@@ -376,7 +428,85 @@ describe('stats.service', () => {
       expect(result.todayNetXp).toBe(75);
       expect(result.totalDaysCompleted).toBe(1);
       expect(result.successRate).toBe(50);
+      expect(result.streakBreak).toEqual({
+        occurred: true,
+        previousStreak: 1,
+        brokeOnDate: '2026-06-02',
+        daysSinceBreak: expect.any(Number),
+      });
       expect(result).not.toHaveProperty('timesRestarted');
+    });
+
+    it('returns streakBreak after a multi-day streak failure', async () => {
+      const challengeId = 'challenge-streak-break';
+      const prisma = createFakePrisma({
+        users: [makeUser()],
+        challenges: [
+          makeChallenge(challengeId, {
+            isActive: true,
+            currentStreak: 0,
+            longestStreak: 9,
+          }),
+        ],
+        activities: [],
+        activityLogs: [],
+        dayScores: [
+          makeDayScore(challengeId, '2026-06-10', {
+            finalized: true,
+            breakdown: { allScoredLogged: false },
+          }),
+          ...Array.from({ length: 9 }, (_, index) =>
+            makeDayScore(challengeId, `2026-06-0${9 - index}`, {
+              finalized: true,
+              breakdown: { allScoredLogged: true },
+            }),
+          ),
+        ],
+      });
+
+      const result = await getDashboardStats(prisma, USER_ID);
+
+      expect(result.streakBreak).toEqual({
+        occurred: true,
+        previousStreak: 9,
+        brokeOnDate: '2026-06-10',
+        daysSinceBreak: expect.any(Number),
+      });
+    });
+
+    it('returns no streak break when streak is intact', async () => {
+      const challengeId = 'challenge-intact';
+      const prisma = createFakePrisma({
+        users: [makeUser()],
+        challenges: [
+          makeChallenge(challengeId, {
+            isActive: true,
+            currentStreak: 5,
+            longestStreak: 5,
+          }),
+        ],
+        activities: [],
+        activityLogs: [],
+        dayScores: [
+          makeDayScore(challengeId, '2026-06-09', {
+            finalized: true,
+            breakdown: { allScoredLogged: true },
+          }),
+          makeDayScore(challengeId, '2026-06-08', {
+            finalized: true,
+            breakdown: { allScoredLogged: true },
+          }),
+        ],
+      });
+
+      const result = await getDashboardStats(prisma, USER_ID);
+
+      expect(result.streakBreak).toEqual({
+        occurred: false,
+        previousStreak: 0,
+        brokeOnDate: null,
+        daysSinceBreak: 0,
+      });
     });
   });
 

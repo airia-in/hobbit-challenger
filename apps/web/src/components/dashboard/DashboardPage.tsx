@@ -1,5 +1,5 @@
 import { getGuidance } from '@workspace-starter/types';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DayCounter,
   HeatmapGrid,
@@ -13,10 +13,25 @@ import {
 import { AuthGateInner } from '../auth/AuthGate';
 import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
+import { FirstWeekChecklist } from '../onboarding/FirstWeekChecklist';
 import { BRAND_NAME, BRAND_SUBTITLE } from '../../lib/brand';
+import { getPerfectDayBanner } from '../../lib/celebrations';
+import {
+  hasPerfectDayBeenCelebrated,
+  markPerfectDayCelebrated,
+} from '../../lib/perfect-day-storage';
+import {
+  dismissStreakRecovery,
+  isStreakRecoveryDismissed,
+} from '../../lib/streak-recovery-storage';
 import { TrpcProvider } from '../TrpcProvider';
 import { getToken } from '../../lib/auth';
 import { trpc } from '../../lib/trpc';
+import {
+  allScoredActivitiesCompleted,
+  anyActivityCompleted,
+} from '../../lib/today-completion';
+import { useActivityCelebrations } from '../../lib/use-activity-celebrations';
 import {
   applyMutationResult,
   optimisticMarkDone,
@@ -28,6 +43,9 @@ import {
   type GetTodayCache,
   type TodayActivity,
 } from '../../lib/today-optimistic';
+import { PerfectDayBanner } from './PerfectDayBanner';
+import { PerfectDayCelebration } from './PerfectDayCelebration';
+import { StreakRecoveryBanner } from './StreakRecoveryBanner';
 
 const apiUrl = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -238,10 +256,12 @@ function ActivityCard({
   activity,
   mutations,
   variant = 'scored',
+  celebrationLine,
 }: {
   activity: TodayActivity;
   mutations: ReturnType<typeof useTodayMutations>;
   variant?: 'scored' | 'personal';
+  celebrationLine?: string;
 }) {
   const {
     markActivity,
@@ -267,6 +287,7 @@ function ActivityCard({
       xpPerUnit={activity.xpPerUnit}
       xpCap={activity.xpCap}
       currentStreak={activity.currentStreak}
+      celebrationLine={celebrationLine}
       subPoints={activity.subPoints}
       tiers={activity.tiers}
       defaultExpanded
@@ -308,12 +329,78 @@ export function DashboardContent() {
   const [viewedDateKey, setViewedDateKey] = useState<string | undefined>(
     undefined,
   );
+  const [perfectDayBannerDismissed, setPerfectDayBannerDismissed] =
+    useState(false);
+  const [recoveryDismissed, setRecoveryDismissed] = useState(false);
+  const [confettiActive, setConfettiActive] = useState(false);
+  const confettiTriggeredRef = useRef(false);
   const queryInput = viewedDateKey ? { date: viewedDateKey } : undefined;
   const mutations = useTodayMutations(viewedDateKey);
 
   const activitiesQuery = trpc.activities.getToday.useQuery(queryInput);
   const statsQuery = trpc.stats.getDashboard.useQuery();
   const heatmapQuery = trpc.heatmap.get.useQuery();
+  const profileQuery = trpc.profile.get.useQuery();
+
+  const stats = statsQuery.data;
+  const today = activitiesQuery.data;
+
+  const { celebrationLines } = useActivityCelebrations(
+    today,
+    stats?.currentStreak,
+  );
+
+  const allScoredComplete =
+    today != null &&
+    today.isViewingToday &&
+    allScoredActivitiesCompleted(today);
+
+  const brokeOnDate = stats?.streakBreak?.brokeOnDate ?? null;
+
+  useEffect(() => {
+    setPerfectDayBannerDismissed(false);
+    confettiTriggeredRef.current = false;
+  }, [today?.dateKey]);
+
+  useEffect(() => {
+    setRecoveryDismissed(
+      brokeOnDate ? isStreakRecoveryDismissed(brokeOnDate) : false,
+    );
+  }, [brokeOnDate]);
+
+  useEffect(() => {
+    if (!today?.isViewingToday || !allScoredComplete) return;
+    if (today.scoredActivities.length === 0) return;
+    if (hasPerfectDayBeenCelebrated(today.dateKey)) return;
+    if (confettiTriggeredRef.current) return;
+
+    confettiTriggeredRef.current = true;
+    markPerfectDayCelebrated(today.dateKey);
+    setConfettiActive(true);
+  }, [today, allScoredComplete]);
+
+  const handleConfettiDone = useCallback(() => {
+    setConfettiActive(false);
+  }, []);
+
+  const handleRecoveryDismiss = useCallback(() => {
+    if (brokeOnDate) dismissStreakRecovery(brokeOnDate);
+    setRecoveryDismissed(true);
+  }, [brokeOnDate]);
+
+  const handleScrollToTasks = useCallback(() => {
+    document.getElementById('today-tasks')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  }, []);
+
+  const showRecoveryBanner =
+    stats?.streakBreak?.occurred === true &&
+    today?.isViewingToday === true &&
+    brokeOnDate != null &&
+    !recoveryDismissed &&
+    !allScoredComplete;
 
   if (activitiesQuery.isLoading || statsQuery.isLoading) {
     return (
@@ -343,9 +430,6 @@ export function DashboardContent() {
     );
   }
 
-  const stats = statsQuery.data;
-  const today = activitiesQuery.data;
-
   const activityTitles = today
     ? [...today.scoredActivities, ...today.personalActivities].map(
         (a) => a.title,
@@ -368,9 +452,19 @@ export function DashboardContent() {
             </p>
           </div>
           {stats && (
-            <StreakBadge streak={stats.currentStreak} label="day streak" />
+            <StreakBadge streak={stats.currentStreak} />
           )}
         </header>
+
+        {showRecoveryBanner && stats && (
+          <StreakRecoveryBanner
+            previousStreak={stats.streakBreak.previousStreak}
+            longestStreak={stats.longestStreak}
+            daysSinceBreak={stats.streakBreak.daysSinceBreak}
+            onDismiss={handleRecoveryDismiss}
+            onScrollToTasks={handleScrollToTasks}
+          />
+        )}
 
         {stats && (
           <DayCounter
@@ -381,8 +475,16 @@ export function DashboardContent() {
           />
         )}
 
+        {stats && today && (
+          <FirstWeekChecklist
+            currentDay={stats.currentDay}
+            hasReminder={Boolean(profileQuery.data?.reminderTime)}
+            hasCompletedHabit={anyActivityCompleted(today)}
+          />
+        )}
+
         {today && (
-          <section className="space-y-3">
+          <section id="today-tasks" className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <button
                 type="button"
@@ -425,11 +527,21 @@ export function DashboardContent() {
               }
             />
 
+            {allScoredComplete &&
+              !perfectDayBannerDismissed &&
+              today.scoredActivities.length > 0 && (
+                <PerfectDayBanner
+                  message={getPerfectDayBanner(today.dateKey)}
+                  onDismiss={() => setPerfectDayBannerDismissed(true)}
+                />
+              )}
+
             {today.scoredActivities.map((activity) => (
               <ActivityCard
                 key={activity.id}
                 activity={activity}
                 mutations={mutations}
+                celebrationLine={celebrationLines[activity.id]}
               />
             ))}
 
@@ -447,6 +559,7 @@ export function DashboardContent() {
                     activity={activity}
                     mutations={mutations}
                     variant="personal"
+                    celebrationLine={celebrationLines[activity.id]}
                   />
                 ))}
               </div>
@@ -532,6 +645,11 @@ export function DashboardContent() {
             Manage group →
           </a>
         </footer>
+
+        <PerfectDayCelebration
+          active={confettiActive}
+          onDone={handleConfettiDone}
+        />
       </div>
     </div>
   );

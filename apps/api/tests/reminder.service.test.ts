@@ -114,6 +114,14 @@ const defaultContext: ReminderContext = {
   xpAtRisk: 50,
   rank: 1,
   totalXp: 500,
+  topActivityStreak: 0,
+  topActivityName: null,
+  unloggedHabitNames: [],
+  missedYesterday: false,
+  streakAtRisk: false,
+  journeyMilestone: null,
+  currentStreak: 0,
+  longestStreak: 0,
 };
 
 describe('ReminderService', () => {

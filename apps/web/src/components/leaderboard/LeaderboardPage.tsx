@@ -65,10 +65,10 @@ export function LeaderboardContent() {
           className="text-3xl text-[var(--text-primary)] sm:text-4xl"
           style={{ fontFamily: 'var(--font-display)' }}
         >
-          Leaderboard
+          Fellow travelers
         </h1>
         <p className="text-sm text-[var(--text-muted)]">
-          Squad rankings · refreshes every 60s
+          Travelers on the trail · refreshes every 60s
         </p>
       </header>
 

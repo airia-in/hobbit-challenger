@@ -26,6 +26,15 @@ export type ReminderMessaging = {
   dashboardUrl: string;
 };
 
+export type ReminderCopyLines = {
+  themedIntro: string;
+  unloggedHabitsLine: string;
+  streakLine: string;
+  milestoneLine: string;
+  yesterdayMissLine: string;
+  streakAtRiskLine: string;
+};
+
 export function buildReminderMessaging(
   webDomain = DEFAULT_WEB_DOMAIN,
 ): ReminderMessaging {
@@ -34,6 +43,50 @@ export function buildReminderMessaging(
     brandIntro: BRAND_INTRO,
     brandTagline: BRAND_TAGLINE,
     dashboardUrl: buildDashboardUrl(webDomain),
+  };
+}
+
+export function buildReminderCopyLines(context: ReminderContext): ReminderCopyLines {
+  const unloggedHabitsLine =
+    context.unloggedHabitNames.length > 0
+      ? `Still in the pack: ${context.unloggedHabitNames.join(', ')}.`
+      : '';
+
+  const streakLine =
+    context.topActivityStreak > 0 && context.topActivityName
+      ? `${context.topActivityName} is on a ${context.topActivityStreak}-day trail streak.`
+      : context.currentStreak > 0
+        ? `${context.currentStreak} days on the challenge trail.`
+        : '';
+
+  const milestoneLine = context.journeyMilestone
+    ? `Milestone day ${context.journeyMilestone} on the journey — worth a small campfire cheer.`
+    : '';
+
+  const yesterdayMissLine = context.missedYesterday
+    ? 'Yesterday was a muddy patch on the trail — today is a fresh path.'
+    : '';
+
+  const streakAtRiskLine = context.streakAtRisk
+    ? `Your ${context.currentStreak}-day streak needs today's logs before the campfire goes out.`
+    : '';
+
+  const themedIntro =
+    context.journeyMilestone != null
+      ? 'Pack light, walk steady — milestone weather ahead.'
+      : context.streakAtRisk
+        ? 'Clouds on the horizon — a few logs will clear the sky.'
+        : context.missedYesterday
+          ? 'Fresh morning air after yesterday\'s rain.'
+          : 'Good trail weather for small wins today.';
+
+  return {
+    themedIntro,
+    unloggedHabitsLine,
+    streakLine,
+    milestoneLine,
+    yesterdayMissLine,
+    streakAtRiskLine,
   };
 }
 
@@ -113,6 +166,7 @@ export function interpolatePrompt(
 ): string {
   const rankLine =
     context.rank != null ? `Current leaderboard rank: ${context.rank}.` : '';
+  const copyLines = buildReminderCopyLines(context);
 
   const replacements: Record<string, string> = {
     name: context.name,
@@ -122,12 +176,17 @@ export function interpolatePrompt(
     todayNetXp: String(context.todayNetXp),
     xpAtRisk: String(context.xpAtRisk),
     totalXp: String(context.totalXp),
+    currentStreak: String(context.currentStreak),
+    longestStreak: String(context.longestStreak),
+    topActivityStreak: String(context.topActivityStreak),
+    topActivityName: context.topActivityName ?? '',
     rank: context.rank != null ? String(context.rank) : '',
     rankLine,
     brandName: messaging.brandName,
     brandIntro: messaging.brandIntro,
     brandTagline: messaging.brandTagline,
     dashboardUrl: messaging.dashboardUrl,
+    ...copyLines,
   };
 
   let result = template;
@@ -135,7 +194,6 @@ export function interpolatePrompt(
     result = result.replaceAll(`{{${key}}}`, value);
   }
 
-  // Remove leftover handlebars-style conditionals from prompt templates
   result = result.replace(/\{\{#if rank\}\}[\s\S]*?\{\{\/if\}\}/g, rankLine);
   result = result.replace(/\{\{[^}]+\}\}/g, '');
 
@@ -155,29 +213,155 @@ function appendDashboardLink(
   return `${message} Log them: ${messaging.dashboardUrl}`;
 }
 
+export function fallbackSeed(
+  context: ReminderContext,
+  kind: ReminderKind,
+): number {
+  const input = `${context.name}:${context.dayNumber}:${kind}`;
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash * 31 + input.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+function pickVariant<T>(variants: readonly T[], seed: number): T {
+  return variants[seed % variants.length]!;
+}
+
+const MORNING_CLEAR: readonly string[] = [
+  'Good morning, {{name}}! {{brandName}} here — day {{dayNumber}} trail is clear ahead.',
+  'Morning, {{name}}! {{brandName}} here — the pack is light on day {{dayNumber}}.',
+];
+
+const MORNING_CLEAR_AFTER_MISS: readonly string[] = [
+  'Good morning, {{name}}! {{brandName}} here — fresh trail on day {{dayNumber}} after yesterday\'s mud.',
+  'Rise and ramble, {{name}}! {{brandName}} here — day {{dayNumber}} starts clean after yesterday\'s detour.',
+];
+
+const MORNING_MILESTONE: readonly string[] = [
+  'Good morning, {{name}}! {{brandName}} here — day {{dayNumber}} milestone, campfire-worthy weather.',
+  'Morning, {{name}}! {{brandName}} here — day {{dayNumber}} is a trail marker worth celebrating.',
+  'Hey {{name}}, {{brandName}} here — milestone day {{dayNumber}}! Pack steady and enjoy the view.',
+];
+
+const MORNING_YESTERDAY_MISS: readonly string[] = [
+  'Good morning, {{name}}! {{brandName}} here — rain yesterday, sunshine on day {{dayNumber}}.',
+  'Morning, {{name}}! {{brandName}} here — muddy patch behind us, {{tasksRemaining}} task(s) on today\'s path.',
+];
+
+const MORNING_STREAK_AT_RISK: readonly string[] = [
+  'Good morning, {{name}}! {{brandName}} here — your {{currentStreak}}-day streak wants {{tasksRemaining}} log(s) today.',
+  'Morning, {{name}}! {{brandName}} here — keep the {{currentStreak}}-day fire going, {{tasksRemaining}} log(s) to go.',
+  'Hey {{name}}, {{brandName}} here — day {{dayNumber}} — don\'t let a {{currentStreak}}-day streak get cold. {{tasksRemaining}} still open.',
+];
+
+const MORNING_TASKS: readonly string[] = [
+  'Good morning, {{name}}! {{brandName}} here — day {{dayNumber}} with {{tasksRemaining}} task(s) in the pack.',
+  'Morning, {{name}}! {{brandName}} here — day {{dayNumber}} with {{tasksRemaining}} habit(s) to log before sunset.',
+];
+
+const EVENING_MILESTONE: readonly string[] = [
+  'Hi {{name}}, {{brandName}} here — milestone evening on day {{dayNumber}}. {{tasksRemaining}} task(s) before the campfire dims.',
+  'Evening, {{name}}! {{brandName}} here — day {{dayNumber}} milestone; log {{tasksRemaining}} before midnight.',
+];
+
+const EVENING_STREAK_AT_RISK: readonly string[] = [
+  'Hi {{name}}, {{brandName}} here — {{currentStreak}}-day streak at risk. {{tasksRemaining}} task(s) and {{xpAtRisk}} XP before midnight.',
+  'Evening, {{name}}! {{brandName}} here — {{tasksRemaining}} open, {{xpAtRisk}} XP at stake for your {{currentStreak}}-day run.',
+  'Hey {{name}}, {{brandName}} here — don\'t let day {{dayNumber}} snap a {{currentStreak}}-day streak. {{tasksRemaining}} still unlogged, {{xpAtRisk}} XP at risk.',
+];
+
+const EVENING_XP_ONLY: readonly string[] = [
+  'Hi {{name}}, {{brandName}} here — all tasks logged but {{xpAtRisk}} XP still at risk before midnight.',
+  'Evening, {{name}}! {{brandName}} here — tasks are done; {{xpAtRisk}} XP could still slip away tonight.',
+  'Hey {{name}}, {{brandName}} here — {{xpAtRisk}} XP on the line even though the pack looks packed.',
+];
+
+const EVENING_DEFAULT: readonly string[] = [
+  'Hi {{name}}, {{brandName}} here — {{tasksRemaining}} task(s) still open and {{xpAtRisk}} XP at risk before midnight.',
+  'Evening, {{name}}! {{brandName}} here — {{tasksRemaining}} habit(s) unlogged; {{xpAtRisk}} XP fades at midnight.',
+  'Hey {{name}}, {{brandName}} here — campfire\'s cooling with {{tasksRemaining}} task(s) and {{xpAtRisk}} XP tonight.',
+];
+
+function fillFallbackTemplate(
+  template: string,
+  context: ReminderContext,
+  messaging: ReminderMessaging,
+): string {
+  const rankSuffix =
+    context.rank != null ? ` You're rank #${context.rank}.` : '';
+  const filled = template
+    .replaceAll('{{name}}', context.name)
+    .replaceAll('{{brandName}}', messaging.brandName)
+    .replaceAll('{{dayNumber}}', String(context.dayNumber))
+    .replaceAll('{{tasksRemaining}}', String(context.tasksRemaining))
+    .replaceAll('{{xpAtRisk}}', String(context.xpAtRisk))
+    .replaceAll('{{currentStreak}}', String(context.currentStreak));
+  return `${filled}${rankSuffix}`;
+}
+
+function selectMorningTemplate(
+  context: ReminderContext,
+  seed: number,
+): string {
+  if (context.tasksRemaining <= 0) {
+    if (context.missedYesterday) {
+      return pickVariant(MORNING_CLEAR_AFTER_MISS, seed);
+    }
+    return pickVariant(MORNING_CLEAR, seed);
+  }
+  if (context.journeyMilestone != null) {
+    return pickVariant(MORNING_MILESTONE, seed);
+  }
+  if (context.missedYesterday) {
+    return pickVariant(MORNING_YESTERDAY_MISS, seed);
+  }
+  if (context.streakAtRisk) {
+    return pickVariant(MORNING_STREAK_AT_RISK, seed);
+  }
+  return pickVariant(MORNING_TASKS, seed);
+}
+
+function selectEveningTemplate(
+  context: ReminderContext,
+  seed: number,
+): string {
+  if (context.journeyMilestone != null) {
+    return pickVariant(EVENING_MILESTONE, seed);
+  }
+  if (context.streakAtRisk) {
+    return pickVariant(EVENING_STREAK_AT_RISK, seed);
+  }
+  if (context.tasksRemaining <= 0 && context.xpAtRisk > 0) {
+    return pickVariant(EVENING_XP_ONLY, seed);
+  }
+  return pickVariant(EVENING_DEFAULT, seed);
+}
+
 export function buildFallbackMessage(
   kind: ReminderKind,
   context: ReminderContext,
   messaging: ReminderMessaging = buildReminderMessaging(),
+  seed = fallbackSeed(context, kind),
 ): string {
-  const rankSuffix =
-    context.rank != null ? ` You're rank #${context.rank}.` : '';
-
-  if (kind === 'MORNING') {
-    if (context.tasksRemaining <= 0) {
-      return `Good morning, ${context.name}! ${messaging.brandName} here — day ${context.dayNumber} is looking clear.${rankSuffix}`;
-    }
-
-    return appendDashboardLink(
-      `Good morning, ${context.name}! ${messaging.brandName} here — day ${context.dayNumber} with ${context.tasksRemaining} task(s) left.${rankSuffix}`,
-      context,
-      messaging,
-    );
-  }
-
-  return appendDashboardLink(
-    `Hi ${context.name}, ${messaging.brandName} here — ${context.tasksRemaining} task(s) still open and ${context.xpAtRisk} XP at risk before midnight. Annoying, I know.${rankSuffix}`,
-    context,
-    messaging,
-  );
+  const template =
+    kind === 'MORNING'
+      ? selectMorningTemplate(context, seed)
+      : selectEveningTemplate(context, seed);
+  const message = fillFallbackTemplate(template, context, messaging);
+  return appendDashboardLink(message, context, messaging);
 }
+
+export const FALLBACK_VARIANT_TEMPLATES = [
+  ...MORNING_CLEAR,
+  ...MORNING_CLEAR_AFTER_MISS,
+  ...MORNING_MILESTONE,
+  ...MORNING_YESTERDAY_MISS,
+  ...MORNING_STREAK_AT_RISK,
+  ...MORNING_TASKS,
+  ...EVENING_MILESTONE,
+  ...EVENING_STREAK_AT_RISK,
+  ...EVENING_XP_ONLY,
+  ...EVENING_DEFAULT,
+] as const;

@@ -8,8 +8,26 @@ import {
   computeXpPreview,
 } from '@workspace-starter/ui';
 
+function mockMatchMedia(matches: boolean) {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
 afterEach(() => {
-  vi.restoreAllMocks();
+  vi.clearAllMocks();
+  mockMatchMedia(false);
 });
 
 describe('TaskCard', () => {
@@ -30,6 +48,133 @@ describe('TaskCard', () => {
       screen.getByRole('button', { name: /tap to complete/i }),
     );
     expect(onMarkDone).toHaveBeenCalledOnce();
+  });
+
+  it('applies completion animation class when marking done via tap', async () => {
+    mockMatchMedia(false);
+    const onMarkDone = vi.fn();
+    render(
+      <TaskCard
+        icon="✅"
+        title="Progress photo"
+        kind="CHECKBOX"
+        log={null}
+        canEdit
+        onMarkDone={onMarkDone}
+      />,
+    );
+
+    const card = screen.getByTestId('task-card');
+    expect(card).not.toHaveClass('task-card--completing');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /tap to complete/i }),
+    );
+
+    expect(onMarkDone).toHaveBeenCalledOnce();
+    expect(card).toHaveClass('task-card--completing');
+    expect(screen.getByText(/tap to complete/i)).toHaveClass(
+      'task-card-status--completing',
+    );
+  });
+
+  it('does not apply completion animation when mounted already complete', () => {
+    mockMatchMedia(false);
+    render(
+      <TaskCard
+        icon="✅"
+        title="Progress photo"
+        kind="CHECKBOX"
+        log={{
+          state: 'DONE',
+          value: null,
+          tier: null,
+          subPoints: null,
+          xpAwarded: 200,
+        }}
+        canEdit
+      />,
+    );
+
+    expect(screen.getByTestId('task-card')).not.toHaveClass(
+      'task-card--completing',
+    );
+  });
+
+  it('does not apply completion animation on undo', async () => {
+    mockMatchMedia(false);
+    const onUndo = vi.fn();
+    render(
+      <TaskCard
+        icon="✅"
+        title="Progress photo"
+        kind="CHECKBOX"
+        log={{
+          state: 'DONE',
+          value: null,
+          tier: null,
+          subPoints: null,
+          xpAwarded: 200,
+        }}
+        canEdit
+        onUndo={onUndo}
+      />,
+    );
+
+    const card = screen.getByTestId('task-card');
+    await userEvent.click(screen.getByRole('button', { name: /done ✓/i }));
+
+    expect(onUndo).toHaveBeenCalledOnce();
+    expect(card).not.toHaveClass('task-card--completing');
+  });
+
+  it('skips completion animation when prefers-reduced-motion is set', async () => {
+    mockMatchMedia(true);
+    const onCompleted = vi.fn();
+    const onMarkDone = vi.fn();
+    render(
+      <TaskCard
+        icon="✅"
+        title="Progress photo"
+        kind="CHECKBOX"
+        log={null}
+        canEdit
+        onMarkDone={onMarkDone}
+        onCompleted={onCompleted}
+      />,
+    );
+
+    const card = screen.getByTestId('task-card');
+    await userEvent.click(
+      screen.getByRole('button', { name: /tap to complete/i }),
+    );
+
+    expect(onMarkDone).toHaveBeenCalledOnce();
+    expect(onCompleted).toHaveBeenCalledOnce();
+    expect(card).not.toHaveClass('task-card--completing');
+  });
+
+  it('calls onCompleted when marking done', async () => {
+    const onCompleted = vi.fn();
+    const onMarkDone = vi.fn();
+    render(
+      <TaskCard
+        icon="✅"
+        title="Progress photo"
+        kind="CHECKBOX"
+        log={null}
+        canEdit
+        onMarkDone={onMarkDone}
+        onCompleted={onCompleted}
+      />,
+    );
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /tap to complete/i }),
+    );
+
+    expect(onMarkDone).toHaveBeenCalledOnce();
+    expect(onCompleted).toHaveBeenCalledOnce();
   });
 
   it('renders a compact current streak without blocking card taps', async () => {

@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { cn } from '../utils/cn';
 import { NumberStepper } from './NumberStepper';
 import { TierChips, type TierOption } from './TierChips';
@@ -69,6 +69,8 @@ export type TaskCardProps = {
   subPoints?: SubPointConfig[];
   tiers?: TierOption[];
   onMarkDone?: () => void;
+  /** Fired on user-initiated completion (mark-done paths only; not undo or mount). */
+  onCompleted?: () => void;
   onUndo?: () => void;
   onNumberCommit?: (value: number) => void;
   onTierSelect?: (tierKey: string) => void;
@@ -167,6 +169,14 @@ function hasExpandableContent(
 
 function bodyTapEnabled(kind: ActivityKind): boolean {
   return kind === 'CHECKBOX' || kind === 'SUBPOINTS';
+}
+
+const COMPLETION_ANIMATION_MS = 520;
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined') return true;
+  if (typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 function GuidancePanel({
@@ -374,6 +384,7 @@ export function TaskCard({
   subPoints = [],
   tiers = [],
   onMarkDone,
+  onCompleted,
   onUndo,
   onNumberCommit,
   onTierSelect,
@@ -390,11 +401,32 @@ export function TaskCard({
   const showExpand = hasExpandableContent(kind, expandedContent);
   const [expanded, setExpanded] = useState(() => defaultExpanded && showExpand);
   const [guidanceOpen, setGuidanceOpen] = useState(false);
+  const [completionAnimating, setCompletionAnimating] = useState(false);
   const status = deriveTaskStatus(kind, log, canEdit);
   const xpAwarded = log?.xpAwarded ?? 0;
   const isComplete = status === 'COMPLETED';
   const canBodyTap = bodyTapEnabled(kind) && canEdit && !disabled;
   const showCurrentStreak = kind !== 'NUMBER' && currentStreak !== undefined;
+
+  useEffect(() => {
+    if (!completionAnimating) return;
+    const timer = window.setTimeout(
+      () => setCompletionAnimating(false),
+      COMPLETION_ANIMATION_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [completionAnimating]);
+
+  function triggerCompletionFeedback() {
+    onCompleted?.();
+    if (prefersReducedMotion()) return;
+    setCompletionAnimating(true);
+  }
+
+  function handleMarkDone() {
+    triggerCompletionFeedback();
+    onMarkDone?.();
+  }
 
   function handleBodyTap() {
     if (!canEdit || disabled) return;
@@ -403,7 +435,7 @@ export function TaskCard({
       return;
     }
     if (canBodyTap) {
-      onMarkDone?.();
+      handleMarkDone();
     }
   }
 
@@ -414,7 +446,26 @@ export function TaskCard({
       initial[sp.key] = current[sp.key] ?? 'UNLOGGED';
     }
     const updated = { ...initial, [key]: next };
+    const allDone =
+      next === 'DONE' &&
+      subPoints.length > 0 &&
+      subPoints.every((sp) => updated[sp.key] === 'DONE');
+    if (allDone) {
+      triggerCompletionFeedback();
+    }
     onSubPointChange?.(updated);
+  }
+
+  function handleNumberCommit(value: number) {
+    if (value > 0) {
+      triggerCompletionFeedback();
+    }
+    onNumberCommit?.(value);
+  }
+
+  function handleTierSelect(tierKey: string) {
+    triggerCompletionFeedback();
+    onTierSelect?.(tierKey);
   }
 
   const numberValue = log?.value ?? 0;
@@ -425,9 +476,11 @@ export function TaskCard({
   return (
     <div
       id={domId}
+      data-testid="task-card"
       className={cn(
         'overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)]',
         isComplete && 'border-[var(--success)]/20',
+        completionAnimating && 'task-card--completing',
         className,
       )}
     >
@@ -480,6 +533,7 @@ export function TaskCard({
             className={cn(
               'inline-flex shrink-0 items-center whitespace-nowrap rounded-md border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide',
               STATUS_STYLES[status],
+              completionAnimating && 'task-card-status--completing',
             )}
             style={{ fontFamily: 'var(--font-mono)' }}
           >
@@ -537,7 +591,7 @@ export function TaskCard({
               xpPerUnit={xpPerUnit}
               xpCap={xpCap}
               onChange={() => {}}
-              onCommit={onNumberCommit}
+              onCommit={handleNumberCommit}
               disabled={!canEdit || disabled}
             />
           )}
@@ -546,7 +600,7 @@ export function TaskCard({
             <TierChips
               tiers={tiers}
               selectedTier={log?.tier ?? null}
-              onSelect={onTierSelect}
+              onSelect={handleTierSelect}
               disabled={!canEdit || disabled}
             />
           )}

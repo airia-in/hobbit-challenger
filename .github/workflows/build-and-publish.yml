@@ -89,6 +89,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Require assetlinks fingerprints for web-host publish
+        if: matrix.app == 'web-host'
+        run: |
+          if [ -z "${{ secrets.ANDROID_SHA256_CERT_FINGERPRINTS }}" ]; then
+            echo "::error::ANDROID_SHA256_CERT_FINGERPRINTS secret is required to publish web-host."
+            exit 1
+          fi
+
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
@@ -98,6 +106,9 @@ jobs:
           tags: |
             ${{ steps.image.outputs.image }}:${{ steps.image.outputs.sha }}
             ${{ steps.image.outputs.image }}:latest
+          build-args: |
+            ANDROID_SHA256_CERT_FINGERPRINTS=${{ secrets.ANDROID_SHA256_CERT_FINGERPRINTS }}
+            REQUIRE_ASSETLINKS_FINGERPRINTS=${{ matrix.app == 'web-host' && '1' || '0' }}
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
 

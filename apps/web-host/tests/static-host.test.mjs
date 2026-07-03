@@ -150,7 +150,14 @@ test('serves Digital Asset Links JSON with application/json content type', async
   assert.equal(response.headers.get('cache-control'), 'public, max-age=3600');
 
   const payload = await response.json();
+  assert.deepEqual(payload[0].relation, [
+    'delegate_permission/common.handle_all_urls',
+  ]);
+  assert.equal(payload[0].target.namespace, 'android_app');
   assert.equal(payload[0].target.package_name, 'com.drcode.hobbit');
+  assert.deepEqual(payload[0].target.sha256_cert_fingerprints, [
+    '14:6D:E9:25:B5:2F:46:FD:8D:65:19:FB:FF:0D:56:8F:0B:8C:F4:30:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55',
+  ]);
 });
 
 test('does not serve files outside the mounted site root', async (t) => {

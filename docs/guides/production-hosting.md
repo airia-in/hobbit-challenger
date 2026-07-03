@@ -117,9 +117,12 @@ https://<WEB_DOMAIN>/.well-known/assetlinks.json
 ```
 
 `scripts/build-frontends.mjs` generates this file into
-`apps/web/public/.well-known/assetlinks.json` before each Astro static build.
+`apps/web/public/.well-known/assetlinks.json` before each Astro static build when
+`ANDROID_SHA256_CERT_FINGERPRINTS` is set. If fingerprints are unset, the file is
+**omitted** so Android does not cache a broken verification payload; invite taps
+stay in chooser-fallback until fingerprints are configured.
 The staged bundle is served by `web-host` at the same path (no auth; JSON is
-cacheable for one hour).
+cacheable for one hour when present).
 
 ### Deploy step
 
@@ -139,7 +142,9 @@ cacheable for one hour).
    `SHA256:` value (colon-separated hex). Multiple keys (e.g. upload + app
    signing): comma-separate fingerprints.
 
-2. Set the fingerprint when building the `web-host` image (not committed):
+2. Set the fingerprint when building the `web-host` image (not committed).
+
+   **Local docker compose:**
 
    ```bash
    export ANDROID_SHA256_CERT_FINGERPRINTS='AA:BB:CC:...'
@@ -150,6 +155,21 @@ cacheable for one hour).
    `docker-compose.yml` passes `ANDROID_SHA256_CERT_FINGERPRINTS` as a build arg
    to `apps/web-host/Dockerfile`. Override `ANDROID_PACKAGE_NAME` only if the
    Capacitor `appId` changes (default `com.drcode.hobbit`).
+
+   **GHCR / GitHub Actions (production path):**
+
+   Store the fingerprint in the repository secret
+   `ANDROID_SHA256_CERT_FINGERPRINTS`. The
+   [Build and Publish](../../.github/workflows/build-and-publish.yml) and
+   [Release](../../.github/workflows/release.yml) workflows pass it as a Docker
+   build arg for `web-host`, require it before publish, and validate the staged
+   file inside the image build (`scripts/validate-assetlinks.mjs`). Until the
+   secret is set, `web-host` publish builds fail closed instead of shipping an
+   empty verification payload.
+
+   For local compose builds without App Links, pass
+   `REQUIRE_ASSETLINKS_FINGERPRINTS=0` to allow the image to build without
+   fingerprints (the file remains omitted).
 
 3. Verify after deploy:
 
@@ -175,8 +195,8 @@ Example payload shape:
 ]
 ```
 
-Until fingerprints are injected at image build, the file is still served but
-Android verification fails and invite taps may show a disambiguation chooser.
+Until fingerprints are injected at image build, `/.well-known/assetlinks.json`
+is not served (404) and invite taps may show a disambiguation chooser.
 
 ## Config layout
 

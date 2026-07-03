@@ -12,19 +12,3 @@ export interface AssetLinksEntry {
     sha256_cert_fingerprints: string[];
   };
 }
-
-export function buildAssetLinksPayload(
-  sha256CertFingerprints: string[],
-  packageName = ANDROID_PACKAGE_NAME,
-): AssetLinksEntry[] {
-  return [
-    {
-      relation: [...ASSETLINKS_RELATION],
-      target: {
-        namespace: 'android_app',
-        package_name: packageName,
-        sha256_cert_fingerprints: sha256CertFingerprints,
-      },
-    },
-  ];
-}

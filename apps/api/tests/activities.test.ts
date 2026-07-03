@@ -35,11 +35,12 @@ function matchesActivityWhere(
   activity: Activity,
   where: {
     OR?: Array<Record<string, unknown>>;
-    groupId?: string;
+    groupId?: string | null;
     active?: boolean;
     scored?: boolean;
     ownerUserId?: string;
     isPersonal?: boolean;
+    seedKey?: { not: null } | null;
   },
 ): boolean {
   if (where.OR) {
@@ -67,6 +68,9 @@ function matchesActivityWhere(
     where.isPersonal !== undefined &&
     activity.isPersonal !== where.isPersonal
   ) {
+    return false;
+  }
+  if (where.seedKey && 'not' in where.seedKey && activity.seedKey == null) {
     return false;
   }
   return true;
@@ -161,6 +165,39 @@ function createFakePrisma(seed: FakePrismaSeed) {
           result = result.sort((a, b) => a.sortOrder - b.sortOrder);
         }
         return result.map((activity) => ({ ...activity }));
+      },
+      count: async ({
+        where,
+      }: {
+        where?: Parameters<typeof matchesActivityWhere>[1];
+      }) =>
+        [...activities.values()].filter((activity) =>
+          where ? matchesActivityWhere(activity, where) : true,
+        ).length,
+      upsert: async ({
+        where,
+        create,
+        update,
+      }: {
+        where: {
+          ownerUserId_seedKey: { ownerUserId: string; seedKey: string };
+        };
+        create: Activity;
+        update: Partial<Activity>;
+      }) => {
+        const existing = [...activities.values()].find(
+          (activity) =>
+            activity.ownerUserId === where.ownerUserId_seedKey.ownerUserId &&
+            activity.seedKey === where.ownerUserId_seedKey.seedKey,
+        );
+        if (existing) {
+          const updated = { ...existing, ...update };
+          activities.set(existing.id, updated);
+          return updated;
+        }
+        const created = { ...create, id: genId('activity') };
+        activities.set(created.id, created);
+        return created;
       },
     },
     activityLog: {
@@ -961,7 +998,7 @@ describe('activities service', () => {
 
     const result = await service.getToday(fake.prisma, USER_ID);
 
-    expect(result.scoredActivities).toHaveLength(0);
+    expect(result.scoredActivities.length).toBeGreaterThan(0);
     expect(result.personalActivities).toHaveLength(1);
     expect(result.personalActivities[0]?.id).toBe(PERSONAL_ACTIVITY_ID);
     expect(result.currentDay).toBe(1);
@@ -975,7 +1012,7 @@ describe('activities service', () => {
     expect(marked.log.xpAwarded).toBe(50);
   });
 
-  it('getToday returns empty activity lists and zero dayTotals for a challenge with no activities', async () => {
+  it('getToday backfills solo builtins for groupless users with no activities', async () => {
     const today = getUserLocalDate('UTC');
     const grouplessUser: User = {
       id: USER_ID,
@@ -1012,7 +1049,7 @@ describe('activities service', () => {
 
     const result = await service.getToday(fake.prisma, USER_ID);
 
-    expect(result.scoredActivities).toHaveLength(0);
+    expect(result.scoredActivities).toHaveLength(7);
     expect(result.personalActivities).toHaveLength(0);
     expect(result.dayTotals).toEqual({
       netXp: 0,

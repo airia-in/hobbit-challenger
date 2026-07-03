@@ -24,6 +24,8 @@ export function ManageGroupContent() {
   const utils = trpc.useUtils();
 
   const group = trpc.groups.getMine.useQuery();
+  const me = trpc.auth.me.useQuery();
+  const hasSoloSeeds = me.data?.hasSoloSeeds === true;
   const createGroup = trpc.groups.create.useMutation({
     onSuccess: () => utils.groups.getMine.invalidate(),
   });
@@ -141,8 +143,9 @@ export function ManageGroupContent() {
             Walk the path solo
           </p>
           <p className="mb-6 text-sm text-[var(--text-muted)]">
-            Your seeded habits and trail stats are already on the dashboard.
-            Join a fellowship later without losing your journey.
+            {hasSoloSeeds
+              ? 'Your seeded habits and trail stats are already on the dashboard. Join a fellowship later without losing your journey.'
+              : 'Head to the dashboard to start your trail with built-in habits, or join a fellowship when you are ready.'}
           </p>
           <a
             href="/dashboard"

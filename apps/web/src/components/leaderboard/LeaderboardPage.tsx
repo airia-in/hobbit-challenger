@@ -41,6 +41,17 @@ export function LeaderboardContent() {
     );
   }
 
+  if (me.isError) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-12 text-center">
+        <QueryErrorState
+          message={me.error?.message}
+          onRetry={() => void me.refetch()}
+        />
+      </div>
+    );
+  }
+
   if (!hasGroup) {
     return (
       <div className="mx-auto max-w-lg px-4 py-12 text-center">

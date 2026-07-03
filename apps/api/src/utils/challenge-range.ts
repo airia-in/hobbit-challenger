@@ -193,3 +193,34 @@ export function buildCurrentIsoWeekChallengeRange(
   const { start, end } = getIsoWeekRange(timezone, now);
   return buildChallengeRange(start, end, timezone, now);
 }
+
+/** Preserve the earliest solo start and latest end when attaching a fellowship. */
+export function mergeChallengeOnGroupJoin(
+  existing: Pick<
+    ChallengeRangeLike,
+    'startDate' | 'endDate' | 'lengthDays' | 'currentDay'
+  >,
+  groupStartDate: Date,
+  groupEndDate: Date,
+  timezone: string,
+  now = new Date(),
+): { startDate: Date; endDate: Date; lengthDays: number; currentDay: number } {
+  const groupRange = buildChallengeRange(
+    groupStartDate,
+    groupEndDate,
+    timezone,
+    now,
+  );
+  const soloRange = deriveChallengeProgress(existing, timezone, now);
+
+  const mergedStart =
+    existing.startDate.getTime() < groupRange.startDate.getTime()
+      ? existing.startDate
+      : groupRange.startDate;
+  const mergedEnd =
+    soloRange.endDate.getTime() > groupRange.endDate.getTime()
+      ? soloRange.endDate
+      : groupRange.endDate;
+
+  return buildChallengeRange(mergedStart, mergedEnd, timezone, now);
+}

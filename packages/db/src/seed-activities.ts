@@ -149,6 +149,8 @@ type SeedClient = Pick<PrismaClient, 'activity'>;
 
 type SoloSeedClient = Pick<PrismaClient, 'activity'>;
 
+type SoloTransitionClient = Pick<PrismaClient, 'activity' | 'activityLog'>;
+
 function builtinActivityData(
   activity: BuiltinActivitySeed,
   overrides: {
@@ -207,27 +209,146 @@ export async function seedSoloActivities(
   userId: string,
 ): Promise<void> {
   for (const activity of BUILTIN_ACTIVITIES) {
-    const existing = await prisma.activity.findFirst({
-      where: {
-        ownerUserId: userId,
-        groupId: null,
-        seedKey: activity.seedKey,
-      },
-      select: { id: true },
-    });
-
     const data = builtinActivityData(activity, {
       groupId: null,
       ownerUserId: userId,
     });
 
-    if (existing) {
-      await prisma.activity.update({
-        where: { id: existing.id },
-        data,
+    await prisma.activity.upsert({
+      where: {
+        ownerUserId_seedKey: {
+          ownerUserId: userId,
+          seedKey: activity.seedKey,
+        },
+      },
+      create: data,
+      update: data,
+    });
+  }
+}
+
+export async function hasActiveSoloBuiltins(
+  prisma: SoloSeedClient,
+  userId: string,
+): Promise<boolean> {
+  const count = await prisma.activity.count({
+    where: {
+      ownerUserId: userId,
+      groupId: null,
+      scored: true,
+      isPersonal: false,
+      seedKey: { not: null },
+      active: true,
+    },
+  });
+  return count > 0;
+}
+
+/** Lazy backfill for legacy groupless users created before solo seeding shipped. */
+export async function ensureSoloActivities(
+  prisma: SoloSeedClient,
+  userId: string,
+): Promise<boolean> {
+  if (await hasActiveSoloBuiltins(prisma, userId)) {
+    return true;
+  }
+
+  const anySoloBuiltin = await prisma.activity.count({
+    where: {
+      ownerUserId: userId,
+      groupId: null,
+      seedKey: { not: null },
+    },
+  });
+  if (anySoloBuiltin > 0) {
+    return false;
+  }
+
+  await seedSoloActivities(prisma, userId);
+  return true;
+}
+
+/**
+ * Remap solo-era activity logs onto group builtin rows when joining a fellowship.
+ * Must run after group builtins are seeded and before solo rows are deactivated.
+ */
+export async function migrateSoloActivityLogs(
+  prisma: SoloTransitionClient,
+  userId: string,
+  challengeId: string,
+  groupId: string,
+): Promise<void> {
+  const soloActivities = await prisma.activity.findMany({
+    where: {
+      ownerUserId: userId,
+      groupId: null,
+      seedKey: { not: null },
+    },
+    select: { id: true, seedKey: true },
+  });
+
+  if (soloActivities.length === 0) {
+    return;
+  }
+
+  const groupActivities = await prisma.activity.findMany({
+    where: {
+      groupId,
+      seedKey: {
+        in: soloActivities
+          .map((activity) => activity.seedKey)
+          .filter((seedKey): seedKey is string => seedKey != null),
+      },
+    },
+    select: { id: true, seedKey: true },
+  });
+
+  const groupActivityIdBySeedKey = new Map(
+    groupActivities
+      .filter(
+        (activity): activity is { id: string; seedKey: string } =>
+          activity.seedKey != null,
+      )
+      .map((activity) => [activity.seedKey, activity.id]),
+  );
+
+  for (const soloActivity of soloActivities) {
+    if (!soloActivity.seedKey) {
+      continue;
+    }
+
+    const groupActivityId = groupActivityIdBySeedKey.get(soloActivity.seedKey);
+    if (!groupActivityId) {
+      continue;
+    }
+
+    const soloLogs = await prisma.activityLog.findMany({
+      where: {
+        challengeId,
+        activityId: soloActivity.id,
+      },
+    });
+
+    for (const log of soloLogs) {
+      const conflicting = await prisma.activityLog.findUnique({
+        where: {
+          challengeId_activityId_date: {
+            challengeId,
+            activityId: groupActivityId,
+            date: log.date,
+          },
+        },
       });
-    } else {
-      await prisma.activity.create({ data });
+
+      if (conflicting) {
+        await prisma.activityLog.delete({ where: { id: log.id } });
+        continue;
+      }
+
+      await prisma.activityLog.update({
+        where: { id: log.id },
+        data: { activityId: groupActivityId },
+      });
     }
   }
 }

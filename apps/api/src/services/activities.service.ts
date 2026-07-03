@@ -11,6 +11,7 @@ import {
   type Activity,
   type ActivityLog,
   type Challenge,
+  ensureSoloActivities,
 } from '@workspace-starter/db';
 import type { PrismaService } from '../prisma/prisma.service';
 
@@ -882,6 +883,10 @@ export class ActivitiesService {
     });
     if (!user) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+    }
+
+    if (!user.groupId) {
+      await ensureSoloActivities(prisma, userId);
     }
 
     const timezone = options?.timezone ?? user.timezone;

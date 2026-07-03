@@ -36,9 +36,9 @@ function mockProfileAdmin() {
   });
 }
 
-function mockProfileNotAdmin() {
+function mockProfileNotAdmin(groupId: string | null = 'group-1') {
   mockProfileUseQuery.mockReturnValue({
-    data: { isGroupAdmin: false },
+    data: { isGroupAdmin: false, groupId },
     isLoading: false,
     isError: false,
   });
@@ -109,6 +109,18 @@ describe('AppNav admin links', () => {
         within(desktopNav).queryByRole('link', { name: /Group Settings/i }),
       ).not.toBeInTheDocument();
     });
+
+    it('hides leaderboard when the user has no fellowship', () => {
+      mockProfileNotAdmin(null);
+      const { desktopNav } = renderNav();
+
+      expect(
+        within(desktopNav).queryByRole('link', { name: /Leaderboard/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(desktopNav).getByRole('link', { name: /Dashboard/i }),
+      ).toBeInTheDocument();
+    });
   });
 
   describe('mobile', () => {
@@ -157,6 +169,15 @@ describe('AppNav admin links', () => {
       ).not.toBeInTheDocument();
       expect(
         within(mobileNav).queryByRole('link', { name: /Group Settings/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('hides leaderboard on mobile when the user has no fellowship', () => {
+      mockProfileNotAdmin(null);
+      const { mobileNav } = renderNav();
+
+      expect(
+        within(mobileNav).queryByRole('link', { name: /Leaderboard/i }),
       ).not.toBeInTheDocument();
     });
   });

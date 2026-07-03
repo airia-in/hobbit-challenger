@@ -146,6 +146,32 @@ function personalActivity(id: string): Activity {
   };
 }
 
+function scoredSoloBuiltin(id: string, seedKey = 'DIET'): Activity {
+  return {
+    id,
+    groupId: null,
+    ownerUserId: USER_ID,
+    seedKey,
+    title: `Solo ${id}`,
+    emoji: null,
+    kind: ActivityKind.CHECKBOX,
+    scored: true,
+    isPersonal: false,
+    xpComplete: 200,
+    xpMiss: -200,
+    unitLabel: null,
+    xpPerUnit: null,
+    xpCap: null,
+    missXp: null,
+    subPoints: null,
+    tiers: null,
+    deductMultiplier: 2,
+    sortOrder: 1,
+    active: true,
+    createdAt: new Date(),
+  };
+}
+
 function scoredGroupActivity(id: string): Activity {
   return {
     id,
@@ -252,6 +278,40 @@ describe('getLiveStreak', () => {
     });
 
     expect(result).toBe(3);
+  });
+
+  it('increments stored streak for solo builtin users when all scored activities are logged today', async () => {
+    const prisma = createFakePrisma({
+      activities: [scoredSoloBuiltin('s1'), scoredSoloBuiltin('s2', 'WATER')],
+      activityLogs: [loggedLog('s1', today), loggedLog('s2', today)],
+    });
+
+    const result = await getLiveStreak(prisma, {
+      challengeId: CHALLENGE_ID,
+      userId: USER_ID,
+      groupId: null,
+      timezone: TIMEZONE,
+      storedStreak: 4,
+    });
+
+    expect(result).toBe(5);
+  });
+
+  it('returns stored streak for solo builtin users with partial logs', async () => {
+    const prisma = createFakePrisma({
+      activities: [scoredSoloBuiltin('s1'), scoredSoloBuiltin('s2', 'WATER')],
+      activityLogs: [loggedLog('s1', today)],
+    });
+
+    const result = await getLiveStreak(prisma, {
+      challengeId: CHALLENGE_ID,
+      userId: USER_ID,
+      groupId: null,
+      timezone: TIMEZONE,
+      storedStreak: 4,
+    });
+
+    expect(result).toBe(4);
   });
 
   it('increments stored streak for grouped users when all scored activities are logged today', async () => {

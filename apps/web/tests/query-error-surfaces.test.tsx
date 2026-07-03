@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminGroupContent } from '../src/components/admin/AdminGroupPage';
 import { DashboardContent } from '../src/components/dashboard/DashboardPage';
 import { ManageGroupContent } from '../src/components/groups/ManageGroupPage';
@@ -339,6 +339,12 @@ const adminGroup = {
 };
 
 describe('query error surfaces', () => {
+  beforeEach(() => {
+    mockAuthMe.mockReturnValue(
+      idleQuery({ user: { id: 'user-1', groupId: null }, hasSoloSeeds: false }),
+    );
+  });
+
   it('distinguishes Manage Group load errors from the no-group state', async () => {
     const refetch = vi.fn();
     mockGroupsGetMine.mockReturnValue(
@@ -377,6 +383,24 @@ describe('query error surfaces', () => {
     expect(refetch).toHaveBeenCalledOnce();
   });
 
+  it('offers retry when auth.me fails on the leaderboard page', async () => {
+    const refetch = vi.fn();
+    mockAuthMe.mockReturnValue(errorQuery('Session expired', refetch));
+    mockLeaderboardGet.mockReturnValue(idleQuery());
+
+    render(<LeaderboardContent />);
+
+    expect(screen.getByText('Session expired')).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        /no fellowship yet — your own trail stats live on the dashboard/i,
+      ),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
   it('shows a warm solo placeholder when the user has no fellowship', () => {
     mockAuthMe.mockReturnValue(
       idleQuery({ user: { id: 'user-1', groupId: null } }),
@@ -401,6 +425,9 @@ describe('query error surfaces', () => {
 
   it('shows solo path option on the join page when user has no group', () => {
     mockGroupsGetMine.mockReturnValue(idleQuery(null));
+    mockAuthMe.mockReturnValue(
+      idleQuery({ user: { id: 'user-1', groupId: null }, hasSoloSeeds: true }),
+    );
 
     render(<ManageGroupContent />);
 
@@ -409,8 +436,48 @@ describe('query error surfaces', () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/walk the path solo/i)).toBeInTheDocument();
     expect(
+      screen.getByText(
+        /your seeded habits and trail stats are already on the dashboard/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole('link', { name: /continue to dashboard/i }),
     ).toHaveAttribute('href', '/dashboard');
+  });
+
+  it('shows legacy join copy when solo seeds are not present yet', () => {
+    mockGroupsGetMine.mockReturnValue(idleQuery(null));
+    mockAuthMe.mockReturnValue(
+      idleQuery({ user: { id: 'user-1', groupId: null }, hasSoloSeeds: false }),
+    );
+
+    render(<ManageGroupContent />);
+
+    expect(
+      screen.getByText(/head to the dashboard to start your trail/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        /your seeded habits and trail stats are already on the dashboard/i,
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows dashboard empty-state guidance when no activities exist', () => {
+    mockActivitiesGetToday.mockReturnValue(idleQuery(emptyToday));
+    mockStatsGetDashboard.mockReturnValue(idleQuery(dashboardStats));
+    mockProfileGet.mockReturnValue(idleQuery({ reminderTime: null }));
+    mockHeatmapGet.mockReturnValue(idleQuery({ cells: [] }));
+
+    render(<DashboardContent />);
+
+    expect(screen.getByTestId('dashboard-empty-state')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /choose your path/i }),
+    ).toHaveAttribute('href', '/join');
+    expect(
+      screen.getByRole('link', { name: /add personal habits/i }),
+    ).toHaveAttribute('href', '/profile');
   });
 
   it('offers retry when the dashboard heatmap query fails', async () => {

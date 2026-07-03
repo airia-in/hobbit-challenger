@@ -1003,6 +1003,82 @@ describe('DayEvaluatorService — cron guards', () => {
     expect(score?.finalized).toBe(true);
   });
 
+  it('finalizes groupless user with solo builtin scored activities when all are logged', async () => {
+    const soloBuiltin = makeActivity({
+      id: 'solo-water',
+      groupId: null,
+      ownerUserId: 'user-1',
+      seedKey: 'WATER',
+      scored: true,
+      isPersonal: false,
+      kind: ActivityKind.NUMBER,
+      xpCap: 100,
+      missXp: -100,
+      xpPerUnit: 26.3,
+      unitLabel: 'L',
+    });
+
+    const { prisma, transactionOps, challenges, dayScores } =
+      createCronFakePrisma({
+        users: [
+          {
+            id: 'user-1',
+            phone: null,
+            email: 'a@b.com',
+            passwordHash: 'x',
+            name: 'User',
+            timezone,
+            groupId: null,
+            createdAt: new Date(),
+            avatarUrl: null,
+            reminderTime: null,
+          },
+        ],
+        challenges: [
+          {
+            id: 'ch-1',
+            userId: 'user-1',
+            groupId: null,
+            startDate,
+            endDate: null,
+            lengthDays: 30,
+            currentDay: 5,
+            isActive: true,
+            totalXp: 0,
+            currentStreak: 2,
+            longestStreak: 2,
+          },
+        ],
+        activities: [soloBuiltin],
+        activityLogs: [
+          {
+            id: 'log-1',
+            challengeId: 'ch-1',
+            userId: 'user-1',
+            activityId: 'solo-water',
+            date: previousDay,
+            value: 3,
+            tier: null,
+            subPoints: null,
+            state: null,
+            xpAwarded: 79,
+            proofUrl: null,
+            aiVerdict: null,
+          },
+        ],
+      });
+
+    const service = new DayEvaluatorService(prisma as never);
+    await service.evaluateDays();
+
+    expect(transactionOps.length).toBeGreaterThan(0);
+    const challenge = challenges.get('ch-1');
+    const score = dayScores.get(dayScoreKey('ch-1', previousDay));
+    expect(challenge?.currentStreak).toBe(3);
+    expect(score?.finalized).toBe(true);
+    expect(score?.netXp).toBeGreaterThan(0);
+  });
+
   it('resets streak for groupless user when personal activities are unlogged', async () => {
     const personalActivity = makeActivity({
       id: 'personal-1',

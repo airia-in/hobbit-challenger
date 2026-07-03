@@ -11,6 +11,9 @@ export { applyLibsqlMigrations } from './migrate-libsql';
 export {
   BUILTIN_ACTIVITIES,
   deactivateSoloActivities,
+  ensureSoloActivities,
+  hasActiveSoloBuiltins,
+  migrateSoloActivityLogs,
   seedGroupActivities,
   seedSoloActivities,
 } from './seed-activities';

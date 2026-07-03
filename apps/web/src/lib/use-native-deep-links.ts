@@ -5,6 +5,17 @@ import {
 } from './native-deep-link-pending';
 import { resolveNativeDeepLinkTarget } from './native-deep-link';
 
+// App.getLaunchUrl() returns the URL the app was cold-started with for the whole
+// app lifetime. Under the View Transitions router this hook remounts on every
+// in-app navigation, so without a session-scoped guard it would re-navigate the
+// user back to the original launch target on each nav. Handle the launch URL at
+// most once per app session; live appUrlOpen events are unaffected.
+let launchUrlProcessed = false;
+
+export function resetLaunchUrlProcessedForTests(): void {
+  launchUrlProcessed = false;
+}
+
 function navigateToDeepLinkTarget(url: string): boolean {
   const target = resolveNativeDeepLinkTarget(url);
   if (!target) return false;
@@ -53,9 +64,12 @@ export function useNativeDeepLinks(): void {
           void handle.remove();
         };
 
-        const launch = await App.getLaunchUrl();
-        if (!cancelled && launch?.url && !launchUrlHandled) {
-          navigateToDeepLinkTarget(launch.url);
+        if (!launchUrlProcessed) {
+          const launch = await App.getLaunchUrl();
+          launchUrlProcessed = true;
+          if (!cancelled && launch?.url && !launchUrlHandled) {
+            navigateToDeepLinkTarget(launch.url);
+          }
         }
       } catch {
         // No-op on plain web or when Capacitor plugins are unavailable.

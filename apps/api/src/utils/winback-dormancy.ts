@@ -217,12 +217,10 @@ export function isWinbackMorningWindowActionable(input: {
     reminderTime: input.reminderTime,
     effectiveMorningTime: input.effectiveMorningTime,
   });
-  const anchorTimes = [
-    ...new Set([
-      input.reminderTime ?? WINBACK_DEFAULT_MORNING_TIME,
-      latestAnchor,
-    ]),
-  ];
+  // Cover BOTH resolved anchors so an adaptive shift earlier than reminderTime
+  // is still owned by win-back; using only the fixed time + latest anchor drops
+  // the earlier adaptive slot and leaves a FAILED-retry gap.
+  const anchorTimes = [...new Set([earliestAnchor, latestAnchor])];
 
   if (input.winbackLogToday?.status === 'SENT') {
     return false;

@@ -347,6 +347,23 @@ describe('winback adaptive morning union window', () => {
     ).toBe(true);
   });
 
+  it('keeps FAILED win-back retry actionable in the earlier adaptive slot', () => {
+    // Adaptive 07:30 (11:30Z) is earlier than fixed 08:00. A FAILED win-back at
+    // 07:35 local (11:35Z) is inside the earlier slot's retry window but 25min
+    // before the fixed anchor — it must still be owned by win-back, not dropped.
+    const inEarlyRetry = new Date('2026-06-15T11:35:00.000Z');
+
+    expect(
+      isWinbackMorningWindowActionable({
+        timezone: TZ,
+        reminderTime: '08:00',
+        effectiveMorningTime: '07:30',
+        winbackLogToday: { status: 'FAILED' },
+        now: inEarlyRetry,
+      }),
+    ).toBe(true);
+  });
+
   it('releases union window after later anchor catch-up closes', () => {
     const afterUnion = new Date('2026-06-15T12:41:00.000Z');
 

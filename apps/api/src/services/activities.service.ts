@@ -1583,6 +1583,9 @@ export class ActivitiesService {
     if (params.viewedKey !== params.todayKey) {
       return;
     }
+    // Issue #140 AC reads "after first scored log … or on perfect day". We
+    // deliberately implement the perfect-day branch only to avoid ack spam on
+    // partial days; first-log ack is out of scope for this branch.
     if (params.wasScoredDayComplete) {
       return;
     }

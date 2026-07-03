@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@workspace-starter/db';
 import {
   CHECKIN_ACK_KIND,
   CheckinAckMessageService,
@@ -37,6 +38,9 @@ function createReminderLogStore() {
     { userId: string; date: Date; kind: string; status: string; sentAt?: Date }
   >();
 
+  const getKey = (userId: string, date: Date, kind: string) =>
+    reminderLogKey(userId, date, kind);
+
   return {
     logs,
     prisma: {
@@ -48,12 +52,58 @@ function createReminderLogStore() {
             userId_date_kind: { userId: string; date: Date; kind: string };
           };
         }) => {
-          const key = reminderLogKey(
+          const key = getKey(
             where.userId_date_kind.userId,
             where.userId_date_kind.date,
             where.userId_date_kind.kind,
           );
           return logs.get(key) ?? null;
+        },
+        create: async ({
+          data,
+        }: {
+          data: {
+            userId: string;
+            date: Date;
+            kind: string;
+            status: string;
+          };
+        }) => {
+          const key = getKey(data.userId, data.date, data.kind);
+          if (logs.has(key)) {
+            throw new Prisma.PrismaClientKnownRequestError(
+              'Unique constraint',
+              {
+                code: 'P2002',
+                clientVersion: 'test',
+              },
+            );
+          }
+          const row = { ...data, sentAt: new Date() };
+          logs.set(key, row);
+          return row;
+        },
+        update: async ({
+          where,
+          data,
+        }: {
+          where: {
+            userId_date_kind: { userId: string; date: Date; kind: string };
+          };
+          data: { status: string; sentAt?: Date };
+        }) => {
+          const key = getKey(
+            where.userId_date_kind.userId,
+            where.userId_date_kind.date,
+            where.userId_date_kind.kind,
+          );
+          const existing = logs.get(key);
+          if (!existing) {
+            throw new Error('Record not found');
+          }
+          existing.status = data.status;
+          existing.sentAt = data.sentAt ?? new Date();
+          return existing;
         },
         upsert: async ({
           where,
@@ -71,7 +121,7 @@ function createReminderLogStore() {
           };
           update: { status: string; sentAt?: Date };
         }) => {
-          const key = reminderLogKey(
+          const key = getKey(
             where.userId_date_kind.userId,
             where.userId_date_kind.date,
             where.userId_date_kind.kind,
@@ -131,6 +181,7 @@ describe('checkin ack helpers', () => {
 
   it('blocks a second attempt when any log row exists', () => {
     expect(shouldAttemptCheckinAck(null)).toBe(true);
+    expect(shouldAttemptCheckinAck({ status: 'PENDING' })).toBe(false);
     expect(shouldAttemptCheckinAck({ status: 'SENT' })).toBe(false);
     expect(shouldAttemptCheckinAck({ status: 'FAILED' })).toBe(false);
     expect(shouldAttemptCheckinAck({ status: 'SKIPPED_OPTOUT' })).toBe(false);
@@ -241,7 +292,22 @@ describe('CheckinAckMessageService', () => {
     ).resolves.toBeUndefined();
 
     expect(evolution.sendText).toHaveBeenCalledTimes(1);
-    expect(logs.size).toBe(0);
+    expect(
+      logs.get(reminderLogKey(sendInput.userId, localDay, CHECKIN_ACK_KIND))
+        ?.status,
+    ).toBe('FAILED');
+  });
+
+  it('sends at most once when two parallel claims race', async () => {
+    const { prisma } = createReminderLogStore();
+    const { service, evolution } = createService();
+
+    await Promise.all([
+      service.trySendDayCompleteAck({ ...sendInput, prisma: prisma as never }),
+      service.trySendDayCompleteAck({ ...sendInput, prisma: prisma as never }),
+    ]);
+
+    expect(evolution.sendText).toHaveBeenCalledTimes(1);
   });
 
   it('records FAILED when evolution is unconfigured', async () => {

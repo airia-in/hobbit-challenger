@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
+import { Prisma } from '@workspace-starter/db';
 import { BRAND_INTRO } from '@workspace-starter/types';
 import { loadPromptFile } from '../services/prompt-loader';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -13,7 +14,7 @@ import {
 /** ReminderLog kind for one-shot web day-complete acknowledgments (#140). */
 export const CHECKIN_ACK_KIND = 'CHECKIN_ACK';
 
-export type CheckinAckStatus = 'SENT' | 'FAILED' | 'SKIPPED_OPTOUT';
+export type CheckinAckStatus = 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED_OPTOUT';
 
 export type CheckinAckStreakBucket = 'fresh' | 'building' | 'strong';
 
@@ -37,11 +38,19 @@ const CHECKIN_ACK_FALLBACK_VARIANTS: readonly string[] = [
 /**
  * At most one ack per user per local day. Any existing ReminderLog row blocks a
  * second send (including undo/redo), mirroring dashboard confetti dedupe.
+ * FAILED rows are not retried — one-shot ack moment per #140 anti-spam design.
  */
 export function shouldAttemptCheckinAck(
   existing: { status: string } | null | undefined,
 ): boolean {
   return !existing;
+}
+
+function isReminderLogUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002'
+  );
 }
 
 export function resolveCheckinAckStreakBucket(
@@ -202,13 +211,13 @@ export class CheckinAckMessageService {
     todayNetXp: number;
     tasksDone: number;
   }): Promise<void> {
-    try {
-      const logKey = {
-        userId: input.userId,
-        date: input.localDay,
-        kind: CHECKIN_ACK_KIND,
-      };
+    const logKey = {
+      userId: input.userId,
+      date: input.localDay,
+      kind: CHECKIN_ACK_KIND,
+    };
 
+    try {
       const existing = await input.prisma.reminderLog.findUnique({
         where: { userId_date_kind: logKey },
       });
@@ -217,48 +226,99 @@ export class CheckinAckMessageService {
         return;
       }
 
+      // Opt-out / missing phone: no ReminderLog row (unlike cron SKIPPED_OPTOUT).
       if (!input.phone || !input.whatsappOptIn) {
         return;
       }
 
-      const evolutionConfigured = this.evolution.isConfigured();
-      if (!evolutionConfigured) {
-        await this.upsertCheckinAckLog(input.prisma, logKey, 'FAILED');
+      if (!this.evolution.isConfigured()) {
+        await this.recordTerminalCheckinAckLog(input.prisma, logKey, 'FAILED');
         return;
       }
 
-      const context: CheckinAckContext = {
-        name: input.userName,
-        currentStreak: input.currentStreak,
-        todayNetXp: input.todayNetXp,
-        tasksDone: input.tasksDone,
-        streakBucket: resolveCheckinAckStreakBucket(input.currentStreak),
-      };
+      const claimed = await this.claimCheckinAckLease(input.prisma, logKey);
+      if (!claimed) {
+        return;
+      }
 
-      const text = await this.compose(context);
-      const result = await this.evolution.sendText(input.phone, text);
-      const status: CheckinAckStatus = result.ok ? 'SENT' : 'FAILED';
+      let status: 'SENT' | 'FAILED' = 'FAILED';
+      try {
+        const context: CheckinAckContext = {
+          name: input.userName,
+          currentStreak: input.currentStreak,
+          todayNetXp: input.todayNetXp,
+          tasksDone: input.tasksDone,
+          streakBucket: resolveCheckinAckStreakBucket(input.currentStreak),
+        };
 
-      await this.upsertCheckinAckLog(input.prisma, logKey, status);
+        const text = await this.compose(context);
+        const result = await this.evolution.sendText(input.phone, text);
+        status = result.ok ? 'SENT' : 'FAILED';
+      } catch (error) {
+        this.logger.error('Check-in ack send failed:', error);
+        status = 'FAILED';
+      }
+
+      await this.finalizeCheckinAckLog(input.prisma, logKey, status);
     } catch (error) {
-      this.logger.error('Check-in ack send failed:', error);
+      this.logger.error('Check-in ack failed:', error);
     }
   }
 
-  private async upsertCheckinAckLog(
+  /** Atomically claims (userId, date, kind) before outbound I/O; P2002 = lost race. */
+  private async claimCheckinAckLease(
     prisma: PrismaService,
     logKey: { userId: string; date: Date; kind: string },
-    status: CheckinAckStatus,
+  ): Promise<boolean> {
+    try {
+      await prisma.reminderLog.create({
+        data: {
+          userId: logKey.userId,
+          date: logKey.date,
+          kind: logKey.kind,
+          status: 'PENDING',
+        },
+      });
+      return true;
+    } catch (error) {
+      if (isReminderLogUniqueViolation(error)) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /** Records a terminal status without send (e.g. unconfigured Evolution). */
+  private async recordTerminalCheckinAckLog(
+    prisma: PrismaService,
+    logKey: { userId: string; date: Date; kind: string },
+    status: 'FAILED',
   ): Promise<void> {
-    await prisma.reminderLog.upsert({
+    try {
+      await prisma.reminderLog.create({
+        data: {
+          userId: logKey.userId,
+          date: logKey.date,
+          kind: logKey.kind,
+          status,
+        },
+      });
+    } catch (error) {
+      if (isReminderLogUniqueViolation(error)) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  private async finalizeCheckinAckLog(
+    prisma: PrismaService,
+    logKey: { userId: string; date: Date; kind: string },
+    status: 'SENT' | 'FAILED',
+  ): Promise<void> {
+    await prisma.reminderLog.update({
       where: { userId_date_kind: logKey },
-      create: {
-        userId: logKey.userId,
-        date: logKey.date,
-        kind: logKey.kind,
-        status,
-      },
-      update: {
+      data: {
         status,
         sentAt: new Date(),
       },

@@ -6,7 +6,7 @@ import {
   type User,
 } from '@workspace-starter/db';
 import { ActivitiesService } from '../src/services/activities.service';
-import { getUserLocalDate } from '../src/utils/day-window';
+import { addLocalDays, getUserLocalDate } from '../src/utils/day-window';
 import { CHECKIN_ACK_KIND } from '../src/whatsapp/checkin-ack-message.service';
 
 const USER_ID = 'user-1';
@@ -358,7 +358,7 @@ describe('activities check-in ack trigger', () => {
     } as never);
   });
 
-  it('does not ack on partial completion', async () => {
+  it('does not ack on partial completion (perfect-day branch only)', async () => {
     const { prisma } = createFixture();
 
     await service.markActivity(prisma as never, USER_ID, DIET_ID);
@@ -367,7 +367,7 @@ describe('activities check-in ack trigger', () => {
     });
   });
 
-  it('acks once when the last scored task is logged', async () => {
+  it('acks once when the day transitions to perfect-day complete', async () => {
     const { prisma } = createFixture();
 
     await service.markActivity(prisma as never, USER_ID, DIET_ID);
@@ -386,7 +386,7 @@ describe('activities check-in ack trigger', () => {
     );
   });
 
-  it('does not ack again after undo and redo the same day', async () => {
+  it('does not ack again after undo and redo the same day (service dedupe)', async () => {
     const { prisma } = createFixture();
 
     await service.markActivity(prisma as never, USER_ID, DIET_ID);
@@ -401,6 +401,31 @@ describe('activities check-in ack trigger', () => {
     await vi.waitFor(() =>
       expect(trySendDayCompleteAck).toHaveBeenCalledTimes(1),
     );
+  });
+
+  it('does not ack when backfilling a historical date', async () => {
+    const { prisma } = createFixture();
+    const yesterday = addLocalDays(getUserLocalDate('UTC'), -1, 'UTC');
+    const yesterdayKey = yesterday.toISOString().slice(0, 10);
+
+    await service.markActivity(prisma as never, USER_ID, DIET_ID, yesterdayKey);
+    await service.logNumber(
+      prisma as never,
+      USER_ID,
+      WATER_ID,
+      3.8,
+      yesterdayKey,
+    );
+    await service.markActivity(
+      prisma as never,
+      USER_ID,
+      PHOTO_ID,
+      yesterdayKey,
+    );
+
+    await vi.waitFor(() => {
+      expect(trySendDayCompleteAck).not.toHaveBeenCalled();
+    });
   });
 
   it('mutation succeeds when ack send rejects', async () => {

@@ -22,6 +22,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!--
+              App Links for hobbit.drcode.ai invite URLs (DEFAULT_WEB_DOMAIN in
+              packages/types/src/web-url.ts). Manifest cannot read build env;
+              brand-messaging.test.mjs pins host against that constant.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="hobbit.drcode.ai" />
+            </intent-filter>
+
         </activity>
 
         <provider

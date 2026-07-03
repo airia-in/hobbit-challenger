@@ -239,6 +239,9 @@ importers:
       '@astrojs/node':
         specifier: ^10.1.1
         version: 10.1.1(astro@6.3.5(@types/node@25.9.0)(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.60.4)(terser@5.47.1)(tsx@4.22.4)(yaml@2.9.0))
+      '@capacitor/app':
+        specifier: ^7.0.2
+        version: 7.1.2(@capacitor/core@7.6.7)
       '@capacitor/core':
         specifier: ^7.4.2
         version: 7.6.7

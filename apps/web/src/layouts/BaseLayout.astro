@@ -1,6 +1,7 @@
 ---
 import '../styles/global.css';
 import { BRAND_DEFAULT_DESCRIPTION, BRAND_DEFAULT_TITLE } from '../lib/brand';
+import { NativeDeepLinkBootstrap } from '../components/NativeDeepLinkBootstrap';
 
 export interface Props {
   title?: string;
@@ -29,6 +30,7 @@ const { title = BRAND_DEFAULT_TITLE, description = BRAND_DEFAULT_DESCRIPTION } =
     class="min-h-screen bg-[var(--bg-black)] text-[var(--text-primary)] antialiased"
     style="font-family: var(--font-body);"
   >
+    <NativeDeepLinkBootstrap client:only="react" />
     <slot />
   </body>
 </html>

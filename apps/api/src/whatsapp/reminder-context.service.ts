@@ -20,7 +20,10 @@ import {
 import { addLocalDays, getUserLocalDate } from '../utils/day-window';
 import { getLiveStreak } from '../utils/live-streak';
 import type { PrismaService } from '../prisma/prisma.service';
-import { sanitizeUserPromptText } from '../utils/sanitize-prompt-input';
+import {
+  sanitizeUserPromptText,
+  USER_NAME_MAX_LENGTH,
+} from '../utils/sanitize-prompt-input';
 
 export const UNLOGGED_HABITS_CAP = 3;
 export const STREAK_AT_RISK_MIN = 3;
@@ -389,8 +392,11 @@ export class ReminderContextService {
       ? sanitizeUserPromptText(user.habitAnchorText) || null
       : null;
 
+    const name =
+      sanitizeUserPromptText(userName, USER_NAME_MAX_LENGTH) || 'Member';
+
     return buildReminderContextFromToday(
-      userName,
+      name,
       today,
       {
         todayNetXp: stats.todayNetXp,

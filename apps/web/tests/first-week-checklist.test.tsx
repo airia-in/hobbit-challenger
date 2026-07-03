@@ -35,6 +35,7 @@ describe('FirstWeekChecklist', () => {
       />,
     );
     expect(screen.getByTestId('first-week-checklist')).toBeInTheDocument();
+    expect(screen.getByText(/0 of 4 steps/i)).toBeInTheDocument();
     expect(screen.getByText(/first week on the trail/i)).toBeInTheDocument();
     expect(
       screen.getByRole('link', { name: /set your morning reminder/i }),
@@ -78,6 +79,20 @@ describe('FirstWeekChecklist', () => {
     expect(screen.getByText(/set your morning reminder/i)).toHaveClass(
       'line-through',
     );
+  });
+
+  it('marks anchor step when only anchor time is set', () => {
+    render(
+      <FirstWeekChecklist
+        currentDay={5}
+        hasReminder
+        hasAnchor
+        hasCompletedHabit={false}
+      />,
+    );
+
+    const state = getOnboardingState();
+    expect(state.completedSteps).toContain('anchor');
   });
 
   it('marks invite step when invite link is used', async () => {

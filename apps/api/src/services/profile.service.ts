@@ -4,7 +4,11 @@ import { normalizePhone, PhoneValidationError } from '../auth/phone';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { AuthService } from './auth.service';
 import { activeChallengeRelationArgs } from '../utils/challenge-query';
-import { getUserLocalDate, isValidTimeZone } from '../utils/day-window';
+import {
+  getUserLocalDate,
+  isValidTimeZone,
+  isValidWallClockHHMM,
+} from '../utils/day-window';
 import {
   getGroupAdminUserIds,
   getReplacementAdminId,
@@ -12,6 +16,7 @@ import {
 import {
   HABIT_ANCHOR_TEXT_MAX_LENGTH,
   sanitizeUserPromptText,
+  USER_NAME_MAX_LENGTH,
 } from '../utils/sanitize-prompt-input';
 
 export type ProfileData = {
@@ -136,7 +141,17 @@ export async function updateProfile(
         message: 'Name cannot be empty',
       });
     }
-    data.name = input.name.trim();
+    const sanitizedName = sanitizeUserPromptText(
+      input.name.trim(),
+      USER_NAME_MAX_LENGTH,
+    );
+    if (sanitizedName.length === 0) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Name cannot be empty',
+      });
+    }
+    data.name = sanitizedName;
   }
 
   if (input.password !== undefined) {
@@ -152,7 +167,7 @@ export async function updateProfile(
   if (input.reminderTime !== undefined) {
     if (
       input.reminderTime !== null &&
-      !/^\d{2}:\d{2}$/.test(input.reminderTime)
+      !isValidWallClockHHMM(input.reminderTime)
     ) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
@@ -181,7 +196,8 @@ export async function updateProfile(
   if (input.habitAnchorTime !== undefined) {
     if (
       input.habitAnchorTime !== null &&
-      !/^\d{2}:\d{2}$/.test(input.habitAnchorTime)
+      input.habitAnchorTime !== '' &&
+      !isValidWallClockHHMM(input.habitAnchorTime)
     ) {
       throw new TRPCError({
         code: 'BAD_REQUEST',

@@ -197,8 +197,8 @@ describe('buildReminderCopyLines', () => {
       ...baseContext,
       habitAnchorText: 'morning chai',
     });
-    expect(lines.anchorLine).toContain('morning chai');
-    expect(lines.anchorLine).toMatch(/naturally/i);
+    expect(lines.anchorLine).toContain('<<<morning chai>>>');
+    expect(lines.anchorLine).toMatch(/inert data only/i);
   });
 });
 

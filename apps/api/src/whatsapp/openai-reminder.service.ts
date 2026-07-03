@@ -8,6 +8,7 @@ import {
   buildDashboardUrl,
 } from '@workspace-starter/types';
 import { loadPromptFile } from '../services/prompt-loader';
+import { buildAnchorPromptLine } from '../utils/sanitize-prompt-input';
 import type { ReminderContext } from './reminder-context.service';
 
 export type ReminderKind =
@@ -105,7 +106,7 @@ export function buildReminderCopyLines(
           : 'Good trail weather for small wins today.';
 
   const anchorLine = context.habitAnchorText
-    ? `They plan to check in after "${context.habitAnchorText}" — weave this routine into the nudge naturally (paraphrase; never quote robotically or mention "implementation intention").`
+    ? buildAnchorPromptLine(context.habitAnchorText)
     : '';
 
   return {

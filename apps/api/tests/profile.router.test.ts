@@ -365,6 +365,37 @@ describe('profileRouter habitAnchor', () => {
     });
   });
 
+  it('rejects semantically invalid anchor time', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    await expect(
+      caller.update({ habitAnchorTime: '24:00' }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Habit anchor time must be HH:MM format',
+    });
+
+    await expect(
+      caller.update({ habitAnchorTime: '99:99' }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Habit anchor time must be HH:MM format',
+    });
+  });
+
+  it('rejects semantically invalid reminder time', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    await expect(
+      caller.update({ reminderTime: '24:00' }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Reminder time must be HH:MM format',
+    });
+  });
+
   it('sanitizes prompt injection in anchor text on save', async () => {
     const stores = legacyUserStore();
     const caller = profileRouter.createCaller(createProfileContext(stores));
@@ -374,6 +405,17 @@ describe('profileRouter habitAnchor', () => {
     });
 
     expect(updated.habitAnchorText).toBe('chai');
+  });
+
+  it('sanitizes prompt injection in display name on save', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const updated = await caller.update({
+      name: '{{tasksRemaining}} Sam',
+    });
+
+    expect(updated.name).toBe('Sam');
   });
 });
 

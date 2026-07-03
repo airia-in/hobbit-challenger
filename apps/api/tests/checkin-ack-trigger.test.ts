@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityKind,
+  Prisma,
   type Activity,
   type Challenge,
   type User,
 } from '@workspace-starter/db';
 import { ActivitiesService } from '../src/services/activities.service';
 import { addLocalDays, getUserLocalDate } from '../src/utils/day-window';
-import { CHECKIN_ACK_KIND } from '../src/whatsapp/checkin-ack-message.service';
+import {
+  CHECKIN_ACK_FIRST_KIND,
+  CHECKIN_ACK_KIND,
+} from '../src/whatsapp/checkin-ack-message.service';
 
 const USER_ID = 'user-1';
 const GROUP_ID = 'group-1';
@@ -15,6 +19,77 @@ const CHALLENGE_ID = 'challenge-1';
 const DIET_ID = 'activity-diet';
 const WATER_ID = 'activity-water';
 const PHOTO_ID = 'activity-photo';
+const TIERED_ID = 'activity-tiered';
+const SUBPOINTS_ID = 'activity-subpoints';
+
+function normalizeActivityLogFields(
+  fields: Record<string, unknown>,
+): Record<string, unknown> {
+  const normalized = { ...fields };
+  if (normalized.subPoints === Prisma.DbNull) {
+    normalized.subPoints = null;
+  }
+  return normalized;
+}
+
+function tieredActivity(): Activity {
+  return {
+    id: TIERED_ID,
+    groupId: GROUP_ID,
+    ownerUserId: null,
+    seedKey: 'NO_REELS',
+    title: 'No reels',
+    emoji: '📵',
+    kind: ActivityKind.TIERED,
+    scored: true,
+    isPersonal: false,
+    xpComplete: null,
+    xpMiss: null,
+    unitLabel: null,
+    xpPerUnit: null,
+    xpCap: null,
+    missXp: null,
+    subPoints: null,
+    tiers: [
+      { key: 'NONE', label: '0 min', maxMinutes: 0, xp: 250 },
+      { key: 'UNDER_30', label: '<=30 min', maxMinutes: 30, xp: 150 },
+    ],
+    deductMultiplier: 2,
+    allowsProof: false,
+    autoCompleteOnProof: false,
+    sortOrder: 3,
+    active: true,
+    createdAt: new Date(),
+  };
+}
+
+function subpointsActivity(): Activity {
+  return {
+    id: SUBPOINTS_ID,
+    groupId: GROUP_ID,
+    ownerUserId: null,
+    seedKey: 'DIET_SUB',
+    title: 'Diet subpoints',
+    emoji: '🥗',
+    kind: ActivityKind.SUBPOINTS,
+    scored: true,
+    isPersonal: false,
+    xpComplete: null,
+    xpMiss: null,
+    unitLabel: null,
+    xpPerUnit: null,
+    xpCap: null,
+    missXp: null,
+    subPoints: [{ key: 'HEALTHY', label: 'Healthy', xp: 60 }],
+    tiers: null,
+    deductMultiplier: 3,
+    allowsProof: false,
+    autoCompleteOnProof: false,
+    sortOrder: 4,
+    active: true,
+    createdAt: new Date(),
+  };
+}
 
 function activityLogKey(
   challengeId: string,
@@ -301,10 +376,10 @@ function createFixture() {
         );
         const existing = activityLogs.get(key);
         if (existing) {
-          Object.assign(existing, update);
+          Object.assign(existing, normalizeActivityLogFields(update));
           return { ...existing };
         }
-        const row = { id: genId('log'), ...create };
+        const row = { id: genId('log'), ...normalizeActivityLogFields(create) };
         activityLogs.set(key, row);
         return { ...row };
       },
@@ -344,38 +419,51 @@ function createFixture() {
       fn(prisma),
   };
 
-  return { prisma, user, today, activityLogs };
+  return { prisma, user, today, activityLogs, activityMap };
 }
 
 describe('activities check-in ack trigger', () => {
   let trySendDayCompleteAck: ReturnType<typeof vi.fn>;
+  let trySendFirstLogAck: ReturnType<typeof vi.fn>;
   let service: ActivitiesService;
 
   beforeEach(() => {
     trySendDayCompleteAck = vi.fn().mockResolvedValue(undefined);
+    trySendFirstLogAck = vi.fn().mockResolvedValue(undefined);
     service = new ActivitiesService({
       trySendDayCompleteAck,
+      trySendFirstLogAck,
     } as never);
   });
 
-  it('does not ack on partial completion (perfect-day branch only)', async () => {
+  it('acks on first partial log of the day', async () => {
     const { prisma } = createFixture();
 
     await service.markActivity(prisma as never, USER_ID, DIET_ID);
     await vi.waitFor(() => {
+      expect(trySendFirstLogAck).toHaveBeenCalledTimes(1);
       expect(trySendDayCompleteAck).not.toHaveBeenCalled();
     });
+    expect(trySendFirstLogAck).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: USER_ID,
+        tasksDone: 1,
+        whatsappOptIn: true,
+      }),
+    );
   });
 
   it('acks once when the day transitions to perfect-day complete', async () => {
     const { prisma } = createFixture();
 
     await service.markActivity(prisma as never, USER_ID, DIET_ID);
+    await vi.waitFor(() => expect(trySendFirstLogAck).toHaveBeenCalledTimes(1));
     await service.logNumber(prisma as never, USER_ID, WATER_ID, 3.8);
     await service.markActivity(prisma as never, USER_ID, PHOTO_ID);
 
     await vi.waitFor(() => {
       expect(trySendDayCompleteAck).toHaveBeenCalledTimes(1);
+      expect(trySendFirstLogAck).toHaveBeenCalledTimes(1);
     });
     expect(trySendDayCompleteAck).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -386,10 +474,25 @@ describe('activities check-in ack trigger', () => {
     );
   });
 
+  it('sends only day-complete ack on a single-habit day', async () => {
+    const { prisma, activityMap } = createFixture();
+    for (const id of [WATER_ID, PHOTO_ID]) {
+      activityMap.delete(id);
+    }
+
+    await service.markActivity(prisma as never, USER_ID, DIET_ID);
+
+    await vi.waitFor(() => {
+      expect(trySendDayCompleteAck).toHaveBeenCalledTimes(1);
+      expect(trySendFirstLogAck).not.toHaveBeenCalled();
+    });
+  });
+
   it('does not ack again after undo and redo the same day (service dedupe)', async () => {
     const { prisma } = createFixture();
 
     await service.markActivity(prisma as never, USER_ID, DIET_ID);
+    await vi.waitFor(() => expect(trySendFirstLogAck).toHaveBeenCalledTimes(1));
     await service.logNumber(prisma as never, USER_ID, WATER_ID, 3.8);
     await service.markActivity(prisma as never, USER_ID, PHOTO_ID);
     await vi.waitFor(() =>
@@ -401,6 +504,60 @@ describe('activities check-in ack trigger', () => {
     await vi.waitFor(() =>
       expect(trySendDayCompleteAck).toHaveBeenCalledTimes(1),
     );
+    expect(trySendFirstLogAck).toHaveBeenCalledTimes(1);
+  });
+
+  it('schedules first-log ack again after undo-all-to-zero then re-log (dedupe in message service)', async () => {
+    const { prisma } = createFixture();
+
+    await service.markActivity(prisma as never, USER_ID, DIET_ID);
+    await vi.waitFor(() => expect(trySendFirstLogAck).toHaveBeenCalledTimes(1));
+
+    await service.undoActivity(prisma as never, USER_ID, DIET_ID);
+    await service.markActivity(prisma as never, USER_ID, DIET_ID);
+    await vi.waitFor(() => expect(trySendFirstLogAck).toHaveBeenCalledTimes(2));
+    expect(trySendDayCompleteAck).not.toHaveBeenCalled();
+  });
+
+  it('acks on first logNumber of the day', async () => {
+    const { prisma, activityMap } = createFixture();
+    activityMap.delete(PHOTO_ID);
+
+    await service.logNumber(prisma as never, USER_ID, WATER_ID, 3.8);
+    await vi.waitFor(() => {
+      expect(trySendFirstLogAck).toHaveBeenCalledTimes(1);
+      expect(trySendDayCompleteAck).not.toHaveBeenCalled();
+    });
+  });
+
+  it('acks on first setTier of the day', async () => {
+    const { prisma, activityMap } = createFixture();
+    for (const id of [DIET_ID, PHOTO_ID]) {
+      activityMap.delete(id);
+    }
+    activityMap.set(TIERED_ID, tieredActivity());
+
+    await service.setTier(prisma as never, USER_ID, TIERED_ID, 'NONE');
+    await vi.waitFor(() => {
+      expect(trySendFirstLogAck).toHaveBeenCalledTimes(1);
+      expect(trySendDayCompleteAck).not.toHaveBeenCalled();
+    });
+  });
+
+  it('acks on first setSubPoints of the day', async () => {
+    const { prisma, activityMap } = createFixture();
+    for (const id of [DIET_ID, PHOTO_ID]) {
+      activityMap.delete(id);
+    }
+    activityMap.set(SUBPOINTS_ID, subpointsActivity());
+
+    await service.setSubPoints(prisma as never, USER_ID, SUBPOINTS_ID, {
+      HEALTHY: 'DONE',
+    });
+    await vi.waitFor(() => {
+      expect(trySendFirstLogAck).toHaveBeenCalledTimes(1);
+      expect(trySendDayCompleteAck).not.toHaveBeenCalled();
+    });
   });
 
   it('does not ack when backfilling a historical date', async () => {
@@ -425,6 +582,7 @@ describe('activities check-in ack trigger', () => {
 
     await vi.waitFor(() => {
       expect(trySendDayCompleteAck).not.toHaveBeenCalled();
+      expect(trySendFirstLogAck).not.toHaveBeenCalled();
     });
   });
 
@@ -446,7 +604,8 @@ describe('activities check-in ack trigger', () => {
     );
   });
 
-  it('exports CHECKIN_ACK kind for ReminderLog wiring', () => {
+  it('exports CHECKIN_ACK kinds for ReminderLog wiring', () => {
     expect(CHECKIN_ACK_KIND).toBe('CHECKIN_ACK');
+    expect(CHECKIN_ACK_FIRST_KIND).toBe('CHECKIN_ACK_FIRST');
   });
 });

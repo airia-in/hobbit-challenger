@@ -10,6 +10,6 @@ export default defineConfig({
   },
   clean: true,
   sourcemap: true,
-  external: ['react', 'react-dom'],
+  external: ['react', 'react-dom', '@workspace-starter/types'],
   treeshake: true,
 });

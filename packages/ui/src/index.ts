@@ -14,6 +14,9 @@ export type {
   HeatmapGridProps,
 } from './components/HeatmapGrid';
 
+export { JourneyPath } from './components/JourneyPath';
+export type { JourneyPathProps } from './components/JourneyPath';
+
 export { LineChart } from './components/LineChart';
 export type {
   LineChartPoint,

@@ -210,3 +210,26 @@ export function getMilestoneCardStat(key: MilestoneKey): MilestoneCardStat {
 export function milestoneReminderKind(key: MilestoneKey): string {
   return `MILESTONE:${key}`;
 }
+
+/** Fixed challenge-day positions for journey path landmark markers (#175). */
+export const JOURNEY_LANDMARKS = [
+  { day: 7, key: 'streak_7' },
+  { day: 21, key: 'streak_21' },
+  { day: 30, key: 'streak_30' },
+  { day: 66, key: 'streak_66' },
+] as const satisfies ReadonlyArray<{ day: number; key: MilestoneKey }>;
+
+export type JourneyLandmark = (typeof JOURNEY_LANDMARKS)[number];
+
+export function journeyLandmarksForLength(
+  lengthDays: number,
+): JourneyLandmark[] {
+  return JOURNEY_LANDMARKS.filter((landmark) => landmark.day <= lengthDays);
+}
+
+export function isJourneyLandmarkEarned(
+  key: MilestoneKey,
+  earnedKeys: readonly MilestoneKey[],
+): boolean {
+  return earnedKeys.includes(key);
+}

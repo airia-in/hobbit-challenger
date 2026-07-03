@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { cn } from '../utils/cn';
+import { getHeatmapStateClasses } from './heatmap-state-styles';
 
 export type HeatmapCellState =
   | 'completed'
@@ -19,15 +20,6 @@ export type HeatmapGridProps = {
   adminMode?: boolean;
   onDayLabelEdit?: (dayNumber: number, labelText: string) => void;
   className?: string;
-};
-
-const STATE_COLORS: Record<HeatmapCellState, string> = {
-  completed: 'bg-[var(--success)]',
-  failed: 'bg-[var(--accent-red)]',
-  future: 'bg-[var(--border)]',
-  today:
-    'bg-[var(--gold-fill)] ring-2 ring-[var(--gold-fill)] ring-offset-1 ring-offset-[var(--ring-offset)]',
-  not_started: 'bg-[var(--surface-raised)]',
 };
 
 export function getHeatmapColumnCount(cellCount: number): number {
@@ -145,7 +137,7 @@ export function HeatmapGrid({
               title={`Day ${cell.dayNumber}${cell.dayLabel ? `: ${cell.dayLabel}` : ''}`}
               className={cn(
                 'aspect-square w-full rounded-sm transition hover:opacity-80',
-                STATE_COLORS[cell.state],
+                getHeatmapStateClasses(cell.state),
               )}
             />
           </div>

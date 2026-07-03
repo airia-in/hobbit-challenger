@@ -127,6 +127,20 @@
     }
   }
 
+  @keyframes journey-today-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--gold) 35%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--gold) 20%, transparent);
+    }
+  }
+
+  .journey-today-pulse {
+    animation: journey-today-pulse 2s ease-in-out infinite;
+  }
+
   .task-card--completing {
     animation: task-complete-card-settle 480ms cubic-bezier(0.22, 1, 0.36, 1);
   }

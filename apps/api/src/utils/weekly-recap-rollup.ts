@@ -15,6 +15,8 @@ import {
   getWeeklyRecapWeekKeys,
   type WeeklyRecapEligibleRange,
 } from './weekly-recap-eligibility';
+import type { UserRecapFocus } from '@workspace-starter/types';
+import { sanitizeUserPromptText } from './sanitize-prompt-input';
 
 type ChallengeLike = {
   startDate: Date;
@@ -41,6 +43,14 @@ type DayScoreRow = {
   finalized: boolean;
 };
 
+export type WeeklyRecapFocusOption = {
+  index: 1 | 2 | 3;
+  activityId: string;
+  name: string;
+  completedDays: number;
+  eligibleDays: number;
+};
+
 export type WeeklyRecapRollup = {
   weekStartKey: string;
   weekEndKey: string;
@@ -55,6 +65,9 @@ export type WeeklyRecapRollup = {
   bestHabitHits: number;
   identityReflectionLine: string;
   nextWeekNudgeLine: string;
+  focusOptions: WeeklyRecapFocusOption[];
+  focusOptionsLine: string;
+  priorWeekFocusLine: string;
 };
 
 function isPerfectDayBreakdown(breakdown: unknown): boolean {
@@ -102,6 +115,109 @@ function buildNextWeekNudgeLine(
     return `Next week, one small log keeps your ${streakEnd}-day streak warm.`;
   }
   return 'Next week, pick one small habit and let the trail meet you there.';
+}
+
+function buildPriorWeekFocusLine(
+  priorFocus: UserRecapFocus | null | undefined,
+  weekStartKey: string,
+): string {
+  if (!priorFocus || priorFocus.targetWeekStartKey !== weekStartKey) {
+    return '';
+  }
+  const activityName = sanitizeUserPromptText(priorFocus.activityName);
+  if (!activityName) {
+    return '';
+  }
+  return `You picked ${activityName} as your focus last week — nice commitment.`;
+}
+
+export function buildFocusOptionsLine(
+  focusOptions: WeeklyRecapFocusOption[],
+): string {
+  if (focusOptions.length < 2) {
+    return '';
+  }
+
+  const lines = focusOptions.map(
+    (option) =>
+      `${option.index}) ${option.name} (${option.completedDays}/${option.eligibleDays} days)`,
+  );
+
+  return `Pick one habit to focus next week — reply with 1, 2, or 3:\n${lines.join('\n')}`;
+}
+
+type MixedHabitCandidate = {
+  activityId: string;
+  name: string;
+  completedDays: number;
+  eligibleDays: number;
+};
+
+export function findMixedCompletionHabits(
+  logs: ActivityLogRow[],
+  activityNames: Map<string, string>,
+  eligibleStartKey: string,
+  eligibleEndKey: string,
+  eligibleDays: number,
+  timezone: string,
+): MixedHabitCandidate[] {
+  if (eligibleDays <= 0) {
+    return [];
+  }
+
+  const eligible = new Set(iterDateKeys(eligibleStartKey, eligibleEndKey));
+  const completedByActivity = new Map<string, Set<string>>();
+
+  for (const log of logs) {
+    const dateKey = formatLocalDateKey(log.date, timezone);
+    if (!eligible.has(dateKey) || !isLogCompletedForHabit(log)) {
+      continue;
+    }
+    const dates = completedByActivity.get(log.activityId) ?? new Set<string>();
+    dates.add(dateKey);
+    completedByActivity.set(log.activityId, dates);
+  }
+
+  const mixed: MixedHabitCandidate[] = [];
+  for (const [activityId, name] of activityNames) {
+    const completedDays = completedByActivity.get(activityId)?.size ?? 0;
+    if (completedDays > 0 && completedDays < eligibleDays) {
+      mixed.push({
+        activityId,
+        name,
+        completedDays,
+        eligibleDays,
+      });
+    }
+  }
+
+  mixed.sort((a, b) => {
+    const rateA = a.completedDays / a.eligibleDays;
+    const rateB = b.completedDays / b.eligibleDays;
+    if (rateA !== rateB) {
+      return rateA - rateB;
+    }
+    const gapA = a.eligibleDays - a.completedDays;
+    const gapB = b.eligibleDays - b.completedDays;
+    if (gapB !== gapA) {
+      return gapB - gapA;
+    }
+    return a.name.localeCompare(b.name);
+  });
+
+  return mixed.slice(0, 3);
+}
+
+function toFocusOptions(
+  mixed: MixedHabitCandidate[],
+): WeeklyRecapFocusOption[] {
+  return mixed.map((habit, index) => ({
+    index: (index + 1) as 1 | 2 | 3,
+    activityId: habit.activityId,
+    name: habit.name,
+    completedDays: habit.completedDays,
+    eligibleDays: habit.eligibleDays,
+  }));
 }
 
 function streakBeforeWeek(
@@ -199,6 +315,8 @@ export function computeWeeklyRecapRollup(input: {
   dayScores: DayScoreRow[];
   activityLogs: ActivityLogRow[];
   activityNames: Map<string, string>;
+  priorFocus?: UserRecapFocus | null;
+  inboundEnabled?: boolean;
   now?: Date;
 }): WeeklyRecapRollup {
   const now = input.now ?? new Date();
@@ -265,6 +383,24 @@ export function computeWeeklyRecapRollup(input: {
     range.eligibleDays,
   );
   const nextWeekNudgeLine = buildNextWeekNudgeLine(best.name, streakEnd);
+  const priorWeekFocusLine = buildPriorWeekFocusLine(
+    input.priorFocus,
+    weekStartKey,
+  );
+
+  const mixedHabits = findMixedCompletionHabits(
+    input.activityLogs,
+    input.activityNames,
+    range.eligibleStartKey,
+    range.eligibleEndKey,
+    range.eligibleDays,
+    timezone,
+  );
+  const focusOptions =
+    input.inboundEnabled && mixedHabits.length >= 2
+      ? toFocusOptions(mixedHabits)
+      : [];
+  const focusOptionsLine = buildFocusOptionsLine(focusOptions);
 
   return {
     weekStartKey,
@@ -280,6 +416,9 @@ export function computeWeeklyRecapRollup(input: {
     bestHabitHits: best.hits,
     identityReflectionLine,
     nextWeekNudgeLine,
+    focusOptions,
+    focusOptionsLine,
+    priorWeekFocusLine,
   };
 }
 
@@ -309,6 +448,8 @@ export function summarizeWeeklyRecapRollup(rollup: WeeklyRecapRollup): string {
     habitLine,
     rollup.identityReflectionLine,
     rollup.nextWeekNudgeLine,
+    rollup.priorWeekFocusLine,
+    rollup.focusOptionsLine,
   ]
     .filter(Boolean)
     .join(' ');

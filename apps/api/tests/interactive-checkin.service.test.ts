@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { ConfigService } from '@nestjs/config';
 import { ActivityKind } from '@workspace-starter/db';
 import { Prisma } from '@workspace-starter/db';
 import type { TodayActivity } from '../src/services/activities.service';
@@ -67,6 +68,7 @@ function inboundPayload(
     phoneE164: string;
     senderPhoneE164: string | null;
     replyKind: 'done' | 'snooze' | 'rest' | null;
+    recapFocusIndex: 1 | 2 | 3 | null;
     buttonId: string | null;
   }> = {},
 ) {
@@ -76,6 +78,7 @@ function inboundPayload(
     senderPhoneE164: null,
     messageTimestamp: NOW_SEC,
     replyKind: 'done' as const,
+    recapFocusIndex: null,
     rawText: null,
     buttonId: CHECKIN_BUTTON_DONE,
     ...overrides,
@@ -86,16 +89,41 @@ describe('InteractiveCheckinService', () => {
   const markActivity = vi.fn();
   const getToday = vi.fn();
   const sendText = vi.fn().mockResolvedValue({ ok: true });
+  const handleFocusReply = vi.fn().mockResolvedValue(undefined);
   const reminderLogUpsert = vi.fn().mockResolvedValue({});
   const reminderLogFindMany = vi.fn().mockResolvedValue([]);
   const inboundDedupe = createDedupeStore();
 
   let service: InteractiveCheckinService;
+  const originalWebhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET;
+
+  function createConfig(
+    values: Record<string, string | undefined> = {},
+  ): ConfigService {
+    return new ConfigService({
+      EVOLUTION_WEBHOOK_SECRET: 'test-secret',
+      ...values,
+    });
+  }
+
+  function createService(
+    prisma: unknown,
+    config: ConfigService = createConfig(),
+  ): InteractiveCheckinService {
+    return new InteractiveCheckinService(
+      prisma as never,
+      { markActivity, getToday } as never,
+      { sendText } as never,
+      { handleFocusReply } as never,
+      config,
+    );
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
     inboundDedupe.seen.clear();
     resetWebhookAbuseGuardsForTests();
+    process.env.EVOLUTION_WEBHOOK_SECRET = 'test-secret';
 
     const prisma = {
       user: {
@@ -114,11 +142,15 @@ describe('InteractiveCheckinService', () => {
       },
     };
 
-    service = new InteractiveCheckinService(
-      prisma as never,
-      { markActivity, getToday } as never,
-      { sendText } as never,
-    );
+    service = createService(prisma);
+  });
+
+  afterEach(() => {
+    if (originalWebhookSecret === undefined) {
+      delete process.env.EVOLUTION_WEBHOOK_SECRET;
+    } else {
+      process.env.EVOLUTION_WEBHOOK_SECRET = originalWebhookSecret;
+    }
   });
 
   it('marks focus habit on done button', async () => {
@@ -192,11 +224,7 @@ describe('InteractiveCheckinService', () => {
       user: { findUnique: vi.fn(async () => null) },
       inboundMessageDedupe: inboundDedupe,
     };
-    const svc = new InteractiveCheckinService(
-      prisma as never,
-      { markActivity, getToday } as never,
-      { sendText } as never,
-    );
+    const svc = createService(prisma);
 
     await svc.handleInbound(
       inboundPayload({ phoneE164: '+10000000000', messageId: 'm4' }),
@@ -219,11 +247,7 @@ describe('InteractiveCheckinService', () => {
       },
       inboundMessageDedupe: inboundDedupe,
     };
-    const svc = new InteractiveCheckinService(
-      prisma as never,
-      { markActivity, getToday } as never,
-      { sendText } as never,
-    );
+    const svc = createService(prisma);
 
     await svc.handleInbound(inboundPayload({ messageId: 'm5' }));
 
@@ -265,5 +289,70 @@ describe('InteractiveCheckinService', () => {
     }
 
     expect(sendText).toHaveBeenCalledTimes(WEBHOOK_OUTBOUND_CONFIRM_MAX);
+  });
+
+  it('routes numeric recap replies to focus handler', async () => {
+    await service.handleInbound(
+      inboundPayload({
+        messageId: 'm-focus',
+        replyKind: null,
+        recapFocusIndex: 2,
+        buttonId: null,
+        rawText: '2',
+      }),
+    );
+
+    expect(handleFocusReply).toHaveBeenCalledWith(USER_ID, 2, 'UTC');
+    expect(markActivity).not.toHaveBeenCalled();
+  });
+
+  it('dedupes recap focus replies by message id', async () => {
+    const payload = inboundPayload({
+      messageId: 'dup-focus',
+      replyKind: null,
+      recapFocusIndex: 1,
+      buttonId: null,
+      rawText: '1',
+    });
+
+    await service.handleInbound(payload);
+    await service.handleInbound(payload);
+
+    expect(handleFocusReply).toHaveBeenCalledTimes(1);
+  });
+
+  it('no-ops recap focus replies when inbound is not configured', async () => {
+    delete process.env.EVOLUTION_WEBHOOK_SECRET;
+    delete process.env.EVOLUTION_WEBHOOK_ALLOW_UNAUTHENTICATED;
+
+    const prisma = {
+      user: {
+        findUnique: vi.fn(async () => ({
+          id: USER_ID,
+          phone: PHONE,
+          whatsappOptIn: true,
+          timezone: 'UTC',
+          group: null,
+        })),
+      },
+      inboundMessageDedupe: inboundDedupe,
+    };
+    const svc = createService(
+      prisma,
+      createConfig({ EVOLUTION_WEBHOOK_SECRET: undefined }),
+    );
+
+    await svc.handleInbound(
+      inboundPayload({
+        messageId: 'm-focus-off',
+        replyKind: null,
+        recapFocusIndex: 1,
+        buttonId: null,
+        rawText: '1',
+      }),
+    );
+
+    expect(handleFocusReply).not.toHaveBeenCalled();
+    expect(inboundDedupe.create).not.toHaveBeenCalled();
   });
 });

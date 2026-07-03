@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@workspace-starter/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivitiesService } from '../services/activities.service';
@@ -10,6 +11,7 @@ import {
   inferDefaultRegionFromE164,
   jidToE164,
 } from './evolution-inbound.parser';
+import { isEvolutionInboundConfigured } from './evolution-inbound-auth';
 import { pickFocusHabit } from './interactive-checkin-focus';
 import {
   INTERACTIVE_CHECKIN_REMINDER_KINDS,
@@ -23,6 +25,7 @@ import {
   checkWebhookUserRateLimit,
   recordOutboundConfirmation,
 } from './webhook-abuse-guards';
+import { WeeklyRecapFocusService } from './weekly-recap-focus.service';
 
 @Injectable()
 export class InteractiveCheckinService {
@@ -32,7 +35,20 @@ export class InteractiveCheckinService {
     private readonly prisma: PrismaService,
     private readonly activitiesService: ActivitiesService,
     private readonly evolution: EvolutionApiClient,
+    private readonly recapFocusService: WeeklyRecapFocusService,
+    private readonly config: ConfigService,
   ) {}
+
+  private isEvolutionInboundConfigured(): boolean {
+    return isEvolutionInboundConfigured({
+      EVOLUTION_WEBHOOK_SECRET:
+        this.config.get<string>('EVOLUTION_WEBHOOK_SECRET') ??
+        process.env.EVOLUTION_WEBHOOK_SECRET,
+      EVOLUTION_WEBHOOK_ALLOW_UNAUTHENTICATED:
+        this.config.get<string>('EVOLUTION_WEBHOOK_ALLOW_UNAUTHENTICATED') ??
+        process.env.EVOLUTION_WEBHOOK_ALLOW_UNAUTHENTICATED,
+    });
+  }
 
   async handleInbound(parsed: ParsedEvolutionInbound): Promise<void> {
     const user = await this.prisma.user.findUnique({
@@ -72,7 +88,16 @@ export class InteractiveCheckinService {
       return;
     }
 
-    if (!parsed.replyKind) {
+    if (!parsed.replyKind && !parsed.recapFocusIndex) {
+      return;
+    }
+
+    const willHandleRecapFocus =
+      !parsed.replyKind &&
+      parsed.recapFocusIndex !== null &&
+      this.isEvolutionInboundConfigured();
+
+    if (!parsed.replyKind && parsed.recapFocusIndex && !willHandleRecapFocus) {
       return;
     }
 
@@ -83,16 +108,27 @@ export class InteractiveCheckinService {
     const timezone = user.group?.challengeTimezone ?? user.timezone;
     const localDate = getUserLocalDate(timezone);
 
-    switch (parsed.replyKind) {
-      case 'done':
-        await this.handleDone(user.id, user.phone!, timezone);
-        break;
-      case 'snooze':
-        await this.handleSnooze(user.id, localDate);
-        break;
-      case 'rest':
-        await this.handleRestDay(user.id, localDate);
-        break;
+    if (parsed.replyKind) {
+      switch (parsed.replyKind) {
+        case 'done':
+          await this.handleDone(user.id, user.phone!, timezone);
+          break;
+        case 'snooze':
+          await this.handleSnooze(user.id, localDate);
+          break;
+        case 'rest':
+          await this.handleRestDay(user.id, localDate);
+          break;
+      }
+      return;
+    }
+
+    if (parsed.recapFocusIndex && this.isEvolutionInboundConfigured()) {
+      await this.recapFocusService.handleFocusReply(
+        user.id,
+        parsed.recapFocusIndex,
+        timezone,
+      );
     }
   }
 

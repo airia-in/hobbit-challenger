@@ -5,6 +5,7 @@ import {
 import {
   replyKindFromButtonId,
   replyKindFromText,
+  recapFocusIndexFromText,
 } from './interactive-checkin.constants';
 import type { ParsedEvolutionInbound } from './evolution-inbound.types';
 import { evolutionWebhookEnvelopeSchema } from './evolution-inbound.types';
@@ -225,6 +226,8 @@ export function parseEvolutionInbound(
   const replyKind =
     replyKindFromButtonId(buttonId ?? undefined) ??
     (rawText ? replyKindFromText(rawText) : null);
+  const recapFocusIndex =
+    replyKind || !rawText ? null : recapFocusIndexFromText(rawText);
 
   return {
     messageId,
@@ -232,6 +235,7 @@ export function parseEvolutionInbound(
     senderPhoneE164,
     messageTimestamp,
     replyKind,
+    recapFocusIndex,
     rawText,
     buttonId,
   };

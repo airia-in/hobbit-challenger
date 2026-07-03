@@ -4,6 +4,7 @@ import {
   WeeklyRecapMessageService,
   buildWeeklyRecapFallback,
   ensureWeeklyRecapDashboardUrl,
+  ensureWeeklyRecapFocusOptionsLine,
   interpolateWeeklyRecapPrompt,
 } from '../src/whatsapp/weekly-recap-message.service';
 import {
@@ -30,6 +31,9 @@ const rollup = {
     "You showed up 5 of 7 days — steady steps, and that's who you're becoming.",
   nextWeekNudgeLine:
     'Next week, keep Morning walk in the pack — your 5-day streak has momentum.',
+  focusOptions: [],
+  focusOptionsLine: '',
+  priorWeekFocusLine: '',
 };
 
 const context = { name: 'Sam', rollup };
@@ -42,7 +46,13 @@ function reminderLogKey(userId: string, date: Date, kind: string): string {
 function createReminderLogStore() {
   const logs = new Map<
     string,
-    { userId: string; date: Date; kind: string; status: string }
+    {
+      userId: string;
+      date: Date;
+      kind: string;
+      status: string;
+      metadata?: unknown;
+    }
   >();
 
   return {
@@ -71,8 +81,14 @@ function createReminderLogStore() {
           where: {
             userId_date_kind: { userId: string; date: Date; kind: string };
           };
-          create: { userId: string; date: Date; kind: string; status: string };
-          update: { status: string };
+          create: {
+            userId: string;
+            date: Date;
+            kind: string;
+            status: string;
+            metadata?: unknown;
+          };
+          update: { status: string; metadata?: unknown };
         }) => {
           const key = reminderLogKey(
             where.userId_date_kind.userId,
@@ -82,6 +98,9 @@ function createReminderLogStore() {
           const existing = logs.get(key);
           if (existing) {
             existing.status = update.status;
+            if (update.metadata !== undefined) {
+              existing.metadata = update.metadata;
+            }
             return existing;
           }
           const row = { ...create };
@@ -133,6 +152,26 @@ describe('weekly recap message', () => {
     expect(
       ensureWeeklyRecapDashboardUrl('Trail review complete.', messaging),
     ).toContain(messaging.dashboardUrl);
+  });
+
+  it('appends focus options line when missing from composed text', () => {
+    const focusLine =
+      'Pick one habit to focus next week — reply with 1, 2, or 3:\n1) Morning walk (3/6 days)';
+    const composed = ensureWeeklyRecapFocusOptionsLine(
+      'Great week on the trail!',
+      focusLine,
+    );
+    expect(composed).toContain(focusLine);
+    expect(composed).toBe(`Great week on the trail!\n\n${focusLine}`);
+  });
+
+  it('does not duplicate focus options line when already present', () => {
+    const focusLine = 'reply with 1, 2, or 3';
+    const composed = ensureWeeklyRecapFocusOptionsLine(
+      `Recap copy with ${focusLine}`,
+      focusLine,
+    );
+    expect(composed).toBe(`Recap copy with ${focusLine}`);
   });
 
   it('interpolates prompt slots from rollup context', () => {
@@ -204,5 +243,165 @@ describe('weekly recap message', () => {
     });
     expect(sendText).toHaveBeenCalledTimes(2);
     expect(store.logs.get(key)?.status).toBe('SENT');
+  });
+
+  it('persists focus metadata on SENT when inbound enabled and options present', async () => {
+    const store = createReminderLogStore();
+    const { service } = createService();
+    const focusRollup = {
+      ...rollup,
+      focusOptions: [
+        {
+          index: 1 as const,
+          activityId: 'a1',
+          name: 'Morning walk',
+          completedDays: 3,
+          eligibleDays: 6,
+        },
+        {
+          index: 2 as const,
+          activityId: 'a2',
+          name: 'Reading',
+          completedDays: 2,
+          eligibleDays: 6,
+        },
+      ],
+      focusOptionsLine:
+        'Pick one habit to focus next week — reply with 1, 2, or 3:\n1) Morning walk (3/6 days)\n2) Reading (2/6 days)',
+    };
+
+    await service.trySendWeeklyRecap({
+      prisma: store.prisma as never,
+      userId: 'user-1',
+      phone: '+919876543210',
+      logDate,
+      inboundEnabled: true,
+      context: { name: 'Sam', rollup: focusRollup },
+    });
+
+    const key = reminderLogKey('user-1', logDate, WEEKLY_RECAP_KIND);
+    expect(store.logs.get(key)?.metadata).toEqual({
+      focusOptions: [
+        { index: 1, activityId: 'a1', name: 'Morning walk' },
+        { index: 2, activityId: 'a2', name: 'Reading' },
+      ],
+    });
+  });
+
+  it('omits focus metadata when inbound disabled', async () => {
+    const store = createReminderLogStore();
+    const { service } = createService();
+    const focusRollup = {
+      ...rollup,
+      focusOptions: [
+        {
+          index: 1 as const,
+          activityId: 'a1',
+          name: 'Morning walk',
+          completedDays: 3,
+          eligibleDays: 6,
+        },
+        {
+          index: 2 as const,
+          activityId: 'a2',
+          name: 'Reading',
+          completedDays: 2,
+          eligibleDays: 6,
+        },
+      ],
+      focusOptionsLine: 'Pick one habit...',
+    };
+
+    await service.trySendWeeklyRecap({
+      prisma: store.prisma as never,
+      userId: 'user-1',
+      phone: '+919876543210',
+      logDate,
+      inboundEnabled: false,
+      context: { name: 'Sam', rollup: focusRollup },
+    });
+
+    const key = reminderLogKey('user-1', logDate, WEEKLY_RECAP_KIND);
+    expect(store.logs.get(key)?.metadata).toBeUndefined();
+  });
+
+  it('appends focus options line to fallback copy', () => {
+    const focusRollup = {
+      ...rollup,
+      focusOptionsLine:
+        'Pick one habit to focus next week — reply with 1, 2, or 3:\n1) Morning walk (3/6 days)',
+    };
+    const message = buildWeeklyRecapFallback(
+      { name: 'Sam', rollup: focusRollup },
+      messaging,
+    );
+    expect(message).toContain('reply with 1, 2, or 3');
+    expect(message).toContain('Morning walk (3/6 days)');
+  });
+
+  it('appends focus options line when OpenAI omits it from composed text', async () => {
+    const store = createReminderLogStore();
+    const focusOptionsLine =
+      'Pick one habit to focus next week — reply with 1, 2, or 3:\n1) Morning walk (3/6 days)\n2) Reading (2/6 days)';
+    const focusRollup = {
+      ...rollup,
+      focusOptions: [
+        {
+          index: 1 as const,
+          activityId: 'a1',
+          name: 'Morning walk',
+          completedDays: 3,
+          eligibleDays: 6,
+        },
+        {
+          index: 2 as const,
+          activityId: 'a2',
+          name: 'Reading',
+          completedDays: 2,
+          eligibleDays: 6,
+        },
+      ],
+      focusOptionsLine,
+    };
+
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const evolution = {
+      isConfigured: () => true,
+      sendText,
+    };
+
+    const service = new WeeklyRecapMessageService(
+      new ConfigService({ OPENAI_API_KEY: 'test-key' }),
+      evolution as never,
+    );
+    (
+      service as unknown as {
+        openai: {
+          chat: { completions: { create: ReturnType<typeof vi.fn> } };
+        };
+      }
+    ).openai = {
+      chat: {
+        completions: {
+          create: vi.fn().mockResolvedValue({
+            choices: [{ message: { content: 'Great week on the trail!' } }],
+          }),
+        },
+      },
+    };
+
+    await service.trySendWeeklyRecap({
+      prisma: store.prisma as never,
+      userId: 'user-1',
+      phone: '+919876543210',
+      logDate,
+      inboundEnabled: true,
+      context: { name: 'Sam', rollup: focusRollup },
+    });
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+    const sentText = sendText.mock.calls[0]![1] as string;
+    expect(sentText).toContain('reply with 1, 2, or 3');
+    expect(sentText).toContain(focusOptionsLine);
   });
 });

@@ -86,6 +86,7 @@ describe('parseEvolutionInbound', () => {
       senderPhoneE164: null,
       messageTimestamp: NOW_SEC,
       replyKind: 'done',
+      recapFocusIndex: null,
       rawText: 'Done ✓',
       buttonId: CHECKIN_BUTTON_DONE,
     });
@@ -232,5 +233,53 @@ describe('parseEvolutionInbound', () => {
     );
 
     expect(parsed).toBeNull();
+  });
+
+  it('maps numeric recap focus replies without check-in kind', () => {
+    for (const [text, index] of [
+      ['1', 1],
+      ['2', 2],
+      ['3', 3],
+    ] as const) {
+      const parsed = parseEvolutionInbound(
+        {
+          event: 'messages.upsert',
+          data: {
+            key: {
+              remoteJid: '919876543210@s.whatsapp.net',
+              fromMe: false,
+              id: `msg-focus-${index}`,
+            },
+            message: { conversation: text },
+            messageTimestamp: NOW_SEC,
+          },
+        },
+        { nowMs: NOW_MS },
+      );
+
+      expect(parsed?.replyKind).toBeNull();
+      expect(parsed?.recapFocusIndex).toBe(index);
+    }
+  });
+
+  it('does not map done text to recap focus index', () => {
+    const parsed = parseEvolutionInbound(
+      {
+        event: 'messages.upsert',
+        data: {
+          key: {
+            remoteJid: '919876543210@s.whatsapp.net',
+            fromMe: false,
+            id: 'msg-done',
+          },
+          message: { conversation: 'done' },
+          messageTimestamp: NOW_SEC,
+        },
+      },
+      { nowMs: NOW_MS },
+    );
+
+    expect(parsed?.replyKind).toBe('done');
+    expect(parsed?.recapFocusIndex).toBeNull();
   });
 });

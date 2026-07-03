@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { BRAND_INTRO } from '@workspace-starter/types';
+import type { WeeklyRecapReminderMetadata } from '@workspace-starter/types';
 import { loadPromptFile } from '../services/prompt-loader';
 import type { PrismaService } from '../prisma/prisma.service';
 import {
@@ -59,6 +60,16 @@ export function ensureWeeklyRecapDashboardUrl(
   return `${text} ${messaging.dashboardUrl}`;
 }
 
+export function ensureWeeklyRecapFocusOptionsLine(
+  text: string,
+  focusOptionsLine: string,
+): string {
+  if (!focusOptionsLine || text.includes(focusOptionsLine)) {
+    return text;
+  }
+  return `${text}\n\n${focusOptionsLine}`;
+}
+
 export function buildWeeklyRecapCopyLines(
   rollup: WeeklyRecapRollup,
 ): Record<string, string> {
@@ -86,7 +97,9 @@ export function buildWeeklyRecapCopyLines(
     streakEnd: String(rollup.streakEnd),
     bestHabitLine,
     identityReflectionLine: rollup.identityReflectionLine,
-    nextWeekNudgeLine: rollup.nextWeekNudgeLine,
+    nextWeekNudgeLine: rollup.focusOptionsLine || rollup.nextWeekNudgeLine,
+    priorWeekFocusLine: rollup.priorWeekFocusLine,
+    focusOptionsLine: rollup.focusOptionsLine,
     themedIntro,
     weekSummary: summarizeWeeklyRecapRollup(rollup),
   };
@@ -104,6 +117,9 @@ export function buildWeeklyRecapFallback(
     .replaceAll('{{brandName}}', messaging.brandName)
     .replaceAll('{{weekSummary}}', copyLines.weekSummary)
     .replaceAll('{{dashboardUrl}}', messaging.dashboardUrl);
+  if (copyLines.focusOptionsLine) {
+    return `${filled}\n\n${copyLines.focusOptionsLine}`;
+  }
   return filled;
 }
 
@@ -203,6 +219,7 @@ export class WeeklyRecapMessageService {
     phone: string;
     logDate: Date;
     context: WeeklyRecapMessageContext;
+    inboundEnabled?: boolean;
   }): Promise<void> {
     const logKey = {
       userId: input.userId,
@@ -227,11 +244,29 @@ export class WeeklyRecapMessageService {
       return;
     }
 
-    const text = await this.compose(input.context);
+    const composed = await this.compose(input.context);
+    const text = ensureWeeklyRecapFocusOptionsLine(
+      composed,
+      input.context.rollup.focusOptionsLine,
+    );
     const result = await this.evolution.sendText(input.phone, text);
     const status: WeeklyRecapStatus = result.ok ? 'SENT' : 'FAILED';
+    const metadata =
+      status === 'SENT' &&
+      input.inboundEnabled &&
+      input.context.rollup.focusOptions.length >= 2
+        ? ({
+            focusOptions: input.context.rollup.focusOptions.map(
+              ({ index, activityId, name }) => ({
+                index,
+                activityId,
+                name,
+              }),
+            ),
+          } satisfies WeeklyRecapReminderMetadata)
+        : undefined;
 
-    await this.upsertWeeklyRecapLog(input.prisma, logKey, status);
+    await this.upsertWeeklyRecapLog(input.prisma, logKey, status, metadata);
     trackReminderSentFireAndForget(
       input.prisma,
       input.userId,
@@ -244,6 +279,7 @@ export class WeeklyRecapMessageService {
     prisma: PrismaService,
     logKey: { userId: string; date: Date; kind: string },
     status: WeeklyRecapStatus,
+    metadata?: WeeklyRecapReminderMetadata,
   ): Promise<void> {
     await prisma.reminderLog.upsert({
       where: { userId_date_kind: logKey },
@@ -252,10 +288,12 @@ export class WeeklyRecapMessageService {
         date: logKey.date,
         kind: logKey.kind,
         status,
+        ...(metadata ? { metadata } : {}),
       },
       update: {
         status,
         sentAt: new Date(),
+        ...(metadata ? { metadata } : {}),
       },
     });
   }

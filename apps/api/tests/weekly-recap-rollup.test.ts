@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildFocusOptionsLine,
   computeWeeklyRecapRollup,
+  findMixedCompletionHabits,
   isoWeekStartKey,
 } from '../src/utils/weekly-recap-rollup';
 
@@ -218,5 +220,222 @@ describe('weekly recap rollup', () => {
     expect(rollup.eligibleDays).toBe(1);
     expect(rollup.identityReflectionLine).toContain('1 of 1 day');
     expect(rollup.identityReflectionLine).not.toContain('1 of 1 days');
+  });
+
+  it('offers focus options only when at least two habits had mixed completion', () => {
+    const activityNames = new Map([
+      ['a1', 'Morning walk'],
+      ['a2', 'Reading'],
+      ['a3', 'Stretch'],
+    ]);
+    const logs = [
+      {
+        activityId: 'a1',
+        date: new Date('2026-06-23T00:00:00.000Z'),
+        state: 'DONE',
+        tier: null,
+        value: null,
+        subPoints: null,
+      },
+      {
+        activityId: 'a1',
+        date: new Date('2026-06-24T00:00:00.000Z'),
+        state: 'DONE',
+        tier: null,
+        value: null,
+        subPoints: null,
+      },
+      {
+        activityId: 'a2',
+        date: new Date('2026-06-23T00:00:00.000Z'),
+        state: 'DONE',
+        tier: null,
+        value: null,
+        subPoints: null,
+      },
+      {
+        activityId: 'a3',
+        date: new Date('2026-06-22T00:00:00.000Z'),
+        state: 'DONE',
+        tier: null,
+        value: null,
+        subPoints: null,
+      },
+      {
+        activityId: 'a3',
+        date: new Date('2026-06-23T00:00:00.000Z'),
+        state: 'DONE',
+        tier: null,
+        value: null,
+        subPoints: null,
+      },
+      {
+        activityId: 'a3',
+        date: new Date('2026-06-24T00:00:00.000Z'),
+        state: 'DONE',
+        tier: null,
+        value: null,
+        subPoints: null,
+      },
+      {
+        activityId: 'a3',
+        date: new Date('2026-06-25T00:00:00.000Z'),
+        state: 'DONE',
+        tier: null,
+        value: null,
+        subPoints: null,
+      },
+      {
+        activityId: 'a3',
+        date: new Date('2026-06-26T00:00:00.000Z'),
+        state: 'DONE',
+        tier: null,
+        value: null,
+        subPoints: null,
+      },
+      {
+        activityId: 'a3',
+        date: new Date('2026-06-27T00:00:00.000Z'),
+        state: 'DONE',
+        tier: null,
+        value: null,
+        subPoints: null,
+      },
+    ];
+
+    const mixed = findMixedCompletionHabits(
+      logs,
+      activityNames,
+      '2026-06-23',
+      '2026-06-27',
+      5,
+      TZ,
+    );
+    expect(mixed).toHaveLength(2);
+    expect(mixed[0]?.name).toBe('Reading');
+    expect(mixed[1]?.name).toBe('Morning walk');
+
+    const withInbound = computeWeeklyRecapRollup({
+      challenge: challenge(),
+      timezone: TZ,
+      now: SUNDAY,
+      activityNames,
+      inboundEnabled: true,
+      dayScores: [
+        {
+          date: new Date('2026-06-23T00:00:00.000Z'),
+          netXp: 10,
+          finalized: true,
+          breakdown: { allScoredLogged: false },
+        },
+        {
+          date: new Date('2026-06-24T00:00:00.000Z'),
+          netXp: 10,
+          finalized: true,
+          breakdown: { allScoredLogged: false },
+        },
+        {
+          date: new Date('2026-06-25T00:00:00.000Z'),
+          netXp: 10,
+          finalized: true,
+          breakdown: { allScoredLogged: false },
+        },
+        {
+          date: new Date('2026-06-26T00:00:00.000Z'),
+          netXp: 10,
+          finalized: true,
+          breakdown: { allScoredLogged: false },
+        },
+        {
+          date: new Date('2026-06-27T00:00:00.000Z'),
+          netXp: 10,
+          finalized: true,
+          breakdown: { allScoredLogged: false },
+        },
+      ],
+      activityLogs: logs,
+    });
+
+    expect(withInbound.focusOptions).toHaveLength(2);
+    expect(withInbound.focusOptionsLine).toContain('reply with 1, 2, or 3');
+
+    const withoutInbound = computeWeeklyRecapRollup({
+      challenge: challenge(),
+      timezone: TZ,
+      now: SUNDAY,
+      activityNames,
+      inboundEnabled: false,
+      dayScores: withInbound.eligibleDays
+        ? [
+            {
+              date: new Date('2026-06-27T00:00:00.000Z'),
+              netXp: 10,
+              finalized: true,
+              breakdown: { allScoredLogged: false },
+            },
+          ]
+        : [],
+      activityLogs: logs,
+    });
+    expect(withoutInbound.focusOptions).toHaveLength(0);
+    expect(withoutInbound.focusOptionsLine).toBe('');
+  });
+
+  it('formats numbered focus options line', () => {
+    const line = buildFocusOptionsLine([
+      {
+        index: 1,
+        activityId: 'a1',
+        name: 'Morning walk',
+        completedDays: 3,
+        eligibleDays: 6,
+      },
+      {
+        index: 2,
+        activityId: 'a2',
+        name: 'Reading',
+        completedDays: 2,
+        eligibleDays: 6,
+      },
+    ]);
+    expect(line).toContain('1) Morning walk (3/6 days)');
+    expect(line).toContain('2) Reading (2/6 days)');
+  });
+
+  it('surfaces prior-week focus when target week matches', () => {
+    const rollup = computeWeeklyRecapRollup({
+      challenge: challenge(),
+      timezone: TZ,
+      now: SUNDAY,
+      activityNames: new Map([['a1', 'Morning walk']]),
+      priorFocus: {
+        targetWeekStartKey: '2026-06-22',
+        activityId: 'a1',
+        activityName: 'Morning walk',
+        sourceRecapWeekStartKey: '2026-06-15',
+        chosenAt: '2026-06-21T10:00:00.000Z',
+      },
+      dayScores: [
+        {
+          date: new Date('2026-06-27T00:00:00.000Z'),
+          netXp: 10,
+          finalized: true,
+          breakdown: { allScoredLogged: false },
+        },
+      ],
+      activityLogs: [
+        {
+          activityId: 'a1',
+          date: new Date('2026-06-27T00:00:00.000Z'),
+          state: 'DONE',
+          tier: null,
+          value: null,
+          subPoints: null,
+        },
+      ],
+    });
+
+    expect(rollup.priorWeekFocusLine).toContain('Morning walk');
+    expect(rollup.priorWeekFocusLine).toContain('focus last week');
   });
 });

@@ -387,9 +387,9 @@ describe('JourneyPath', () => {
     }
 
     await waitFor(() => {
-      expect(document.querySelector(todayTileSelector)?.className).not.toContain(
-        'journey-today-pulse',
-      );
+      expect(
+        document.querySelector(todayTileSelector)?.className,
+      ).not.toContain('journey-today-pulse');
     });
   });
 });

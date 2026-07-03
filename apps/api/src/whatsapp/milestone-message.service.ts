@@ -11,10 +11,7 @@ import {
 import { loadPromptFile } from '../services/prompt-loader';
 import type { PrismaService } from '../prisma/prisma.service';
 import { EvolutionApiClient } from './evolution.client';
-import {
-  PRODUCT_EVENT_KEYS,
-  trackProductEventFireAndForget,
-} from '../services/analytics.service';
+import { trackReminderSentFireAndForget } from '../services/analytics.service';
 import {
   buildReminderMessaging,
   type ReminderMessaging,
@@ -176,12 +173,6 @@ export class MilestoneMessageService {
 
     if (!evolutionConfigured) {
       await this.upsertMilestoneLog(input.prisma, logKey, 'FAILED');
-      trackProductEventFireAndForget(
-        input.prisma,
-        input.userId,
-        PRODUCT_EVENT_KEYS.REMINDER_SENT,
-        { kind: MILESTONE_DAY_REMINDER_KIND, status: 'FAILED' },
-      );
       return;
     }
 
@@ -198,11 +189,11 @@ export class MilestoneMessageService {
     const status: MilestoneMessageStatus = result.ok ? 'SENT' : 'FAILED';
 
     await this.upsertMilestoneLog(input.prisma, logKey, status);
-    trackProductEventFireAndForget(
+    trackReminderSentFireAndForget(
       input.prisma,
       input.userId,
-      PRODUCT_EVENT_KEYS.REMINDER_SENT,
-      { kind: MILESTONE_DAY_REMINDER_KIND, status },
+      MILESTONE_DAY_REMINDER_KIND,
+      status,
     );
   }
 

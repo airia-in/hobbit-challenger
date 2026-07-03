@@ -6,10 +6,7 @@ import { loadPromptFile } from '../services/prompt-loader';
 import type { PrismaService } from '../prisma/prisma.service';
 import { WINBACK_KIND, shouldRetryWinback } from '../utils/winback-dormancy';
 import { EvolutionApiClient } from './evolution.client';
-import {
-  PRODUCT_EVENT_KEYS,
-  trackProductEventFireAndForget,
-} from '../services/analytics.service';
+import { trackReminderSentFireAndForget } from '../services/analytics.service';
 import {
   buildReminderMessaging,
   type ReminderMessaging,
@@ -199,12 +196,6 @@ export class WinbackMessageService {
 
     if (!this.evolution.isConfigured()) {
       await this.upsertWinbackLog(input.prisma, logKey, 'FAILED');
-      trackProductEventFireAndForget(
-        input.prisma,
-        input.userId,
-        PRODUCT_EVENT_KEYS.REMINDER_SENT,
-        { kind: WINBACK_KIND, status: 'FAILED' },
-      );
       return;
     }
 
@@ -213,11 +204,11 @@ export class WinbackMessageService {
     const status: WinbackStatus = result.ok ? 'SENT' : 'FAILED';
 
     await this.upsertWinbackLog(input.prisma, logKey, status);
-    trackProductEventFireAndForget(
+    trackReminderSentFireAndForget(
       input.prisma,
       input.userId,
-      PRODUCT_EVENT_KEYS.REMINDER_SENT,
-      { kind: WINBACK_KIND, status },
+      WINBACK_KIND,
+      status,
     );
   }
 

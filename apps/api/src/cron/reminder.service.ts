@@ -31,10 +31,7 @@ import {
   WinbackService,
   type WinbackDeferBatchContext,
 } from './winback.service';
-import {
-  PRODUCT_EVENT_KEYS,
-  trackProductEventFireAndForget,
-} from '../services/analytics.service';
+import { trackReminderSentFireAndForget } from '../services/analytics.service';
 
 const DEFAULT_MORNING_TIME = '08:00';
 const STREAK_AT_RISK_TIME = '18:00';
@@ -445,14 +442,7 @@ export class ReminderService {
 
     const status: ReminderStatus = result.ok ? 'SENT' : 'FAILED';
     await this.upsertReminderLog(user.id, localDate, kind, status);
-    if (status === 'SENT' || status === 'FAILED') {
-      trackProductEventFireAndForget(
-        this.prisma,
-        user.id,
-        PRODUCT_EVENT_KEYS.REMINDER_SENT,
-        { kind, status },
-      );
-    }
+    trackReminderSentFireAndForget(this.prisma, user.id, kind, status);
   }
 
   private async recordSkippedOptout(

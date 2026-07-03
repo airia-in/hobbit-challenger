@@ -11,10 +11,7 @@ import {
 } from '../utils/day-window';
 import type { PrismaService } from '../prisma/prisma.service';
 import { EvolutionApiClient } from './evolution.client';
-import {
-  PRODUCT_EVENT_KEYS,
-  trackProductEventFireAndForget,
-} from '../services/analytics.service';
+import { trackReminderSentFireAndForget } from '../services/analytics.service';
 import {
   buildReminderMessaging,
   type ReminderMessaging,
@@ -349,12 +346,6 @@ export class StreakFreezeMessageService {
 
     if (!evolutionConfigured) {
       await this.upsertStreakFreezeLog(input.prisma, logKey, 'FAILED');
-      trackProductEventFireAndForget(
-        input.prisma,
-        input.userId,
-        PRODUCT_EVENT_KEYS.REMINDER_SENT,
-        { kind: STREAK_FREEZE_GRANTED_KIND, status: 'FAILED' },
-      );
       return;
     }
 
@@ -369,11 +360,11 @@ export class StreakFreezeMessageService {
     const status: StreakFreezeMessageStatus = result.ok ? 'SENT' : 'FAILED';
 
     await this.upsertStreakFreezeLog(input.prisma, logKey, status);
-    trackProductEventFireAndForget(
+    trackReminderSentFireAndForget(
       input.prisma,
       input.userId,
-      PRODUCT_EVENT_KEYS.REMINDER_SENT,
-      { kind: STREAK_FREEZE_GRANTED_KIND, status },
+      STREAK_FREEZE_GRANTED_KIND,
+      status,
     );
   }
 
@@ -412,12 +403,6 @@ export class StreakFreezeMessageService {
 
     if (!evolutionConfigured) {
       await this.upsertStreakFreezeLog(input.prisma, logKey, 'FAILED');
-      trackProductEventFireAndForget(
-        input.prisma,
-        input.userId,
-        PRODUCT_EVENT_KEYS.REMINDER_SENT,
-        { kind: STREAK_FREEZE_CONSUMED_KIND, status: 'FAILED' },
-      );
       return;
     }
 
@@ -431,11 +416,11 @@ export class StreakFreezeMessageService {
     const status: StreakFreezeMessageStatus = result.ok ? 'SENT' : 'FAILED';
 
     await this.upsertStreakFreezeLog(input.prisma, logKey, status);
-    trackProductEventFireAndForget(
+    trackReminderSentFireAndForget(
       input.prisma,
       input.userId,
-      PRODUCT_EVENT_KEYS.REMINDER_SENT,
-      { kind: STREAK_FREEZE_CONSUMED_KIND, status },
+      STREAK_FREEZE_CONSUMED_KIND,
+      status,
     );
   }
 

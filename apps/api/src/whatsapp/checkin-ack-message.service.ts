@@ -6,10 +6,7 @@ import { BRAND_INTRO } from '@workspace-starter/types';
 import { loadPromptFile } from '../services/prompt-loader';
 import type { PrismaService } from '../prisma/prisma.service';
 import { EvolutionApiClient } from './evolution.client';
-import {
-  PRODUCT_EVENT_KEYS,
-  trackProductEventFireAndForget,
-} from '../services/analytics.service';
+import { trackReminderSentFireAndForget } from '../services/analytics.service';
 import {
   buildReminderMessaging,
   type ReminderMessaging,
@@ -237,12 +234,6 @@ export class CheckinAckMessageService {
 
       if (!this.evolution.isConfigured()) {
         await this.recordTerminalCheckinAckLog(input.prisma, logKey, 'FAILED');
-        trackProductEventFireAndForget(
-          input.prisma,
-          input.userId,
-          PRODUCT_EVENT_KEYS.REMINDER_SENT,
-          { kind: CHECKIN_ACK_KIND, status: 'FAILED' },
-        );
         return;
       }
 
@@ -270,11 +261,11 @@ export class CheckinAckMessageService {
       }
 
       await this.finalizeCheckinAckLog(input.prisma, logKey, status);
-      trackProductEventFireAndForget(
+      trackReminderSentFireAndForget(
         input.prisma,
         input.userId,
-        PRODUCT_EVENT_KEYS.REMINDER_SENT,
-        { kind: CHECKIN_ACK_KIND, status },
+        CHECKIN_ACK_KIND,
+        status,
       );
     } catch (error) {
       this.logger.error('Check-in ack failed:', error);

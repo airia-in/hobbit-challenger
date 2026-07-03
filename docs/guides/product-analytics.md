@@ -4,25 +4,38 @@ Lightweight `ProductEvent` rows support retention cohort metrics without a third
 
 ## Event catalog
 
-| `eventKey`               | When emitted                                                      | Metadata (no PII)                                                       |
-| ------------------------ | ----------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `activity.logged`        | Scored/personal activity mutation                                 | `activityId`, `challengeId`, `activityKind`, `scored`                   |
-| `day.finalized`          | Day evaluator finalizes yesterday                                 | `challengeId`, `dayNumber`, `allScoredLogged`, `netXp`, `currentStreak` |
-| `streak.broken`          | Streak reset to 0 (no freeze)                                     | `challengeId`, `previousStreak`                                         |
-| `streak.freeze_consumed` | Rain-cloak freeze used                                            | `challengeId`, `currentStreak`                                          |
-| `reminder.sent`          | WhatsApp send attempt (cron + ack/winback/recap/milestone/freeze) | `kind`, `status` (`SENT` / `FAILED`)                                    |
-| `milestone.unlocked`     | Milestone unlock on finalize                                      | `milestoneKey`, `challengeId`                                           |
-| `user.registered`        | Auth register                                                     | `timezone`                                                              |
-| `group.joined`           | Group join via invite                                             | `groupId`                                                               |
+| `eventKey`               | When emitted                                                             | Metadata (no PII)                                                       |
+| ------------------------ | ------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `activity.logged`        | Scored/personal activity mutation                                        | `activityId`, `challengeId`, `activityKind`, `scored`                   |
+| `day.finalized`          | Day evaluator finalizes yesterday                                        | `challengeId`, `dayNumber`, `allScoredLogged`, `netXp`, `currentStreak` |
+| `streak.broken`          | Streak reset to 0 (no freeze)                                            | `challengeId`, `previousStreak`                                         |
+| `streak.freeze_consumed` | Rain-cloak freeze used                                                   | `challengeId`, `currentStreak`                                          |
+| `reminder.sent`          | Successful WhatsApp delivery (cron + ack/winback/recap/milestone/freeze) | `kind`, `status` (`SENT` only)                                          |
+| `milestone.unlocked`     | Milestone unlock on finalize                                             | `milestoneKey`, `challengeId`                                           |
+| `user.registered`        | Auth register                                                            | `timezone`                                                              |
+| `group.joined`           | Group join via invite                                                    | `groupId`                                                               |
 
-## Example SQL: D7 check-in rate by cohort week
+## D7 check-in rate by cohort week
 
-SQLite — users registered per ISO week with at least one `activity.logged` event within 7 days:
+Each user's D7 window is anchored on **registration time** (`registered_at` through `registered_at + 7 days`). `cohort_week_start` is used only for bucketing users into ISO weeks.
+
+### Admin script
+
+```bash
+DATABASE_URL="file:./packages/db/prisma/dev.db" node scripts/analytics/d7-cohort.mjs
+```
+
+Prints JSON rows: `cohort_week_start`, `registered`, `d7_checkin_users`, `d7_checkin_rate_pct`.
+
+### Example SQL (ProductEvent)
+
+SQLite — users registered per ISO week with at least one `activity.logged` event within 7 days of registration:
 
 ```sql
 WITH cohorts AS (
   SELECT
     u.id AS user_id,
+    u.createdAt AS registered_at,
     date(u.createdAt, 'weekday 1', '-6 days') AS cohort_week_start
   FROM User u
 ),
@@ -31,8 +44,8 @@ d7_checkins AS (
   FROM cohorts c
   INNER JOIN ProductEvent pe ON pe.userId = c.user_id
   WHERE pe.eventKey = 'activity.logged'
-    AND pe.createdAt < datetime(c.cohort_week_start, '+7 days')
-    AND pe.createdAt >= c.cohort_week_start
+    AND pe.createdAt >= c.registered_at
+    AND pe.createdAt < datetime(c.registered_at, '+7 days')
 )
 SELECT
   cohort_week_start,
@@ -45,7 +58,7 @@ GROUP BY cohort_week_start
 ORDER BY cohort_week_start;
 ```
 
-Alternative using raw activity logs (same cohort definition):
+Alternative using raw activity logs (same per-user D7 window):
 
 ```sql
 WITH cohorts AS (

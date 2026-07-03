@@ -13,10 +13,7 @@ import {
   type WeeklyRecapRollup,
 } from '../utils/weekly-recap-rollup';
 import { EvolutionApiClient } from './evolution.client';
-import {
-  PRODUCT_EVENT_KEYS,
-  trackProductEventFireAndForget,
-} from '../services/analytics.service';
+import { trackReminderSentFireAndForget } from '../services/analytics.service';
 import {
   buildReminderMessaging,
   type ReminderMessaging,
@@ -227,12 +224,6 @@ export class WeeklyRecapMessageService {
 
     if (!this.evolution.isConfigured()) {
       await this.upsertWeeklyRecapLog(input.prisma, logKey, 'FAILED');
-      trackProductEventFireAndForget(
-        input.prisma,
-        input.userId,
-        PRODUCT_EVENT_KEYS.REMINDER_SENT,
-        { kind: WEEKLY_RECAP_KIND, status: 'FAILED' },
-      );
       return;
     }
 
@@ -241,11 +232,11 @@ export class WeeklyRecapMessageService {
     const status: WeeklyRecapStatus = result.ok ? 'SENT' : 'FAILED';
 
     await this.upsertWeeklyRecapLog(input.prisma, logKey, status);
-    trackProductEventFireAndForget(
+    trackReminderSentFireAndForget(
       input.prisma,
       input.userId,
-      PRODUCT_EVENT_KEYS.REMINDER_SENT,
-      { kind: WEEKLY_RECAP_KIND, status },
+      WEEKLY_RECAP_KIND,
+      status,
     );
   }
 

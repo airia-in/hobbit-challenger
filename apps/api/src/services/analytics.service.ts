@@ -25,6 +25,7 @@ export type ProductEventMetadata = Record<
 
 const BLOCKED_METADATA_KEYS = new Set([
   'phone',
+  'phonenumber',
   'message',
   'messagebody',
   'text',
@@ -32,6 +33,11 @@ const BLOCKED_METADATA_KEYS = new Set([
   'email',
   'password',
   'name',
+  'username',
+  'anchor',
+  'anchortext',
+  'copy',
+  'title',
 ]);
 
 type TrackClient = Pick<PrismaService, 'productEvent'>;
@@ -93,7 +99,7 @@ function sanitizeMetadata(
 export async function trackProductEvent(
   prisma: TrackClient,
   userId: string,
-  eventKey: ProductEventKey | string,
+  eventKey: ProductEventKey,
   metadata?: ProductEventMetadata,
   options?: TrackOptions,
 ): Promise<void> {
@@ -121,7 +127,7 @@ export async function trackProductEvent(
 export function trackProductEventFireAndForget(
   prisma: TrackClient,
   userId: string,
-  eventKey: ProductEventKey | string,
+  eventKey: ProductEventKey,
   metadata?: ProductEventMetadata,
   options?: TrackOptions,
 ): void {
@@ -135,23 +141,47 @@ export function trackProductEventFireAndForget(
   );
 }
 
+/** Emits `reminder.sent` only on successful WhatsApp delivery (SENT transition). */
+export function trackReminderSentFireAndForget(
+  prisma: TrackClient,
+  userId: string,
+  kind: string,
+  status: string,
+  options?: TrackOptions,
+): void {
+  if (status !== 'SENT') {
+    return;
+  }
+
+  trackProductEventFireAndForget(
+    prisma,
+    userId,
+    PRODUCT_EVENT_KEYS.REMINDER_SENT,
+    { kind, status: 'SENT' },
+    options,
+  );
+}
+
 @Injectable()
 export class AnalyticsService {
   private readonly logger = new Logger(AnalyticsService.name);
+  private readonly analyticsEnabled: boolean;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    this.analyticsEnabled = isProductAnalyticsEnabled(this.config);
+  }
 
   /** Fire-and-forget product event — never throws into callers. */
   track(
     userId: string,
-    eventKey: ProductEventKey | string,
+    eventKey: ProductEventKey,
     metadata?: ProductEventMetadata,
   ): void {
     trackProductEventFireAndForget(this.prisma, userId, eventKey, metadata, {
-      enabled: isProductAnalyticsEnabled(this.config),
+      enabled: this.analyticsEnabled,
       logger: this.logger,
     });
   }

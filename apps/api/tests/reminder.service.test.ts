@@ -337,6 +337,7 @@ describe('ReminderService', () => {
       .mockResolvedValueOnce({ ok: false, error: 'down' })
       .mockResolvedValueOnce({ ok: true });
     const compose = vi.fn().mockResolvedValue('Good morning!');
+    const productEventCreate = vi.fn().mockResolvedValue({ id: 'evt-1' });
 
     const { prisma, reminderLogs } = createReminderFakePrisma({
       users: [
@@ -350,6 +351,9 @@ describe('ReminderService', () => {
         },
       ],
     });
+    (
+      prisma as { productEvent: { create: typeof productEventCreate } }
+    ).productEvent = { create: productEventCreate };
 
     const service = createReminderService(
       prisma,
@@ -358,13 +362,23 @@ describe('ReminderService', () => {
       { compose },
     );
 
-    await service.processReminders();
-    vi.setSystemTime(new Date('2026-06-15T08:03:00.000Z'));
-    await service.processReminders();
+    const previous = process.env.PRODUCT_ANALYTICS_ENABLED;
+    process.env.PRODUCT_ANALYTICS_ENABLED = 'true';
 
-    expect(sendText).toHaveBeenCalledTimes(2);
-    const log = [...reminderLogs.values()].find((l) => l.kind === 'MORNING');
-    expect(log?.status).toBe('SENT');
+    try {
+      await service.processReminders();
+      vi.setSystemTime(new Date('2026-06-15T08:03:00.000Z'));
+      await service.processReminders();
+
+      expect(sendText).toHaveBeenCalledTimes(2);
+      const log = [...reminderLogs.values()].find((l) => l.kind === 'MORNING');
+      expect(log?.status).toBe('SENT');
+      await vi.waitFor(() => {
+        expect(productEventCreate).toHaveBeenCalledTimes(1);
+      });
+    } finally {
+      process.env.PRODUCT_ANALYTICS_ENABLED = previous;
+    }
   });
 
   it('does not retry SENT morning reminder later in the retry window', async () => {

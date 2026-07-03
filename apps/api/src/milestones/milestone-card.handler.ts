@@ -1,5 +1,3 @@
-import { createReadStream } from 'node:fs';
-import { access } from 'node:fs/promises';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { AuthService } from '../services/auth.service';
 import {
@@ -81,12 +79,6 @@ export function createMilestoneCardHandler(deps: {
       return reply.status(500).send({ error: 'Invalid card filename' });
     }
 
-    try {
-      await access(card.cachePath);
-    } catch {
-      return reply.status(404).send({ error: 'Card not found' });
-    }
-
     trackProductEventFireAndForget(
       prisma,
       auth.userId,
@@ -101,6 +93,6 @@ export function createMilestoneCardHandler(deps: {
         `attachment; filename="hobbit-${milestoneKey}.png"`,
       )
       .header('Cache-Control', 'private, max-age=3600')
-      .send(createReadStream(card.cachePath));
+      .send(card.buffer);
   };
 }

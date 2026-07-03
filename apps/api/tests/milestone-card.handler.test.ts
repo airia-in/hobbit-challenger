@@ -1,14 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMilestoneCardHandler } from '../src/milestones/milestone-card.handler';
 
-vi.mock('node:fs', () => ({
-  createReadStream: vi.fn(() => 'stream'),
-}));
-
-vi.mock('node:fs/promises', () => ({
-  access: vi.fn(async () => undefined),
-}));
-
 function createHandler(overrides?: {
   userId?: string | null;
   userName?: string;
@@ -152,6 +144,31 @@ describe('milestone card download handler', () => {
       }),
     );
     expect(reply.header).toHaveBeenCalledWith('Content-Type', 'image/png');
-    expect(send).toHaveBeenCalledWith('stream');
+    expect(send).toHaveBeenCalledWith(Buffer.from('png-bytes'));
+  });
+
+  it('serves the in-memory buffer so pruning cannot delete the file mid-download', async () => {
+    // The card buffer returned by getOrCreateCard is sent directly; the handler
+    // never re-reads cachePath from disk, so a concurrent prune of an older
+    // cached version cannot race an in-flight download.
+    const { handler, cardService } = createHandler();
+    const send = vi.fn();
+    const reply = {
+      status: vi.fn(() => ({ send })),
+      header: vi.fn().mockReturnThis(),
+      send,
+    };
+
+    await handler(
+      {
+        headers: { authorization: 'Bearer token' },
+        params: { milestoneKey: 'streak_7' },
+      },
+      reply as never,
+    );
+
+    const sent = send.mock.calls[0]?.[0];
+    expect(Buffer.isBuffer(sent)).toBe(true);
+    expect(cardService.getOrCreateCard).toHaveBeenCalledTimes(1);
   });
 });

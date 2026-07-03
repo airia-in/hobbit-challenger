@@ -21,6 +21,9 @@ build
 # Frontends staged for web-host aggregation
 apps/web-host/sites
 
+# Generated at build time from ANDROID_SHA256_CERT_FINGERPRINTS (scripts/generate-assetlinks.mjs)
+apps/web/public/.well-known/assetlinks.json
+
 # Env files
 .env
 .env.local

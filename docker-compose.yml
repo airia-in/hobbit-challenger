@@ -5,6 +5,7 @@ services:
       dockerfile: apps/web-host/Dockerfile
       args:
         PUBLIC_API_URL: ${PUBLIC_API_URL:-https://${API_DOMAIN:-hobbit-api.drcode.ai}}
+        ANDROID_SHA256_CERT_FINGERPRINTS: ${ANDROID_SHA256_CERT_FINGERPRINTS:-}
     environment:
       NODE_ENV: production
       PORT: 4321

@@ -11,6 +11,10 @@ import { access, cp, mkdir, readFile, readdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
+import {
+  ASSETLINKS_PUBLIC_RELATIVE_PATH,
+  writeAssetLinksFile,
+} from './generate-assetlinks.mjs';
 
 // Self-contained command runner. This script must keep working in generated
 // products, where the installer-only scripts/lib directory is removed.
@@ -137,6 +141,10 @@ export async function buildAndStageFrontends({
   stagingDir = path.join(repoDir, 'apps/web-host/sites'),
 } = {}) {
   const frontends = await discoverFrontends({ repoDir, primary });
+
+  await writeAssetLinksFile({
+    outputPath: path.join(repoDir, ASSETLINKS_PUBLIC_RELATIVE_PATH),
+  });
 
   await rm(stagingDir, { recursive: true, force: true });
   await mkdir(stagingDir, { recursive: true });

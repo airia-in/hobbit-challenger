@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@workspace-starter/db';
 import {
+  CHECKIN_ACK_FIRST_KIND,
   CHECKIN_ACK_KIND,
   CheckinAckMessageService,
   buildCheckinAckFallback,
+  buildCheckinAckFirstFallback,
   buildCheckinAckStreakLine,
   interpolateCheckinAckPrompt,
   resolveCheckinAckStreakBucket,
@@ -175,8 +177,9 @@ const sendInput = {
 };
 
 describe('checkin ack helpers', () => {
-  it('uses CHECKIN_ACK ReminderLog kind', () => {
+  it('uses CHECKIN_ACK ReminderLog kinds', () => {
     expect(CHECKIN_ACK_KIND).toBe('CHECKIN_ACK');
+    expect(CHECKIN_ACK_FIRST_KIND).toBe('CHECKIN_ACK_FIRST');
   });
 
   it('blocks a second attempt when any log row exists', () => {
@@ -198,6 +201,16 @@ describe('checkin ack helpers', () => {
     expect(text).toContain('Sam');
     expect(text).not.toContain(messaging.dashboardUrl);
     expect(text).toMatch(/pack|trail|habit/i);
+  });
+
+  it('builds first-log fallback with trail opener tone', () => {
+    const text = buildCheckinAckFirstFallback(
+      { ...context, tasksDone: 1 },
+      messaging,
+    );
+    expect(text).toContain('Sam');
+    expect(text).toMatch(/trail|first|opener/i);
+    expect(text).not.toMatch(/pack's empty|every scored habit/i);
   });
 
   it('interpolates prompt templates', () => {
@@ -349,5 +362,107 @@ describe('CheckinAckMessageService', () => {
     });
 
     expect(evolution.sendText).not.toHaveBeenCalled();
+  });
+});
+
+describe('CheckinAckMessageService first-log ack', () => {
+  it('sends once and dedupes on second call same day', async () => {
+    const { prisma, logs } = createReminderLogStore();
+    const { service, evolution } = createService();
+
+    await service.trySendFirstLogAck({
+      ...sendInput,
+      prisma: prisma as never,
+      tasksDone: 1,
+    });
+    await service.trySendFirstLogAck({
+      ...sendInput,
+      prisma: prisma as never,
+      tasksDone: 1,
+    });
+
+    expect(evolution.sendText).toHaveBeenCalledTimes(1);
+    expect(
+      logs.get(
+        reminderLogKey(sendInput.userId, localDay, CHECKIN_ACK_FIRST_KIND),
+      )?.status,
+    ).toBe('SENT');
+  });
+
+  it('skips when whatsapp opt-in is false', async () => {
+    const { prisma, logs } = createReminderLogStore();
+    const { service, evolution } = createService();
+
+    await service.trySendFirstLogAck({
+      ...sendInput,
+      prisma: prisma as never,
+      whatsappOptIn: false,
+      tasksDone: 1,
+    });
+
+    expect(evolution.sendText).not.toHaveBeenCalled();
+    expect(logs.size).toBe(0);
+  });
+
+  it('skips when phone is missing', async () => {
+    const { prisma, logs } = createReminderLogStore();
+    const { service, evolution } = createService();
+
+    await service.trySendFirstLogAck({
+      ...sendInput,
+      prisma: prisma as never,
+      phone: null,
+      tasksDone: 1,
+    });
+
+    expect(evolution.sendText).not.toHaveBeenCalled();
+    expect(logs.size).toBe(0);
+  });
+
+  it('sends at most once when two parallel claims race', async () => {
+    const { prisma } = createReminderLogStore();
+    const { service, evolution } = createService();
+
+    await Promise.all([
+      service.trySendFirstLogAck({
+        ...sendInput,
+        prisma: prisma as never,
+        tasksDone: 1,
+      }),
+      service.trySendFirstLogAck({
+        ...sendInput,
+        prisma: prisma as never,
+        tasksDone: 1,
+      }),
+    ]);
+
+    expect(evolution.sendText).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows first-log and day-complete acks on the same day', async () => {
+    const { prisma, logs } = createReminderLogStore();
+    const { service, evolution } = createService();
+
+    await service.trySendFirstLogAck({
+      ...sendInput,
+      prisma: prisma as never,
+      tasksDone: 1,
+    });
+    await service.trySendDayCompleteAck({
+      ...sendInput,
+      prisma: prisma as never,
+      tasksDone: 3,
+    });
+
+    expect(evolution.sendText).toHaveBeenCalledTimes(2);
+    expect(
+      logs.get(
+        reminderLogKey(sendInput.userId, localDay, CHECKIN_ACK_FIRST_KIND),
+      )?.status,
+    ).toBe('SENT');
+    expect(
+      logs.get(reminderLogKey(sendInput.userId, localDay, CHECKIN_ACK_KIND))
+        ?.status,
+    ).toBe('SENT');
   });
 });

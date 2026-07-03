@@ -7,7 +7,10 @@ import {
 } from '@workspace-starter/db';
 import { ActivitiesService } from '../src/services/activities.service';
 import { addLocalDays, getUserLocalDate } from '../src/utils/day-window';
-import { CHECKIN_ACK_KIND } from '../src/whatsapp/checkin-ack-message.service';
+import {
+  CHECKIN_ACK_FIRST_KIND,
+  CHECKIN_ACK_KIND,
+} from '../src/whatsapp/checkin-ack-message.service';
 
 const USER_ID = 'user-1';
 const GROUP_ID = 'group-1';
@@ -344,38 +347,51 @@ function createFixture() {
       fn(prisma),
   };
 
-  return { prisma, user, today, activityLogs };
+  return { prisma, user, today, activityLogs, activityMap };
 }
 
 describe('activities check-in ack trigger', () => {
   let trySendDayCompleteAck: ReturnType<typeof vi.fn>;
+  let trySendFirstLogAck: ReturnType<typeof vi.fn>;
   let service: ActivitiesService;
 
   beforeEach(() => {
     trySendDayCompleteAck = vi.fn().mockResolvedValue(undefined);
+    trySendFirstLogAck = vi.fn().mockResolvedValue(undefined);
     service = new ActivitiesService({
       trySendDayCompleteAck,
+      trySendFirstLogAck,
     } as never);
   });
 
-  it('does not ack on partial completion (perfect-day branch only)', async () => {
+  it('acks on first partial log of the day', async () => {
     const { prisma } = createFixture();
 
     await service.markActivity(prisma as never, USER_ID, DIET_ID);
     await vi.waitFor(() => {
+      expect(trySendFirstLogAck).toHaveBeenCalledTimes(1);
       expect(trySendDayCompleteAck).not.toHaveBeenCalled();
     });
+    expect(trySendFirstLogAck).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: USER_ID,
+        tasksDone: 1,
+        whatsappOptIn: true,
+      }),
+    );
   });
 
   it('acks once when the day transitions to perfect-day complete', async () => {
     const { prisma } = createFixture();
 
     await service.markActivity(prisma as never, USER_ID, DIET_ID);
+    await vi.waitFor(() => expect(trySendFirstLogAck).toHaveBeenCalledTimes(1));
     await service.logNumber(prisma as never, USER_ID, WATER_ID, 3.8);
     await service.markActivity(prisma as never, USER_ID, PHOTO_ID);
 
     await vi.waitFor(() => {
       expect(trySendDayCompleteAck).toHaveBeenCalledTimes(1);
+      expect(trySendFirstLogAck).toHaveBeenCalledTimes(1);
     });
     expect(trySendDayCompleteAck).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -386,10 +402,25 @@ describe('activities check-in ack trigger', () => {
     );
   });
 
+  it('sends only day-complete ack on a single-habit day', async () => {
+    const { prisma, activityMap } = createFixture();
+    for (const id of [WATER_ID, PHOTO_ID]) {
+      activityMap.delete(id);
+    }
+
+    await service.markActivity(prisma as never, USER_ID, DIET_ID);
+
+    await vi.waitFor(() => {
+      expect(trySendDayCompleteAck).toHaveBeenCalledTimes(1);
+      expect(trySendFirstLogAck).not.toHaveBeenCalled();
+    });
+  });
+
   it('does not ack again after undo and redo the same day (service dedupe)', async () => {
     const { prisma } = createFixture();
 
     await service.markActivity(prisma as never, USER_ID, DIET_ID);
+    await vi.waitFor(() => expect(trySendFirstLogAck).toHaveBeenCalledTimes(1));
     await service.logNumber(prisma as never, USER_ID, WATER_ID, 3.8);
     await service.markActivity(prisma as never, USER_ID, PHOTO_ID);
     await vi.waitFor(() =>
@@ -401,6 +432,7 @@ describe('activities check-in ack trigger', () => {
     await vi.waitFor(() =>
       expect(trySendDayCompleteAck).toHaveBeenCalledTimes(1),
     );
+    expect(trySendFirstLogAck).toHaveBeenCalledTimes(1);
   });
 
   it('does not ack when backfilling a historical date', async () => {
@@ -425,6 +457,7 @@ describe('activities check-in ack trigger', () => {
 
     await vi.waitFor(() => {
       expect(trySendDayCompleteAck).not.toHaveBeenCalled();
+      expect(trySendFirstLogAck).not.toHaveBeenCalled();
     });
   });
 
@@ -446,7 +479,8 @@ describe('activities check-in ack trigger', () => {
     );
   });
 
-  it('exports CHECKIN_ACK kind for ReminderLog wiring', () => {
+  it('exports CHECKIN_ACK kinds for ReminderLog wiring', () => {
     expect(CHECKIN_ACK_KIND).toBe('CHECKIN_ACK');
+    expect(CHECKIN_ACK_FIRST_KIND).toBe('CHECKIN_ACK_FIRST');
   });
 });

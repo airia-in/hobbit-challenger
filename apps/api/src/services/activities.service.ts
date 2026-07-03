@@ -1235,6 +1235,12 @@ export class ActivitiesService {
       challengeId: ctx.challenge.id,
       date: viewedDate,
     });
+    const wasScoredDayEmpty = !(await this.hadScoredLogsToday(prisma, {
+      userId,
+      groupId: ctx.user.groupId,
+      challengeId: ctx.challenge.id,
+      date: viewedDate,
+    }));
     await assertCanMutateForDate(
       prisma,
       ctx.challenge.id,
@@ -1335,13 +1341,15 @@ export class ActivitiesService {
           ctx.challenge.id,
           ctx.activity,
         );
-        this.scheduleCheckinAckIfDayJustCompleted(prisma, {
+        this.scheduleCheckinAcks(prisma, {
           user: ctx.user,
           challenge: ctx.challenge,
           viewedDate,
           viewedKey,
           todayKey,
           wasScoredDayComplete,
+          wasScoredDayEmpty,
+          isScoredMutation: ctx.activity.scored && !ctx.activity.isPersonal,
           dayTotals: result.dayTotals,
         });
         return result;
@@ -1421,6 +1429,12 @@ export class ActivitiesService {
       challengeId: ctx.challenge.id,
       date: viewedDate,
     });
+    const wasScoredDayEmpty = !(await this.hadScoredLogsToday(prisma, {
+      userId,
+      groupId: ctx.user.groupId,
+      challengeId: ctx.challenge.id,
+      date: viewedDate,
+    }));
     await assertCanMutateForDate(
       prisma,
       ctx.challenge.id,
@@ -1530,17 +1544,50 @@ export class ActivitiesService {
           ctx.challenge.id,
           ctx.activity,
         );
-        this.scheduleCheckinAckIfDayJustCompleted(prisma, {
+        this.scheduleCheckinAcks(prisma, {
           user: ctx.user,
           challenge: ctx.challenge,
           viewedDate,
           viewedKey,
           todayKey,
           wasScoredDayComplete,
+          wasScoredDayEmpty,
+          isScoredMutation: ctx.activity.scored && !ctx.activity.isPersonal,
           dayTotals: result.dayTotals,
         });
         return result;
       });
+  }
+
+  private async getScoredDayLoggingStatus(
+    prisma: PrismaClientLike,
+    params: {
+      userId: string;
+      groupId: string | null;
+      challengeId: string;
+      date: Date;
+    },
+  ) {
+    const activities = await loadUserActivities(prisma, {
+      userId: params.userId,
+      groupId: params.groupId,
+    });
+    const scoredIds = activities
+      .filter((activity) => activity.scored && !activity.isPersonal)
+      .map((activity) => activity.id);
+
+    const logs = await prisma.activityLog.findMany({
+      where: {
+        challengeId: params.challengeId,
+        userId: params.userId,
+        date: params.date,
+      },
+    });
+
+    return {
+      scoredIds,
+      ...computeDayLoggingStatus(scoredIds, logs),
+    };
   }
 
   private async isScoredDayComplete(
@@ -1552,26 +1599,27 @@ export class ActivitiesService {
       date: Date;
     },
   ): Promise<boolean> {
-    const activities = await loadUserActivities(prisma, {
-      userId: params.userId,
-      groupId: params.groupId,
-    });
-    const scoredIds = activities
-      .filter((activity) => activity.scored && !activity.isPersonal)
-      .map((activity) => activity.id);
-    if (scoredIds.length === 0) {
-      return false;
-    }
+    const { allScoredLogged } = await this.getScoredDayLoggingStatus(
+      prisma,
+      params,
+    );
+    return allScoredLogged;
+  }
 
-    const logs = await prisma.activityLog.findMany({
-      where: {
-        challengeId: params.challengeId,
-        userId: params.userId,
-        date: params.date,
-      },
-    });
-
-    return computeDayLoggingStatus(scoredIds, logs).allScoredLogged;
+  private async hadScoredLogsToday(
+    prisma: PrismaClientLike,
+    params: {
+      userId: string;
+      groupId: string | null;
+      challengeId: string;
+      date: Date;
+    },
+  ): Promise<boolean> {
+    const { loggedActivityIds } = await this.getScoredDayLoggingStatus(
+      prisma,
+      params,
+    );
+    return loggedActivityIds.length > 0;
   }
 
   private scheduleActivityLoggedEvent(
@@ -1593,7 +1641,7 @@ export class ActivitiesService {
     );
   }
 
-  private scheduleCheckinAckIfDayJustCompleted(
+  private scheduleCheckinAcks(
     prisma: PrismaService,
     params: {
       user: {
@@ -1609,6 +1657,8 @@ export class ActivitiesService {
       viewedKey: string;
       todayKey: string;
       wasScoredDayComplete: boolean;
+      wasScoredDayEmpty: boolean;
+      isScoredMutation: boolean;
       dayTotals: DayTotals;
     },
   ): void {
@@ -1618,15 +1668,76 @@ export class ActivitiesService {
     if (params.viewedKey !== params.todayKey) {
       return;
     }
-    // Issue #140 AC reads "after first scored log … or on perfect day". We
-    // deliberately implement the perfect-day branch only to avoid ack spam on
-    // partial days; first-log ack is out of scope for this branch.
-    if (params.wasScoredDayComplete) {
+
+    if (!params.wasScoredDayComplete) {
+      void this.notifyCheckinAckIfDayComplete(prisma, params).catch((error) => {
+        this.logger.error('Check-in ack notify failed:', error);
+      });
+    }
+
+    if (params.wasScoredDayEmpty && params.isScoredMutation) {
+      void this.notifyCheckinAckIfFirstLog(prisma, params).catch((error) => {
+        this.logger.error('First-log check-in ack notify failed:', error);
+      });
+    }
+  }
+
+  private async notifyCheckinAckIfFirstLog(
+    prisma: PrismaService,
+    params: {
+      user: {
+        id: string;
+        name: string;
+        phone: string | null;
+        whatsappOptIn: boolean;
+        timezone: string;
+        groupId: string | null;
+      };
+      challenge: { id: string; currentStreak: number };
+      viewedDate: Date;
+      dayTotals: DayTotals;
+    },
+  ): Promise<void> {
+    const isCompleteNow = await this.isScoredDayComplete(prisma, {
+      userId: params.user.id,
+      groupId: params.user.groupId,
+      challengeId: params.challenge.id,
+      date: params.viewedDate,
+    });
+    // Single-habit day: first log completes the day — day-complete ack wins.
+    if (isCompleteNow) {
       return;
     }
 
-    void this.notifyCheckinAckIfDayComplete(prisma, params).catch((error) => {
-      this.logger.error('Check-in ack notify failed:', error);
+    const { loggedActivityIds } = await this.getScoredDayLoggingStatus(prisma, {
+      userId: params.user.id,
+      groupId: params.user.groupId,
+      challengeId: params.challenge.id,
+      date: params.viewedDate,
+    });
+    if (loggedActivityIds.length === 0) {
+      return;
+    }
+
+    const currentStreak = await getLiveStreak(prisma, {
+      challengeId: params.challenge.id,
+      userId: params.user.id,
+      groupId: params.user.groupId,
+      timezone: params.user.timezone,
+      storedStreak: params.challenge.currentStreak,
+    });
+
+    await this.checkinAck!.trySendFirstLogAck({
+      prisma,
+      userId: params.user.id,
+      userName: params.user.name,
+      phone: params.user.phone,
+      whatsappOptIn: params.user.whatsappOptIn,
+      localDay: params.viewedDate,
+      timezone: params.user.timezone,
+      currentStreak,
+      todayNetXp: params.dayTotals.netXp,
+      tasksDone: loggedActivityIds.length,
     });
   }
 
@@ -1656,21 +1767,12 @@ export class ActivitiesService {
       return;
     }
 
-    const activities = await loadUserActivities(prisma, {
+    const { loggedActivityIds } = await this.getScoredDayLoggingStatus(prisma, {
       userId: params.user.id,
       groupId: params.user.groupId,
+      challengeId: params.challenge.id,
+      date: params.viewedDate,
     });
-    const scoredIds = activities
-      .filter((activity) => activity.scored && !activity.isPersonal)
-      .map((activity) => activity.id);
-    const logs = await prisma.activityLog.findMany({
-      where: {
-        challengeId: params.challenge.id,
-        userId: params.user.id,
-        date: params.viewedDate,
-      },
-    });
-    const { loggedActivityIds } = computeDayLoggingStatus(scoredIds, logs);
 
     const currentStreak = await getLiveStreak(prisma, {
       challengeId: params.challenge.id,

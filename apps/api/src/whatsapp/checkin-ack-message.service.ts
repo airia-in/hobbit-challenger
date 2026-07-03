@@ -12,8 +12,11 @@ import {
   type ReminderMessaging,
 } from './openai-reminder.service';
 
-/** ReminderLog kind for one-shot web day-complete acknowledgments (#140). */
+/** ReminderLog kind for one-shot day-complete acknowledgments (#140 / #162). */
 export const CHECKIN_ACK_KIND = 'CHECKIN_ACK';
+
+/** ReminderLog kind for first scored log of the local day (#173). */
+export const CHECKIN_ACK_FIRST_KIND = 'CHECKIN_ACK_FIRST';
 
 export type CheckinAckStatus = 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED_OPTOUT';
 
@@ -28,12 +31,20 @@ export type CheckinAckContext = {
 };
 
 const PROMPT_FILE = 'checkin-ack.jinja';
+const PROMPT_FILE_FIRST = 'checkin-ack-first.jinja';
 
 const CHECKIN_ACK_FALLBACK_VARIANTS: readonly string[] = [
   "Pack's empty, {{name}} — I saw that from here. {{streakLine}}",
   'Every scored habit logged today. Nice work on the trail, {{name}}. {{streakLine}}',
   "The pack's clear for today, {{name}}. {{streakLine}}",
   "I caught that from here — today's habits are done, {{name}}. {{streakLine}}",
+];
+
+const CHECKIN_ACK_FIRST_FALLBACK_VARIANTS: readonly string[] = [
+  "First step on today's trail, {{name}} — I saw that from here. {{streakLine}}",
+  'Nice opener for today, {{name}}. {{streakLine}}',
+  "Trail's started — I caught your first log today, {{name}}. {{streakLine}}",
+  'First habit in the pack today, {{name}}. {{streakLine}}',
 ];
 
 /**
@@ -82,8 +93,8 @@ export function buildCheckinAckStreakLine(
   return 'Fresh path tomorrow.';
 }
 
-export function checkinAckFallbackSeed(context: CheckinAckContext): number {
-  const input = `${context.name}:${context.currentStreak}:${context.tasksDone}:CHECKIN_ACK`;
+function hashCheckinAckSeed(context: CheckinAckContext, kind: string): number {
+  const input = `${context.name}:${context.currentStreak}:${context.tasksDone}:${kind}`;
   let hash = 0;
   for (let i = 0; i < input.length; i += 1) {
     hash = (hash * 31 + input.charCodeAt(i)) >>> 0;
@@ -91,16 +102,27 @@ export function checkinAckFallbackSeed(context: CheckinAckContext): number {
   return hash;
 }
 
+export function checkinAckFallbackSeed(context: CheckinAckContext): number {
+  return hashCheckinAckSeed(context, CHECKIN_ACK_KIND);
+}
+
+export function checkinAckFirstFallbackSeed(
+  context: CheckinAckContext,
+): number {
+  return hashCheckinAckSeed(context, CHECKIN_ACK_FIRST_KIND);
+}
+
 function pickVariant<T>(variants: readonly T[], seed: number): T {
   return variants[seed % variants.length]!;
 }
 
-export function buildCheckinAckFallback(
+function buildCheckinAckFallbackFromVariants(
+  variants: readonly string[],
   context: CheckinAckContext,
-  messaging: ReminderMessaging = buildReminderMessaging(),
-  seed = checkinAckFallbackSeed(context),
+  messaging: ReminderMessaging,
+  seed: number,
 ): string {
-  const template = pickVariant(CHECKIN_ACK_FALLBACK_VARIANTS, seed);
+  const template = pickVariant(variants, seed);
   const streakLine = buildCheckinAckStreakLine(
     context.currentStreak,
     context.todayNetXp,
@@ -109,6 +131,32 @@ export function buildCheckinAckFallback(
     .replaceAll('{{name}}', context.name)
     .replaceAll('{{streakLine}}', streakLine)
     .replaceAll('{{brandName}}', messaging.brandName);
+}
+
+export function buildCheckinAckFallback(
+  context: CheckinAckContext,
+  messaging: ReminderMessaging = buildReminderMessaging(),
+  seed = checkinAckFallbackSeed(context),
+): string {
+  return buildCheckinAckFallbackFromVariants(
+    CHECKIN_ACK_FALLBACK_VARIANTS,
+    context,
+    messaging,
+    seed,
+  );
+}
+
+export function buildCheckinAckFirstFallback(
+  context: CheckinAckContext,
+  messaging: ReminderMessaging = buildReminderMessaging(),
+  seed = checkinAckFirstFallbackSeed(context),
+): string {
+  return buildCheckinAckFallbackFromVariants(
+    CHECKIN_ACK_FIRST_FALLBACK_VARIANTS,
+    context,
+    messaging,
+    seed,
+  );
 }
 
 export function interpolateCheckinAckPrompt(
@@ -163,12 +211,35 @@ export class CheckinAckMessageService {
   }
 
   async compose(context: CheckinAckContext): Promise<string> {
+    return this.composeFromPrompt(
+      PROMPT_FILE,
+      context,
+      buildCheckinAckFallback,
+    );
+  }
+
+  async composeFirstLog(context: CheckinAckContext): Promise<string> {
+    return this.composeFromPrompt(
+      PROMPT_FILE_FIRST,
+      context,
+      buildCheckinAckFirstFallback,
+    );
+  }
+
+  private async composeFromPrompt(
+    promptFile: string,
+    context: CheckinAckContext,
+    fallback: (
+      context: CheckinAckContext,
+      messaging: ReminderMessaging,
+    ) => string,
+  ): Promise<string> {
     if (!this.openai) {
-      return buildCheckinAckFallback(context, this.messaging);
+      return fallback(context, this.messaging);
     }
 
     try {
-      const prompt = await loadPromptFile(PROMPT_FILE);
+      const prompt = await loadPromptFile(promptFile);
       const systemPrompt = interpolateCheckinAckPrompt(
         prompt.system,
         context,
@@ -196,7 +267,7 @@ export class CheckinAckMessageService {
       return content;
     } catch (error) {
       this.logger.error('Check-in ack compose failed:', error);
-      return buildCheckinAckFallback(context, this.messaging);
+      return fallback(context, this.messaging);
     }
   }
 
@@ -212,10 +283,50 @@ export class CheckinAckMessageService {
     todayNetXp: number;
     tasksDone: number;
   }): Promise<void> {
+    await this.trySendCheckinAck({
+      ...input,
+      kind: CHECKIN_ACK_KIND,
+      compose: (context) => this.compose(context),
+    });
+  }
+
+  async trySendFirstLogAck(input: {
+    prisma: PrismaService;
+    userId: string;
+    userName: string;
+    phone: string | null;
+    whatsappOptIn: boolean;
+    localDay: Date;
+    timezone: string;
+    currentStreak: number;
+    todayNetXp: number;
+    tasksDone: number;
+  }): Promise<void> {
+    await this.trySendCheckinAck({
+      ...input,
+      kind: CHECKIN_ACK_FIRST_KIND,
+      compose: (context) => this.composeFirstLog(context),
+    });
+  }
+
+  private async trySendCheckinAck(input: {
+    prisma: PrismaService;
+    userId: string;
+    userName: string;
+    phone: string | null;
+    whatsappOptIn: boolean;
+    localDay: Date;
+    timezone: string;
+    currentStreak: number;
+    todayNetXp: number;
+    tasksDone: number;
+    kind: string;
+    compose: (context: CheckinAckContext) => Promise<string>;
+  }): Promise<void> {
     const logKey = {
       userId: input.userId,
       date: input.localDay,
-      kind: CHECKIN_ACK_KIND,
+      kind: input.kind,
     };
 
     try {
@@ -252,7 +363,7 @@ export class CheckinAckMessageService {
           streakBucket: resolveCheckinAckStreakBucket(input.currentStreak),
         };
 
-        const text = await this.compose(context);
+        const text = await input.compose(context);
         const result = await this.evolution.sendText(input.phone, text);
         status = result.ok ? 'SENT' : 'FAILED';
       } catch (error) {
@@ -264,7 +375,7 @@ export class CheckinAckMessageService {
       trackReminderSentFireAndForget(
         input.prisma,
         input.userId,
-        CHECKIN_ACK_KIND,
+        input.kind,
         status,
       );
     } catch (error) {

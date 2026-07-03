@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { cn } from '../utils/cn';
 
 export type ProofUploaderProps = {
@@ -31,6 +31,7 @@ export function ProofUploader({
   disabled = false,
 }: ProofUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(value ?? null);
@@ -103,6 +104,11 @@ export function ProofUploader({
     };
   }, [authToken, base, preview]);
 
+  function handleInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (file) void handleFile(file);
+  }
+
   async function handleFile(file: File) {
     if (!authToken) {
       const message = 'Not authenticated';
@@ -162,11 +168,22 @@ export function ProofUploader({
         capture={capture}
         className="hidden"
         disabled={disabled || uploading}
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) void handleFile(file);
-        }}
+        onChange={handleInputChange}
       />
+
+      {/* When the primary input opens the camera directly (capture set), keep a
+          second input without `capture` so users can still pick an existing
+          photo from their gallery instead of being forced to take a new one. */}
+      {capture && (
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept={accept}
+          className="hidden"
+          disabled={disabled || uploading}
+          onChange={handleInputChange}
+        />
+      )}
 
       <button
         type="button"
@@ -179,6 +196,20 @@ export function ProofUploader({
       >
         {uploading ? 'Uploading...' : buttonLabel}
       </button>
+
+      {capture && (
+        <button
+          type="button"
+          disabled={disabled || uploading}
+          onClick={() => galleryInputRef.current?.click()}
+          className={cn(
+            'w-full text-sm text-[var(--text-muted)] underline-offset-2 transition hover:text-[var(--text-primary)] hover:underline disabled:opacity-50',
+            buttonClassName,
+          )}
+        >
+          {preview ? 'Replace from gallery' : 'Upload from gallery'}
+        </button>
+      )}
 
       {error && (
         <p role="alert" className="text-sm text-[var(--accent-red)]">

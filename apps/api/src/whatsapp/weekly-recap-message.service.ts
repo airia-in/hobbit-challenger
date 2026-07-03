@@ -60,6 +60,16 @@ export function ensureWeeklyRecapDashboardUrl(
   return `${text} ${messaging.dashboardUrl}`;
 }
 
+export function ensureWeeklyRecapFocusOptionsLine(
+  text: string,
+  focusOptionsLine: string,
+): string {
+  if (!focusOptionsLine || text.includes(focusOptionsLine)) {
+    return text;
+  }
+  return `${text}\n\n${focusOptionsLine}`;
+}
+
 export function buildWeeklyRecapCopyLines(
   rollup: WeeklyRecapRollup,
 ): Record<string, string> {
@@ -234,7 +244,11 @@ export class WeeklyRecapMessageService {
       return;
     }
 
-    const text = await this.compose(input.context);
+    const composed = await this.compose(input.context);
+    const text = ensureWeeklyRecapFocusOptionsLine(
+      composed,
+      input.context.rollup.focusOptionsLine,
+    );
     const result = await this.evolution.sendText(input.phone, text);
     const status: WeeklyRecapStatus = result.ok ? 'SENT' : 'FAILED';
     const metadata =

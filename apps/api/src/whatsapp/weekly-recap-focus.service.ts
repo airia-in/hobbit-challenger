@@ -1,9 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@workspace-starter/db';
 import {
   parseWeeklyRecapReminderMetadata,
   type WeeklyRecapReminderMetadata,
 } from '@workspace-starter/types';
 import { PrismaService } from '../prisma/prisma.service';
+import { sanitizeUserPromptText } from '../utils/sanitize-prompt-input';
 import {
   formatLocalDateKey,
   getDatePartsInTimezone,
@@ -138,10 +140,11 @@ export class WeeklyRecapFocusService {
     const sourceRecapWeekStartKey = formatLocalDateKey(log.date, timezone);
     const targetWeekStartKey = addDaysToDateKey(sourceRecapWeekStartKey, 7);
     const chosenAt = new Date().toISOString();
+    const sanitizedName = sanitizeUserPromptText(option.name);
     const focusChoice = {
       index,
       activityId: option.activityId,
-      name: option.name,
+      name: sanitizedName,
       chosenAt,
     };
     const updatedMetadata: WeeklyRecapReminderMetadata = {
@@ -149,41 +152,62 @@ export class WeeklyRecapFocusService {
       focusChoice,
     };
 
-    await this.prisma.$transaction([
-      this.prisma.reminderLog.update({
-        where: { id: log.id },
-        data: { metadata: updatedMetadata },
-      }),
-      this.prisma.user.update({
+    const claimed = await this.prisma.$transaction(async (tx) => {
+      const logUpdate = await tx.reminderLog.updateMany({
+        where: {
+          id: log.id,
+          metadata: {
+            equals: metadata as Prisma.InputJsonValue,
+          },
+        },
+        data: {
+          metadata: updatedMetadata as Prisma.InputJsonValue,
+        },
+      });
+
+      if (logUpdate.count === 0) {
+        return false;
+      }
+
+      await tx.user.update({
         where: { id: userId },
         data: {
           recapFocus: {
             targetWeekStartKey,
             activityId: option.activityId,
-            activityName: option.name,
+            activityName: sanitizedName,
             sourceRecapWeekStartKey,
             chosenAt,
           },
         },
-      }),
-    ]);
+      });
+
+      return true;
+    });
+
+    if (!claimed) {
+      return;
+    }
 
     this.logger.debug(
-      `Stored recap focus for user ${userId}: ${option.name} (${index})`,
+      `Stored recap focus for user ${userId}: ${sanitizedName} (${index})`,
     );
   }
 
   async findOpenRecapFocusLog(
     userId: string,
+    now = new Date(),
   ): Promise<RecapFocusLogRow | null> {
+    const replyWindowStart = new Date(now.getTime() - RECAP_FOCUS_REPLY_MAX_MS);
     const logs = await this.prisma.reminderLog.findMany({
       where: {
         userId,
         kind: WEEKLY_RECAP_KIND,
         status: 'SENT',
+        sentAt: { gte: replyWindowStart },
       },
       orderBy: { sentAt: 'desc' },
-      take: 10,
+      take: 20,
       select: {
         id: true,
         date: true,

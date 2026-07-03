@@ -17,39 +17,76 @@ const openMetadata = {
   ],
 };
 
-function createPrisma(seed: {
-  logs?: Array<{
-    id: string;
-    userId: string;
-    date: Date;
-    sentAt: Date;
-    metadata: unknown;
-  }>;
-}) {
+type LogRow = {
+  id: string;
+  userId: string;
+  date: Date;
+  sentAt: Date;
+  metadata: unknown;
+};
+
+function createPrisma(seed: { logs?: LogRow[] }) {
   const logs = [...(seed.logs ?? [])];
   const userUpdate = vi.fn().mockResolvedValue({});
-  const logUpdate = vi.fn().mockResolvedValue({});
+
+  const updateMany = vi.fn(
+    async ({
+      where,
+      data,
+    }: {
+      where: { id: string; metadata: { equals: unknown } };
+      data: { metadata: unknown };
+    }) => {
+      const log = logs.find((row) => row.id === where.id);
+      if (!log) {
+        return { count: 0 };
+      }
+      if (
+        JSON.stringify(log.metadata) !== JSON.stringify(where.metadata.equals)
+      ) {
+        return { count: 0 };
+      }
+      log.metadata = data.metadata;
+      return { count: 1 };
+    },
+  );
 
   return {
     prisma: {
       reminderLog: {
-        findMany: vi.fn(async () =>
-          logs
-            .filter((log) => log.userId === USER_ID)
-            .sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime()),
+        findMany: vi.fn(
+          async ({
+            where,
+          }: {
+            where: {
+              userId: string;
+              sentAt?: { gte: Date };
+            };
+          }) => {
+            let filtered = logs.filter((log) => log.userId === where.userId);
+            if (where.sentAt?.gte) {
+              filtered = filtered.filter(
+                (log) => log.sentAt.getTime() >= where.sentAt!.gte.getTime(),
+              );
+            }
+            return filtered.sort(
+              (a, b) => b.sentAt.getTime() - a.sentAt.getTime(),
+            );
+          },
         ),
-        update: logUpdate,
+        updateMany,
       },
       user: {
         update: userUpdate,
       },
-      $transaction: vi.fn(async (ops: Promise<unknown>[]) => {
-        for (const op of ops) {
-          await op;
-        }
-      }),
+      $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({
+          reminderLog: { updateMany },
+          user: { update: userUpdate },
+        }),
+      ),
     },
-    logUpdate,
+    updateMany,
     userUpdate,
     logs,
   };
@@ -62,7 +99,7 @@ describe('WeeklyRecapFocusService', () => {
   });
 
   it('maps inbound index to stored option and persists focus', async () => {
-    const { prisma, logUpdate, userUpdate } = createPrisma({
+    const { prisma, updateMany, userUpdate } = createPrisma({
       logs: [
         {
           id: 'log-1',
@@ -77,9 +114,9 @@ describe('WeeklyRecapFocusService', () => {
 
     await service.handleFocusReply(USER_ID, 2, TZ);
 
-    expect(logUpdate).toHaveBeenCalledWith(
+    expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'log-1' },
+        where: { id: 'log-1', metadata: { equals: openMetadata } },
         data: expect.objectContaining({
           metadata: expect.objectContaining({
             focusChoice: expect.objectContaining({
@@ -108,7 +145,7 @@ describe('WeeklyRecapFocusService', () => {
 
   it('ignores stale recap replies outside the window', async () => {
     vi.setSystemTime(new Date('2026-07-20T12:00:00.000Z'));
-    const { prisma, logUpdate } = createPrisma({
+    const { prisma, updateMany } = createPrisma({
       logs: [
         {
           id: 'log-1',
@@ -122,19 +159,19 @@ describe('WeeklyRecapFocusService', () => {
     const service = new WeeklyRecapFocusService(prisma as never);
 
     await service.handleFocusReply(USER_ID, 1, TZ);
-    expect(logUpdate).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
   it('ignores replies when no open recap log exists', async () => {
-    const { prisma, logUpdate } = createPrisma({ logs: [] });
+    const { prisma, updateMany } = createPrisma({ logs: [] });
     const service = new WeeklyRecapFocusService(prisma as never);
 
     await service.handleFocusReply(USER_ID, 1, TZ);
-    expect(logUpdate).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
   it('ignores duplicate focus choice on the same recap log', async () => {
-    const { prisma, logUpdate } = createPrisma({
+    const { prisma, updateMany } = createPrisma({
       logs: [
         {
           id: 'log-1',
@@ -156,7 +193,73 @@ describe('WeeklyRecapFocusService', () => {
     const service = new WeeklyRecapFocusService(prisma as never);
 
     await service.handleFocusReply(USER_ID, 2, TZ);
-    expect(logUpdate).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('no-ops for out-of-range index at service level', async () => {
+    const { prisma, updateMany } = createPrisma({
+      logs: [
+        {
+          id: 'log-1',
+          userId: USER_ID,
+          date: RECAP_DATE,
+          sentAt: SENT_AT,
+          metadata: openMetadata,
+        },
+      ],
+    });
+    const service = new WeeklyRecapFocusService(prisma as never);
+
+    await service.handleFocusReply(USER_ID, 3, TZ);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('ignores open logs with malformed metadata', async () => {
+    const { prisma, updateMany } = createPrisma({
+      logs: [
+        {
+          id: 'log-1',
+          userId: USER_ID,
+          date: RECAP_DATE,
+          sentAt: SENT_AT,
+          metadata: {
+            focusOptions: [{ index: 9, activityId: 'x', name: 'Bad' }],
+          },
+        },
+      ],
+    });
+    const service = new WeeklyRecapFocusService(prisma as never);
+
+    await service.handleFocusReply(USER_ID, 1, TZ);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('allows only one winner for concurrent distinct focus replies', async () => {
+    const { prisma, userUpdate, logs } = createPrisma({
+      logs: [
+        {
+          id: 'log-1',
+          userId: USER_ID,
+          date: RECAP_DATE,
+          sentAt: SENT_AT,
+          metadata: openMetadata,
+        },
+      ],
+    });
+    const service = new WeeklyRecapFocusService(prisma as never);
+
+    await Promise.all([
+      service.handleFocusReply(USER_ID, 1, TZ),
+      service.handleFocusReply(USER_ID, 2, TZ),
+    ]);
+
+    expect(userUpdate).toHaveBeenCalledTimes(1);
+    const metadata = logs[0]!.metadata as {
+      focusChoice?: { index: number; activityId: string };
+    };
+    expect(metadata.focusChoice).toBeDefined();
+    expect([1, 2]).toContain(metadata.focusChoice!.index);
+    expect(['a1', 'a2']).toContain(metadata.focusChoice!.activityId);
   });
 
   it('no-ops for out-of-range index', () => {
@@ -221,5 +324,22 @@ describe('findOpenRecapFocusLog', () => {
     const log = await service.findOpenRecapFocusLog(USER_ID);
     expect(log?.id).toBe('open');
     expect(log?.metadata).toEqual(openMetadata);
+  });
+
+  it('excludes recaps sent outside the reply window lookback', async () => {
+    const { prisma } = createPrisma({
+      logs: [
+        {
+          id: 'stale',
+          userId: USER_ID,
+          date: new Date('2026-06-01T00:00:00.000Z'),
+          sentAt: new Date('2026-06-01T10:00:00.000Z'),
+          metadata: openMetadata,
+        },
+      ],
+    });
+    const service = new WeeklyRecapFocusService(prisma as never);
+    const log = await service.findOpenRecapFocusLog(USER_ID);
+    expect(log).toBeNull();
   });
 });

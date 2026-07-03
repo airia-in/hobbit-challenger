@@ -16,6 +16,7 @@ import {
   type WeeklyRecapEligibleRange,
 } from './weekly-recap-eligibility';
 import type { UserRecapFocus } from '@workspace-starter/types';
+import { sanitizeUserPromptText } from './sanitize-prompt-input';
 
 type ChallengeLike = {
   startDate: Date;
@@ -123,7 +124,11 @@ function buildPriorWeekFocusLine(
   if (!priorFocus || priorFocus.targetWeekStartKey !== weekStartKey) {
     return '';
   }
-  return `You picked ${priorFocus.activityName} as your focus last week — nice commitment.`;
+  const activityName = sanitizeUserPromptText(priorFocus.activityName);
+  if (!activityName) {
+    return '';
+  }
+  return `You picked ${activityName} as your focus last week — nice commitment.`;
 }
 
 export function buildFocusOptionsLine(

@@ -50,10 +50,10 @@ services:
       - '80:80'
       - '443:443'
     volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/templates:/etc/nginx/templates:ro
       - ./nginx/snippets:/etc/nginx/snippets:ro
-      - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:
       web-host:
         condition: service_started

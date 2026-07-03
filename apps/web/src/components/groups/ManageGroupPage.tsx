@@ -85,10 +85,11 @@ export function ManageGroupContent() {
             className="text-4xl text-[var(--accent-red)]"
             style={{ fontFamily: 'var(--font-display)' }}
           >
-            Create Your Squad
+            Choose your path
           </h1>
           <p className="mt-2 text-[var(--text-muted)]">
-            Start a group and invite others to hold each other accountable.
+            Travel with a fellowship or walk your own trail — both are honored
+            on this road.
           </p>
         </div>
 
@@ -100,7 +101,7 @@ export function ManageGroupContent() {
           className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6"
         >
           <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
-            Group name
+            Fellowship name
           </label>
           <input
             required
@@ -121,9 +122,35 @@ export function ManageGroupContent() {
             disabled={createGroup.isPending}
             className="w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-white hover:bg-[#c42a22] disabled:opacity-50"
           >
-            {createGroup.isPending ? 'Creating...' : 'Create Group'}
+            {createGroup.isPending ? 'Creating...' : 'Create Fellowship'}
           </button>
         </form>
+
+        <div className="relative my-8 text-center">
+          <span className="bg-[var(--bg-black)] px-3 text-xs uppercase tracking-widest text-[var(--text-muted)]">
+            or
+          </span>
+          <div
+            className="absolute inset-x-0 top-1/2 -z-10 border-t border-[var(--border)]"
+            aria-hidden
+          />
+        </div>
+
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 text-center">
+          <p className="mb-2 text-sm text-[var(--text-primary)]">
+            Walk the path solo
+          </p>
+          <p className="mb-6 text-sm text-[var(--text-muted)]">
+            Your seeded habits and trail stats are already on the dashboard.
+            Join a fellowship later without losing your journey.
+          </p>
+          <a
+            href="/dashboard"
+            className="inline-block w-full rounded border border-[var(--border)] bg-[var(--surface-raised)] py-3 text-sm font-bold uppercase tracking-widest text-[var(--text-primary)] transition hover:border-[var(--accent-red)] hover:text-[var(--accent-red)]"
+          >
+            Continue to dashboard
+          </a>
+        </div>
       </div>
     );
   }

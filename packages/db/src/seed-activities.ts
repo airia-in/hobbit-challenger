@@ -147,6 +147,40 @@ export const BUILTIN_ACTIVITIES: BuiltinActivitySeed[] = [
 
 type SeedClient = Pick<PrismaClient, 'activity'>;
 
+type SoloSeedClient = Pick<PrismaClient, 'activity'>;
+
+function builtinActivityData(
+  activity: BuiltinActivitySeed,
+  overrides: {
+    groupId?: string | null;
+    ownerUserId?: string | null;
+  },
+) {
+  return {
+    groupId: overrides.groupId ?? null,
+    ownerUserId: overrides.ownerUserId ?? null,
+    seedKey: activity.seedKey,
+    title: activity.title,
+    emoji: activity.emoji,
+    kind: activity.kind,
+    scored: activity.scored,
+    isPersonal: activity.isPersonal,
+    deductMultiplier: activity.deductMultiplier,
+    allowsProof: activity.allowsProof,
+    autoCompleteOnProof: activity.autoCompleteOnProof,
+    sortOrder: activity.sortOrder,
+    xpComplete: activity.xpComplete,
+    xpMiss: activity.xpMiss,
+    unitLabel: activity.unitLabel,
+    xpPerUnit: activity.xpPerUnit,
+    xpCap: activity.xpCap,
+    missXp: activity.missXp,
+    subPoints: activity.subPoints,
+    tiers: activity.tiers,
+    active: true,
+  };
+}
+
 export async function seedGroupActivities(
   prisma: SeedClient,
   groupId: string,
@@ -159,47 +193,58 @@ export async function seedGroupActivities(
           seedKey: activity.seedKey,
         },
       },
-      create: {
-        groupId,
-        seedKey: activity.seedKey,
-        title: activity.title,
-        emoji: activity.emoji,
-        kind: activity.kind,
-        scored: activity.scored,
-        isPersonal: activity.isPersonal,
-        deductMultiplier: activity.deductMultiplier,
-        allowsProof: activity.allowsProof,
-        autoCompleteOnProof: activity.autoCompleteOnProof,
-        sortOrder: activity.sortOrder,
-        xpComplete: activity.xpComplete,
-        xpMiss: activity.xpMiss,
-        unitLabel: activity.unitLabel,
-        xpPerUnit: activity.xpPerUnit,
-        xpCap: activity.xpCap,
-        missXp: activity.missXp,
-        subPoints: activity.subPoints,
-        tiers: activity.tiers,
-      },
+      create: builtinActivityData(activity, { groupId }),
       update: {
-        title: activity.title,
-        emoji: activity.emoji,
-        kind: activity.kind,
-        scored: activity.scored,
-        isPersonal: activity.isPersonal,
-        deductMultiplier: activity.deductMultiplier,
-        allowsProof: activity.allowsProof,
-        autoCompleteOnProof: activity.autoCompleteOnProof,
-        sortOrder: activity.sortOrder,
-        xpComplete: activity.xpComplete,
-        xpMiss: activity.xpMiss,
-        unitLabel: activity.unitLabel,
-        xpPerUnit: activity.xpPerUnit,
-        xpCap: activity.xpCap,
-        missXp: activity.missXp,
-        subPoints: activity.subPoints,
-        tiers: activity.tiers,
-        active: true,
+        ...builtinActivityData(activity, { groupId }),
       },
     });
   }
+}
+
+/** Builtin scored habits for groupless users (owner-scoped, not custom personal). */
+export async function seedSoloActivities(
+  prisma: SoloSeedClient,
+  userId: string,
+): Promise<void> {
+  for (const activity of BUILTIN_ACTIVITIES) {
+    const existing = await prisma.activity.findFirst({
+      where: {
+        ownerUserId: userId,
+        groupId: null,
+        seedKey: activity.seedKey,
+      },
+      select: { id: true },
+    });
+
+    const data = builtinActivityData(activity, {
+      groupId: null,
+      ownerUserId: userId,
+    });
+
+    if (existing) {
+      await prisma.activity.update({
+        where: { id: existing.id },
+        data,
+      });
+    } else {
+      await prisma.activity.create({ data });
+    }
+  }
+}
+
+/** Hide solo builtin habits once the user joins or creates a fellowship. */
+export async function deactivateSoloActivities(
+  prisma: SoloSeedClient,
+  userId: string,
+): Promise<void> {
+  await prisma.activity.updateMany({
+    where: {
+      ownerUserId: userId,
+      groupId: null,
+      scored: true,
+      isPersonal: false,
+      seedKey: { not: null },
+    },
+    data: { active: false },
+  });
 }

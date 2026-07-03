@@ -1,4 +1,5 @@
 import { TRPCError } from '@trpc/server';
+import { seedSoloActivities } from '@workspace-starter/db';
 import { z } from 'zod';
 import { normalizePhone, PhoneValidationError } from '../../auth/phone';
 import {
@@ -98,6 +99,8 @@ export const authRouter = router({
             lengthDays: range.lengthDays,
           },
         });
+
+        await seedSoloActivities(tx, created.id);
 
         return created;
       });

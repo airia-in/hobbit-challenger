@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
-import { seedGroupActivities } from '@workspace-starter/db';
+import {
+  seedGroupActivities,
+  deactivateSoloActivities,
+} from '@workspace-starter/db';
 import { z } from 'zod';
 import { latestChallengeRelationArgs } from '../../utils/challenge-query';
 import {
@@ -90,6 +93,7 @@ export const groupsRouter = router({
         });
 
         await seedGroupActivities(tx, created.id);
+        await deactivateSoloActivities(tx, ctx.user.id);
 
         const activeChallenge = await tx.challenge.findFirst({
           where: { userId: ctx.user.id, isActive: true },
@@ -451,6 +455,8 @@ export const groupsRouter = router({
         if (activityCount === 0) {
           await seedGroupActivities(tx, group.id);
         }
+
+        await deactivateSoloActivities(tx, ctx.user.id);
 
         const existingChallenge = await tx.challenge.findFirst({
           where: { userId: ctx.user.id, isActive: true },

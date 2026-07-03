@@ -160,6 +160,21 @@ describe('LoginForm', () => {
     });
   });
 
+  it('redirects groupless users to the dashboard (solo journey)', async () => {
+    mockGetToken.mockReturnValue('existing-token');
+    mockMeUseQuery.mockReturnValue({
+      data: { user: { groupId: null }, attempt: null },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<LoginForm />);
+
+    await waitFor(() => {
+      expect(locationHref).toBe('/dashboard');
+    });
+  });
+
   it('honors returnTo on the mount redirect (invite deep-link)', async () => {
     mockGetToken.mockReturnValue('existing-token');
     Object.defineProperty(window, 'location', {

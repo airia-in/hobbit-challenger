@@ -358,7 +358,9 @@ describe('query error surfaces', () => {
 
   it('offers retry when the leaderboard query fails', async () => {
     const refetch = vi.fn();
-    mockAuthMe.mockReturnValue(idleQuery({ user: { id: 'user-1' } }));
+    mockAuthMe.mockReturnValue(
+      idleQuery({ user: { id: 'user-1', groupId: 'group-1' } }),
+    );
     mockLeaderboardGet.mockReturnValue(
       errorQuery('Unable to load leaderboard', refetch),
     );
@@ -373,6 +375,42 @@ describe('query error surfaces', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it('shows a warm solo placeholder when the user has no fellowship', () => {
+    mockAuthMe.mockReturnValue(
+      idleQuery({ user: { id: 'user-1', groupId: null } }),
+    );
+    mockLeaderboardGet.mockReturnValue(idleQuery());
+
+    render(<LeaderboardContent />);
+
+    expect(
+      screen.getByText(
+        /no fellowship yet — your own trail stats live on the dashboard/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /start or join a fellowship/i }),
+    ).toHaveAttribute('href', '/join');
+    expect(mockLeaderboardGet).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+
+  it('shows solo path option on the join page when user has no group', () => {
+    mockGroupsGetMine.mockReturnValue(idleQuery(null));
+
+    render(<ManageGroupContent />);
+
+    expect(
+      screen.getByRole('heading', { name: /choose your path/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/walk the path solo/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /continue to dashboard/i }),
+    ).toHaveAttribute('href', '/dashboard');
   });
 
   it('offers retry when the dashboard heatmap query fails', async () => {

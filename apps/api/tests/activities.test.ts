@@ -1023,6 +1023,73 @@ describe('activities service', () => {
     expect(result.currentDay).toBe(1);
   });
 
+  it('getToday returns solo seeded builtin habits as scored activities', async () => {
+    const today = getUserLocalDate('UTC');
+    const grouplessUser: User = {
+      id: USER_ID,
+      name: 'Solo Traveler',
+      phone: null,
+      email: 'solo@example.com',
+      passwordHash: 'hash',
+      timezone: 'UTC',
+      groupId: null,
+      avatarUrl: null,
+      reminderTime: null,
+      createdAt: new Date(),
+    };
+    const challenge: Challenge = {
+      id: CHALLENGE_ID,
+      userId: USER_ID,
+      groupId: null,
+      startDate: today,
+      endDate: null,
+      lengthDays: 30,
+      currentDay: 1,
+      isActive: true,
+      totalXp: 0,
+      currentStreak: 0,
+      longestStreak: 0,
+    };
+    const soloDiet: Activity = {
+      id: DIET_ACTIVITY_ID,
+      groupId: null,
+      ownerUserId: USER_ID,
+      seedKey: 'DIET',
+      title: 'Diet',
+      emoji: '🥗',
+      kind: ActivityKind.SUBPOINTS,
+      scored: true,
+      isPersonal: false,
+      xpComplete: null,
+      xpMiss: null,
+      unitLabel: null,
+      xpPerUnit: null,
+      xpCap: null,
+      missXp: null,
+      subPoints: [{ key: 'HEALTHY', label: 'Healthy', xp: 60 }],
+      tiers: null,
+      deductMultiplier: 3,
+      allowsProof: false,
+      autoCompleteOnProof: false,
+      sortOrder: 1,
+      active: true,
+      createdAt: new Date(),
+    };
+
+    fake = createFakePrisma({
+      users: [grouplessUser],
+      challenges: [challenge],
+      activities: [soloDiet],
+    });
+    service = createService();
+
+    const result = await service.getToday(fake.prisma, USER_ID);
+
+    expect(result.scoredActivities).toHaveLength(1);
+    expect(result.scoredActivities[0]?.seedKey).toBe('DIET');
+    expect(result.personalActivities).toHaveLength(0);
+  });
+
   it('getToday returns current streaks for completion activities', async () => {
     const today = getUserLocalDate('UTC');
     const yesterday = addUtcDays(today, -1);

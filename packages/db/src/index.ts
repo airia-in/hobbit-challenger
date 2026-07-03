@@ -8,5 +8,10 @@ export {
 } from './prisma-client';
 export type { CreatePrismaClientOptions } from './prisma-client';
 export { applyLibsqlMigrations } from './migrate-libsql';
-export { BUILTIN_ACTIVITIES, seedGroupActivities } from './seed-activities';
+export {
+  BUILTIN_ACTIVITIES,
+  deactivateSoloActivities,
+  seedGroupActivities,
+  seedSoloActivities,
+} from './seed-activities';
 export type { BuiltinActivitySeed } from './seed-activities';

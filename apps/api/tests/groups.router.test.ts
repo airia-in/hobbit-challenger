@@ -1,6 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { TRPCError } from '@trpc/server';
-import { seedGroupActivities } from '@workspace-starter/db';
+import {
+  seedGroupActivities,
+  deactivateSoloActivities,
+} from '@workspace-starter/db';
 import { groupsRouter } from '../src/trpc/routers/groups.router';
 import { DEFAULT_CHALLENGE_WINDOW_DAYS } from '../src/utils/challenge-range';
 import type { Context } from '../src/trpc/context';
@@ -8,6 +11,7 @@ import type { Context } from '../src/trpc/context';
 vi.mock('@workspace-starter/db', async (importOriginal) => ({
   ...(await importOriginal()),
   seedGroupActivities: vi.fn(async () => {}),
+  deactivateSoloActivities: vi.fn(async () => {}),
 }));
 
 const CALLER_ID = 'user-caller';
@@ -568,6 +572,7 @@ function seedActiveChallenge(
 
 beforeEach(() => {
   vi.mocked(seedGroupActivities).mockClear();
+  vi.mocked(deactivateSoloActivities).mockClear();
   vi.setSystemTime(new Date('2026-06-15T12:00:00.000Z'));
 });
 
@@ -587,6 +592,10 @@ describe('groupsRouter create', () => {
     expect(seedGroupActivities).toHaveBeenCalledWith(
       expect.anything(),
       result.group.id,
+    );
+    expect(deactivateSoloActivities).toHaveBeenCalledWith(
+      expect.anything(),
+      CALLER_ID,
     );
     expect(result.inviteUrl).toContain('token=');
     expect(result.inviteUrl).toContain(
@@ -677,6 +686,10 @@ describe('groupsRouter join', () => {
     expect(seedGroupActivities).toHaveBeenCalledWith(
       expect.anything(),
       GROUP_ID,
+    );
+    expect(deactivateSoloActivities).toHaveBeenCalledWith(
+      expect.anything(),
+      CALLER_ID,
     );
   });
 

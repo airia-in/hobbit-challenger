@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { TRPCError } from '@trpc/server';
+import { seedSoloActivities } from '@workspace-starter/db';
 import { authRouter } from '../src/trpc/routers/auth.router';
 import { DEFAULT_CHALLENGE_WINDOW_DAYS } from '../src/utils/challenge-range';
 import type { Context } from '../src/trpc/context';
+
+vi.mock('@workspace-starter/db', async (importOriginal) => ({
+  ...(await importOriginal()),
+  seedSoloActivities: vi.fn(async () => {}),
+}));
 
 const USER_ID = 'user-1';
 const PHONE = '+919876543210';
@@ -157,6 +163,7 @@ describe('authRouter register/login', () => {
     );
     expect(stores.challenges[0]?.endDate).toBeInstanceOf(Date);
     expect(ctx.authService.hashPassword).toHaveBeenCalledWith(PASSWORD);
+    expect(seedSoloActivities).toHaveBeenCalledWith(expect.anything(), USER_ID);
   });
 
   it('rejects duplicate phone on register', async () => {

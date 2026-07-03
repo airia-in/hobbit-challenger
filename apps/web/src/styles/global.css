@@ -141,6 +141,37 @@
     animation: journey-today-pulse 2s ease-in-out infinite;
   }
 
+  @keyframes companion-smoke-rise {
+    0%,
+    100% {
+      transform: translateY(0);
+      opacity: 0.5;
+    }
+    50% {
+      transform: translateY(-3px);
+      opacity: 0.3;
+    }
+  }
+
+  .companion-smoke-rise {
+    animation: companion-smoke-rise 3s ease-in-out infinite;
+  }
+
+  @keyframes companion-rain-fall {
+    0% {
+      transform: translateY(0);
+      opacity: 0.6;
+    }
+    100% {
+      transform: translateY(6px);
+      opacity: 0.2;
+    }
+  }
+
+  .companion-rain-fall {
+    animation: companion-rain-fall 1.2s linear infinite;
+  }
+
   .task-card--completing {
     animation: task-complete-card-settle 480ms cubic-bezier(0.22, 1, 0.36, 1);
   }

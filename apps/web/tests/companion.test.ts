@@ -43,7 +43,8 @@ describe('companion mood derivation', () => {
     expect(mapHeatmapStateToOutcome('completed')).toBe('completed');
     expect(mapHeatmapStateToOutcome('failed')).toBe('missed');
     expect(mapHeatmapStateToOutcome('today', true)).toBe('completed');
-    expect(mapHeatmapStateToOutcome('today', false)).toBe('missed');
+    expect(mapHeatmapStateToOutcome('today', false)).toBe('excluded');
+    expect(mapHeatmapStateToOutcome('today')).toBe('excluded');
     expect(mapHeatmapStateToOutcome('not_started')).toBe('excluded');
     expect(mapHeatmapStateToOutcome('future')).toBe('excluded');
   });
@@ -73,9 +74,9 @@ describe('companion mood derivation', () => {
       currentDay: 3,
       todayComplete: false,
     });
-    expect(result.evaluatedDays).toBe(2);
+    expect(result.evaluatedDays).toBe(1);
     expect(result.completedDays).toBe(1);
-    expect(result.rate).toBe(0.5);
+    expect(result.rate).toBe(1);
   });
 
   it('returns zero evaluated days for a brand-new challenge window', () => {
@@ -89,13 +90,13 @@ describe('companion mood derivation', () => {
   });
 
   it('derives mood band boundaries', () => {
-    expect(deriveCompanionMood(0.85, 7)).toBe('thriving');
-    expect(deriveCompanionMood(0.849, 100)).toBe('content');
-    expect(deriveCompanionMood(0.6, 10)).toBe('content');
-    expect(deriveCompanionMood(0.599, 100)).toBe('sleepy');
-    expect(deriveCompanionMood(0.35, 20)).toBe('sleepy');
-    expect(deriveCompanionMood(0.349, 100)).toBe('rainy');
-    expect(deriveCompanionMood(0, 5)).toBe('rainy');
+    expect(deriveCompanionMood(0.85, 7, 10)).toBe('thriving');
+    expect(deriveCompanionMood(0.849, 100, 100)).toBe('content');
+    expect(deriveCompanionMood(0.6, 10, 10)).toBe('content');
+    expect(deriveCompanionMood(0.599, 100, 100)).toBe('sleepy');
+    expect(deriveCompanionMood(0.35, 20, 20)).toBe('sleepy');
+    expect(deriveCompanionMood(0.349, 100, 100)).toBe('rainy');
+    expect(deriveCompanionMood(0, 5, 5)).toBe('rainy');
   });
 
   it('defaults to content when no days are evaluated', () => {
@@ -103,6 +104,36 @@ describe('companion mood derivation', () => {
     expect(getCompanionCopyLine('content', '2026-07-03', 0)).toMatch(
       /hobbit-hole is ready/i,
     );
+  });
+
+  it.each([1, 2, 3] as const)(
+    'never shows rainy on challenge day %i with incomplete today',
+    (currentDay) => {
+      const statesInWindow: HeatmapCellState[] = Array.from(
+        { length: currentDay },
+        (_, index) => (index === currentDay - 1 ? 'today' : 'failed'),
+      );
+      const { rate, evaluatedDays } = computeRollingCompletionRate({
+        cells: cellsWithWindowStates(currentDay, statesInWindow),
+        currentDay,
+        todayComplete: false,
+      });
+      const mood = deriveCompanionMood(rate, evaluatedDays, currentDay);
+      expect(mood).not.toBe('rainy');
+    },
+  );
+
+  it('shows empty-garden copy on day 1 before any habits are done', () => {
+    const { rate, evaluatedDays } = computeRollingCompletionRate({
+      cells: cellsWithWindowStates(1, ['today']),
+      currentDay: 1,
+      todayComplete: false,
+    });
+    expect(evaluatedDays).toBe(0);
+    expect(deriveCompanionMood(rate, evaluatedDays, 1)).toBe('content');
+    expect(
+      getCompanionCopyLine('content', '2026-07-03', evaluatedDays),
+    ).toMatch(/hobbit-hole is ready|garden awaits|hearth is warm/i);
   });
 
   it('returns stable copy per date key', () => {
@@ -142,7 +173,7 @@ describe('companion mood derivation', () => {
       ]),
       currentDay: 7,
     });
-    expect(deriveCompanionMood(rate, evaluatedDays)).toBe('thriving');
+    expect(deriveCompanionMood(rate, evaluatedDays, 7)).toBe('thriving');
   });
 
   it('maps zero percent completion to rainy', () => {
@@ -157,6 +188,6 @@ describe('companion mood derivation', () => {
       currentDay: 5,
     });
     expect(rate).toBe(0);
-    expect(deriveCompanionMood(rate, evaluatedDays)).toBe('rainy');
+    expect(deriveCompanionMood(rate, evaluatedDays, 5)).toBe('rainy');
   });
 });

@@ -374,6 +374,9 @@ export function DashboardContent() {
   const mutations = useTodayMutations(viewedDateKey);
 
   const activitiesQuery = trpc.activities.getToday.useQuery(queryInput);
+  const calendarTodayQuery = trpc.activities.getToday.useQuery(undefined, {
+    enabled: viewedDateKey !== undefined,
+  });
   const statsQuery = trpc.stats.getDashboard.useQuery();
   const heatmapQuery = trpc.heatmap.get.useQuery();
   const profileQuery = trpc.profile.get.useQuery();
@@ -390,6 +393,17 @@ export function DashboardContent() {
     today != null &&
     today.isViewingToday &&
     allScoredActivitiesCompleted(today);
+
+  const calendarToday =
+    viewedDateKey !== undefined ? calendarTodayQuery.data : today;
+  const companionTodayComplete =
+    calendarToday != null
+      ? allScoredActivitiesCompleted(calendarToday)
+      : undefined;
+  const calendarDateKey =
+    calendarToday?.dateKey ??
+    today?.dateKey ??
+    new Date().toISOString().slice(0, 10);
 
   const brokeOnDate = stats?.streakBreak?.brokeOnDate ?? null;
   const recoveryDismissedStorage =
@@ -726,8 +740,8 @@ export function DashboardContent() {
             <CompanionPanel
               cells={heatmapQuery.data.cells}
               currentDay={stats.currentDay}
-              todayComplete={allScoredComplete}
-              dateKey={today?.dateKey ?? new Date().toISOString().slice(0, 10)}
+              todayComplete={companionTodayComplete}
+              dateKey={calendarDateKey}
             />
           )}
 

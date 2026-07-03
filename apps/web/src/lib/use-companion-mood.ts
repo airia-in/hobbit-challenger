@@ -25,7 +25,7 @@ export function useCompanionMood(input: UseCompanionMoodInput) {
         todayComplete,
       },
     );
-    const mood = deriveCompanionMood(rate, evaluatedDays);
+    const mood = deriveCompanionMood(rate, evaluatedDays, currentDay);
     const definition = COMPANION_MOOD_CATALOG[mood];
 
     return {

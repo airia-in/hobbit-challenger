@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DashboardContent } from '../src/components/dashboard/DashboardPage';
 import type { HeatmapCellState } from '@workspace-starter/types';
@@ -256,6 +257,66 @@ describe('DashboardContent companion panel', () => {
     );
     render(<DashboardContent />);
     expect(screen.getByTestId('companion-svg')).toHaveAttribute(
+      'data-mood',
+      'rainy',
+    );
+  });
+
+  it('does not downgrade mood when viewing a past day but calendar today is complete', async () => {
+    const user = userEvent.setup();
+    mockStatsGetDashboard.mockReturnValue(
+      idleQuery({ ...baseStats, currentDay: 7 }),
+    );
+    mockHeatmapGet.mockReturnValue(
+      idleQuery(
+        heatmapCells(30, (day) => {
+          if (day === 1 || day === 2) return 'completed';
+          if (day >= 3 && day <= 6) return 'failed';
+          if (day === 7) return 'today';
+          return 'future';
+        }),
+      ),
+    );
+    // React Query returns stable references across renders; precompute the two
+    // query results so the mock returns the SAME instance per input. Returning a
+    // fresh idleQuery(...) on every call changes identity each render and drives
+    // DashboardContent into an infinite re-render loop (heap OOM in the suite).
+    const pastDayQuery = idleQuery({
+      ...baseToday,
+      dateKey: '2026-07-02',
+      currentDay: 7,
+      isViewingToday: false,
+      canNavigateBack: true,
+      canNavigateForward: true,
+      scoredActivities: [
+        {
+          ...baseToday.scoredActivities[0],
+          log: null,
+        },
+      ],
+    });
+    const todayQuery = idleQuery({
+      ...baseToday,
+      currentDay: 7,
+      dateKey: '2026-07-03',
+      isViewingToday: true,
+    });
+    mockActivitiesGetToday.mockImplementation((input?: { date?: string }) =>
+      input?.date ? pastDayQuery : todayQuery,
+    );
+
+    render(<DashboardContent />);
+    expect(screen.getByTestId('companion-svg')).toHaveAttribute(
+      'data-mood',
+      'sleepy',
+    );
+
+    await user.click(screen.getByTestId('dashboard-date-prev'));
+    expect(screen.getByTestId('companion-svg')).toHaveAttribute(
+      'data-mood',
+      'sleepy',
+    );
+    expect(screen.getByTestId('companion-svg')).not.toHaveAttribute(
       'data-mood',
       'rainy',
     );

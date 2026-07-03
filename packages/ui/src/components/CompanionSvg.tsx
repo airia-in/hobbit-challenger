@@ -27,13 +27,6 @@ export function CompanionSvg({
     return () => mediaQuery.removeEventListener('change', onChange);
   }, []);
 
-  const motionClass =
-    allowMotion && mood === 'content'
-      ? 'companion-smoke-rise'
-      : allowMotion && mood === 'rainy'
-        ? 'companion-rain-fall'
-        : undefined;
-
   return (
     <svg
       role="img"
@@ -41,7 +34,7 @@ export function CompanionSvg({
       data-testid="companion-svg"
       data-mood={mood}
       viewBox="0 0 120 80"
-      className={cn('h-16 w-24 shrink-0', motionClass, className)}
+      className={cn('h-16 w-24 shrink-0', className)}
     >
       <ellipse
         cx="60"

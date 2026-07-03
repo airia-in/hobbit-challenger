@@ -89,6 +89,23 @@ const THRIVING_RATE = 0.85;
 const CONTENT_RATE = 0.6;
 const SLEEPY_RATE = 0.35;
 
+/** Challenge days 1–3 and windows with fewer than 3 evaluated days never show rainy. */
+export const COMPANION_GRACE_DAYS = 3;
+
+const MOOD_SEVERITY: Record<CompanionMood, number> = {
+  rainy: 0,
+  sleepy: 1,
+  content: 2,
+  thriving: 3,
+};
+
+function floorCompanionMood(
+  mood: CompanionMood,
+  minimum: CompanionMood,
+): CompanionMood {
+  return MOOD_SEVERITY[mood] >= MOOD_SEVERITY[minimum] ? mood : minimum;
+}
+
 function pickVariant<T>(items: readonly T[], seed: string): T {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) {
@@ -107,7 +124,8 @@ export function mapHeatmapStateToOutcome(
     case 'failed':
       return 'missed';
     case 'today':
-      return isTodayComplete ? 'completed' : 'missed';
+      // In-progress today is pending until habits are done or the day finalizes.
+      return isTodayComplete ? 'completed' : 'excluded';
     case 'not_started':
     case 'future':
       return 'excluded';
@@ -148,20 +166,31 @@ export function computeRollingCompletionRate(input: {
 export function deriveCompanionMood(
   rate: number,
   evaluatedDays: number,
+  currentDay?: number,
 ): CompanionMood {
   if (evaluatedDays === 0) {
     return 'content';
   }
+
+  let mood: CompanionMood;
   if (rate >= THRIVING_RATE) {
-    return 'thriving';
+    mood = 'thriving';
+  } else if (rate >= CONTENT_RATE) {
+    mood = 'content';
+  } else if (rate >= SLEEPY_RATE) {
+    mood = 'sleepy';
+  } else {
+    mood = 'rainy';
   }
-  if (rate >= CONTENT_RATE) {
-    return 'content';
+
+  const inGracePeriod =
+    (currentDay !== undefined && currentDay <= COMPANION_GRACE_DAYS) ||
+    evaluatedDays < COMPANION_GRACE_DAYS;
+  if (inGracePeriod) {
+    return floorCompanionMood(mood, 'sleepy');
   }
-  if (rate >= SLEEPY_RATE) {
-    return 'sleepy';
-  }
-  return 'rainy';
+
+  return mood;
 }
 
 export function getCompanionCopyLine(

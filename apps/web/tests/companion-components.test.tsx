@@ -75,6 +75,38 @@ describe('CompanionSvg', () => {
     );
   });
 
+  it('omits content smoke animation on root and child when reduced motion is preferred', () => {
+    mockMatchMedia(true);
+    render(
+      <CompanionSvg
+        mood="content"
+        ariaLabel={COMPANION_MOOD_CATALOG.content.visualDescription}
+      />,
+    );
+    const svg = screen.getByTestId('companion-svg');
+    expect(svg.getAttribute('class') ?? '').not.toContain(
+      'companion-smoke-rise',
+    );
+    const smoke = screen.getByTestId('companion-smoke');
+    expect(smoke.getAttribute('class') ?? '').not.toContain(
+      'companion-smoke-rise',
+    );
+  });
+
+  it('omits thriving smoke animation when reduced motion is preferred', () => {
+    mockMatchMedia(true);
+    render(
+      <CompanionSvg
+        mood="thriving"
+        ariaLabel={COMPANION_MOOD_CATALOG.thriving.visualDescription}
+      />,
+    );
+    const smoke = screen.getByTestId('companion-smoke');
+    expect(smoke.getAttribute('class') ?? '').not.toContain(
+      'companion-smoke-rise',
+    );
+  });
+
   it('applies idle animation classes when motion is allowed', () => {
     mockMatchMedia(false);
     render(

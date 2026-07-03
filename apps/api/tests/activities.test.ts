@@ -1483,6 +1483,96 @@ describe('activities service', () => {
     expect(fake.stores.challenges.get(CHALLENGE_ID)?.totalXp).toBe(100);
   });
 
+  it('logNumber correcting a finalized past-day value downward recomputes a negative delta', async () => {
+    const today = getUserLocalDate('UTC');
+    const yesterday = addUtcDays(today, -1);
+    const yesterdayKey = yesterday.toISOString().slice(0, 10);
+    const challenge = fake.stores.challenges.get(CHALLENGE_ID);
+    expect(challenge).toBeDefined();
+    fake.stores.challenges.set(CHALLENGE_ID, {
+      ...challenge!,
+      startDate: addUtcDays(today, -5),
+      totalXp: 100,
+    });
+    fake.stores.activityLogs.set(
+      activityLogKey(CHALLENGE_ID, WATER_ACTIVITY_ID, yesterday),
+      createActivityLog({
+        activityId: WATER_ACTIVITY_ID,
+        date: yesterday,
+        id: 'water-yesterday',
+        state: null,
+        value: 3.8,
+        xpAwarded: 100,
+      }),
+    );
+    fake.stores.dayScores.set(dayScoreKey(CHALLENGE_ID, yesterday), {
+      id: 'score-yesterday',
+      challengeId: CHALLENGE_ID,
+      userId: USER_ID,
+      date: yesterday,
+      dayNumber: 5,
+      xpEarned: 100,
+      xpDeducted: 0,
+      netXp: 100,
+      personalXp: 0,
+      breakdown: { allScoredLogged: false, entries: [] },
+      finalized: true,
+    });
+
+    const result = await service.logNumber(
+      fake.prisma,
+      USER_ID,
+      WATER_ACTIVITY_ID,
+      1,
+      yesterdayKey,
+    );
+
+    expect(result.log.value).toBe(1);
+    expect(result.log.xpAwarded).toBe(26);
+    expect(result.dayTotals.netXp).toBe(26);
+    const storedScore = fake.stores.dayScores.get(
+      dayScoreKey(CHALLENGE_ID, yesterday),
+    );
+    expect(storedScore?.finalized).toBe(true);
+    expect(storedScore?.netXp).toBe(26);
+    expect(fake.stores.challenges.get(CHALLENGE_ID)?.totalXp).toBe(26);
+  });
+
+  it('undoActivity still rejects undoing a NUMBER entry on a past date', async () => {
+    const today = getUserLocalDate('UTC');
+    const yesterday = addUtcDays(today, -1);
+    const yesterdayKey = yesterday.toISOString().slice(0, 10);
+    const challenge = fake.stores.challenges.get(CHALLENGE_ID);
+    expect(challenge).toBeDefined();
+    fake.stores.challenges.set(CHALLENGE_ID, {
+      ...challenge!,
+      startDate: addUtcDays(today, -5),
+    });
+    fake.stores.activityLogs.set(
+      activityLogKey(CHALLENGE_ID, WATER_ACTIVITY_ID, yesterday),
+      createActivityLog({
+        activityId: WATER_ACTIVITY_ID,
+        date: yesterday,
+        id: 'water-yesterday',
+        state: null,
+        value: 1,
+        xpAwarded: 26,
+      }),
+    );
+
+    await expect(
+      service.undoActivity(
+        fake.prisma,
+        USER_ID,
+        WATER_ACTIVITY_ID,
+        yesterdayKey,
+      ),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Cannot undo entries on past dates',
+    });
+  });
+
   it('markActivity rejects backfill when a CHECKBOX past-day entry already exists', async () => {
     const today = getUserLocalDate('UTC');
     const yesterday = addUtcDays(today, -1);

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DayCounter,
   HeatmapGrid,
+  JourneyPath,
   ProofUploader,
   StatsRow,
   StreakBadge,
@@ -89,6 +90,7 @@ function useTodayMutations(viewedDateKey?: string) {
   function settle() {
     void utils.activities.getToday.invalidate();
     void utils.stats.getDashboard.invalidate();
+    void utils.heatmap.get.invalidate();
   }
 
   function createHandlers<TInput extends { activityId: string; date?: string }>(
@@ -720,27 +722,57 @@ export function DashboardContent() {
           (heatmapQuery.isLoading ||
             heatmapQuery.isError ||
             heatmapQuery.data) && (
-            <section>
-              <h2
-                className="mb-4 text-lg uppercase tracking-wider text-[var(--text-muted)]"
-                style={{ fontFamily: 'var(--font-mono)' }}
-              >
-                {stats.lengthDays}-Day Progress
-              </h2>
+            <>
               {heatmapQuery.isLoading ? (
-                <p className="text-sm text-[var(--text-muted)]">
-                  Loading progress...
-                </p>
+                <section>
+                  <p className="text-sm text-[var(--text-muted)]">
+                    Loading progress...
+                  </p>
+                </section>
               ) : heatmapQuery.isError ? (
-                <QueryErrorState
-                  message={heatmapQuery.error?.message}
-                  onRetry={() => void heatmapQuery.refetch()}
-                  className="text-left"
-                />
+                <section>
+                  <h2
+                    className="mb-4 text-lg uppercase tracking-wider text-[var(--text-muted)]"
+                    style={{ fontFamily: 'var(--font-mono)' }}
+                  >
+                    Your trail
+                  </h2>
+                  <QueryErrorState
+                    message={heatmapQuery.error?.message}
+                    onRetry={() => void heatmapQuery.refetch()}
+                    className="text-left"
+                  />
+                </section>
               ) : heatmapQuery.data ? (
-                <HeatmapGrid cells={heatmapQuery.data.cells} />
+                <>
+                  <section>
+                    <h2
+                      className="mb-4 text-lg uppercase tracking-wider text-[var(--text-muted)]"
+                      style={{ fontFamily: 'var(--font-mono)' }}
+                    >
+                      Your trail
+                    </h2>
+                    <JourneyPath
+                      cells={heatmapQuery.data.cells}
+                      currentDay={stats.currentDay}
+                      lengthDays={stats.lengthDays}
+                      earnedMilestoneKeys={stats.milestones.earned.map(
+                        (milestone) => milestone.key,
+                      )}
+                    />
+                  </section>
+                  <section>
+                    <h2
+                      className="mb-4 text-lg uppercase tracking-wider text-[var(--text-muted)]"
+                      style={{ fontFamily: 'var(--font-mono)' }}
+                    >
+                      {stats.lengthDays}-Day Progress
+                    </h2>
+                    <HeatmapGrid cells={heatmapQuery.data.cells} />
+                  </section>
+                </>
               ) : null}
-            </section>
+            </>
           )}
 
         {activityTitles.length > 0 && (

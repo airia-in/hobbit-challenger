@@ -492,7 +492,7 @@ describe('query error surfaces', () => {
     render(<DashboardContent />);
 
     expect(screen.getByText('Unable to load heatmap')).toBeInTheDocument();
-    expect(screen.getByText('45-Day Progress')).toBeInTheDocument();
+    expect(screen.getByText('Your trail')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(refetch).toHaveBeenCalledOnce();

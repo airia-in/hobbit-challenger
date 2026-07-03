@@ -181,7 +181,7 @@ function AdminActivitiesContent() {
             <button
               type="button"
               onClick={() => setShowCreate(true)}
-              className="rounded bg-[var(--accent-red)] px-4 py-2 text-xs font-bold uppercase tracking-widest text-white"
+              className="rounded bg-[var(--accent-red)] px-4 py-2 text-xs font-bold uppercase tracking-widest text-[var(--text-on-accent)]"
             >
               Add activity
             </button>

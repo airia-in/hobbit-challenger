@@ -6,6 +6,10 @@
   color-scheme: dark;
 }
 
+[data-theme='light'] {
+  color-scheme: light;
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;
@@ -14,7 +18,7 @@
   body {
     min-height: 100vh;
     color: var(--text-primary);
-    background-color: var(--bg-black);
+    background-color: var(--bg-base);
     font-family: var(--font-body);
     text-wrap: pretty;
     -webkit-font-smoothing: antialiased;

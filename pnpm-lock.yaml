@@ -245,6 +245,9 @@ importers:
       '@capacitor/haptics':
         specifier: ^7.0.2
         version: 7.0.5(@capacitor/core@7.6.7)
+      '@capacitor/status-bar':
+        specifier: ^7.0.2
+        version: 7.0.6(@capacitor/core@7.6.7)
       '@tanstack/react-query':
         specifier: ^5.100.11
         version: 5.100.11(react@19.2.6)

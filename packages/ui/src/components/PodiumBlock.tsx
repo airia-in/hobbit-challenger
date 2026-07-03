@@ -11,7 +11,7 @@ const PODIUM_STYLES = [
     order: 'order-2',
     height: 'h-20 md:h-28',
     color: 'text-[var(--gold)]',
-    bg: 'bg-[var(--gold)]/10 border-[var(--gold)]',
+    bg: 'bg-[var(--gold-fill)]/10 border-[var(--gold-fill)]',
     medal: '🥇',
     label: '1st',
   },

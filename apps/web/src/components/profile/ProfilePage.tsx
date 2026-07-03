@@ -5,6 +5,7 @@ import { AuthenticatedImage } from '../common/AuthenticatedImage';
 import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
+import { ThemeModeControl } from '../ThemeModeControl';
 import { PersonalActivitiesSection } from '../activities/PersonalActivitiesSection';
 import { getToken, performClientLogout } from '../../lib/auth';
 import { trpc } from '../../lib/trpc';
@@ -654,11 +655,18 @@ export function ProfileContent() {
         <button
           type="submit"
           disabled={updateProfile.isPending}
-          className="w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-white disabled:opacity-50"
+          className="w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-[var(--text-on-accent)] disabled:opacity-50"
         >
           {updateProfile.isPending ? 'Saving...' : 'Save Changes'}
         </button>
       </form>
+
+      <div className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+        <h2 className="text-sm uppercase tracking-wider text-[var(--text-muted)]">
+          Appearance
+        </h2>
+        <ThemeModeControl />
+      </div>
 
       <PersonalActivitiesSection />
 
@@ -718,7 +726,7 @@ export function ProfileContent() {
       </div>
 
       {showLeaveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] px-4">
           <div className="w-full max-w-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
             <h3 className="text-lg text-[var(--text-primary)]">
               {leaveModalTitle}
@@ -742,7 +750,7 @@ export function ProfileContent() {
               {leaveGroupMode === 'blocked' ? (
                 <a
                   href="/join"
-                  className="flex-1 rounded bg-[var(--accent-red)] py-2 text-center text-sm font-bold text-white"
+                  className="flex-1 rounded bg-[var(--accent-red)] py-2 text-center text-sm font-bold text-[var(--text-on-accent)]"
                 >
                   Manage admins
                 </a>
@@ -751,7 +759,7 @@ export function ProfileContent() {
                   type="button"
                   onClick={() => leaveGroup.mutate()}
                   disabled={leaveGroup.isPending}
-                  className="flex-1 rounded bg-[var(--accent-red)] py-2 text-sm font-bold text-white disabled:opacity-50"
+                  className="flex-1 rounded bg-[var(--accent-red)] py-2 text-sm font-bold text-[var(--text-on-accent)] disabled:opacity-50"
                 >
                   {leaveGroup.isPending
                     ? leaveGroupMode === 'dissolve'

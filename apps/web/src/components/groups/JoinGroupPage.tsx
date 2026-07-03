@@ -124,12 +124,12 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
           <button
             type="button"
             disabled
-            className="w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-white opacity-50"
+            className="w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-[var(--text-on-accent)] opacity-50"
           >
             Checking...
           </button>
         ) : me.data?.user.groupId ? (
-          <div className="rounded border border-[var(--border)] bg-[var(--bg-black)]/40 px-4 py-5">
+          <div className="rounded border border-[var(--border)] bg-[var(--bg-base)]/40 px-4 py-5">
             <p className="text-sm text-[var(--text-primary)]">
               You&apos;re already in a group
             </p>
@@ -148,7 +148,7 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
             type="button"
             onClick={() => join.mutate({ token })}
             disabled={join.isPending}
-            className="w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-white hover:bg-[#c42a22] disabled:opacity-50"
+            className="w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-[var(--text-on-accent)] hover:bg-[var(--accent-red-hover)] disabled:opacity-50"
           >
             {join.isPending ? 'Joining...' : 'Join Group'}
           </button>

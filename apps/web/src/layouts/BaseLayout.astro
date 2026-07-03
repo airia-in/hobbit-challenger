@@ -1,7 +1,9 @@
 ---
 import '../styles/global.css';
 import { BRAND_DEFAULT_DESCRIPTION, BRAND_DEFAULT_TITLE } from '../lib/brand';
+import { themeInitScript } from '../lib/theme';
 import { NativeDeepLinkBootstrap } from '../components/NativeDeepLinkBootstrap';
+import { ThemeBootstrap } from '../components/ThemeBootstrap';
 
 export interface Props {
   title?: string;
@@ -18,6 +20,8 @@ const { title = BRAND_DEFAULT_TITLE, description = BRAND_DEFAULT_DESCRIPTION } =
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
+    <meta name="theme-color" content="#0a0a0a" />
+    <script is:inline set:html={themeInitScript} />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -27,9 +31,10 @@ const { title = BRAND_DEFAULT_TITLE, description = BRAND_DEFAULT_DESCRIPTION } =
     <title>{title}</title>
   </head>
   <body
-    class="min-h-screen bg-[var(--bg-black)] text-[var(--text-primary)] antialiased"
+    class="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] antialiased"
     style="font-family: var(--font-body);"
   >
+    <ThemeBootstrap client:load />
     <NativeDeepLinkBootstrap client:load />
     <slot />
   </body>

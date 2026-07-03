@@ -122,14 +122,14 @@ export function ManageGroupContent() {
           <button
             type="submit"
             disabled={createGroup.isPending}
-            className="w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-white hover:bg-[#c42a22] disabled:opacity-50"
+            className="w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-[var(--text-on-accent)] hover:bg-[var(--accent-red-hover)] disabled:opacity-50"
           >
             {createGroup.isPending ? 'Creating...' : 'Create Fellowship'}
           </button>
         </form>
 
         <div className="relative my-8 text-center">
-          <span className="bg-[var(--bg-black)] px-3 text-xs uppercase tracking-widest text-[var(--text-muted)]">
+          <span className="bg-[var(--bg-base)] px-3 text-xs uppercase tracking-widest text-[var(--text-muted)]">
             or
           </span>
           <div
@@ -220,7 +220,7 @@ export function ManageGroupContent() {
                       {member.name}
                     </p>
                     {member.isAdmin && (
-                      <span className="rounded border border-[var(--gold)]/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[var(--gold)]">
+                      <span className="rounded border border-[var(--gold-fill)]/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[var(--gold)]">
                         Admin
                       </span>
                     )}
@@ -306,7 +306,7 @@ export function ManageGroupContent() {
       </div>
 
       {pendingAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] px-4">
           <div className="w-full max-w-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
             <h3 className="text-lg text-[var(--text-primary)]">
               {pendingAction.type === 'remove'
@@ -340,7 +340,7 @@ export function ManageGroupContent() {
                   }
                 }}
                 disabled={activeMutation.isPending}
-                className="flex-1 rounded bg-[var(--accent-red)] py-2 text-sm font-bold text-white disabled:opacity-50"
+                className="flex-1 rounded bg-[var(--accent-red)] py-2 text-sm font-bold text-[var(--text-on-accent)] disabled:opacity-50"
               >
                 {activeMutation.isPending
                   ? 'Working...'

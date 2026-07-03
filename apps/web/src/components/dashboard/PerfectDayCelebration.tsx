@@ -3,10 +3,10 @@ import { useEffect, useRef, useState } from 'react';
 const PARTICLE_COUNT = 24;
 const COLORS = [
   'var(--accent-red)',
-  'var(--gold)',
+  'var(--gold-fill)',
   'var(--success)',
-  '#f4d58d',
-  '#e8c4a0',
+  'var(--confetti-warm-1)',
+  'var(--confetti-warm-2)',
 ];
 
 function prefersReducedMotion(): boolean {

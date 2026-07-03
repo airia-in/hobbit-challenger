@@ -9,6 +9,20 @@ export type GroupInviteCardProps = {
   className?: string;
 };
 
+function readResolvedTheme(): 'light' | 'dark' {
+  if (typeof document === 'undefined') return 'dark';
+  return document.documentElement.getAttribute('data-theme') === 'light'
+    ? 'light'
+    : 'dark';
+}
+
+function getQrColors(theme: 'light' | 'dark'): { dark: string; light: string } {
+  if (theme === 'light') {
+    return { dark: '#1c1917', light: '#ffffff' };
+  }
+  return { dark: '#f0f0f0', light: '#111111' };
+}
+
 export function GroupInviteCard({
   inviteUrl,
   groupName,
@@ -18,6 +32,21 @@ export function GroupInviteCard({
 }: GroupInviteCardProps) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(
+    readResolvedTheme,
+  );
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const update = () => setResolvedTheme(readResolvedTheme());
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,7 +56,7 @@ export function GroupInviteCard({
         QRCode.toDataURL(inviteUrl, {
           width: 200,
           margin: 2,
-          color: { dark: '#F0F0F0', light: '#111111' },
+          color: getQrColors(resolvedTheme),
         }),
       )
       .then((url) => {
@@ -40,7 +69,7 @@ export function GroupInviteCard({
     return () => {
       cancelled = true;
     };
-  }, [inviteUrl]);
+  }, [inviteUrl, resolvedTheme]);
 
   async function handleCopy() {
     await navigator.clipboard.writeText(inviteUrl);

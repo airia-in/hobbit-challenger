@@ -182,7 +182,7 @@ export function AppShell({
 
   return (
     <div
-      className={`min-h-screen bg-[var(--bg-black)] md:pb-0 md:pl-56 ${showAdminNav ? 'pb-28' : 'pb-16'}`}
+      className={`min-h-screen bg-[var(--bg-base)] md:pb-0 md:pl-56 ${showAdminNav ? 'pb-28' : 'pb-16'}`}
     >
       <AppNav currentPath={currentPath} />
       {children}

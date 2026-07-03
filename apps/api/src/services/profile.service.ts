@@ -31,6 +31,7 @@ export type ProfileData = {
   habitAnchorTime: string | null;
   whatsappOptIn: boolean;
   weeklyRecapOptIn: boolean;
+  reminderAdaptive: boolean;
   needsPhoneMigration: boolean;
   groupId: string | null;
   groupName: string | null;
@@ -88,6 +89,7 @@ export async function getProfile(
     habitAnchorTime: user.habitAnchorTime,
     whatsappOptIn: user.whatsappOptIn,
     weeklyRecapOptIn: user.weeklyRecapOptIn,
+    reminderAdaptive: user.reminderAdaptive,
     needsPhoneMigration:
       user.phone === null && (user.email !== null || user.whatsappOptIn),
     groupId: user.groupId,
@@ -108,6 +110,7 @@ export type UpdateProfileInput = {
   habitAnchorTime?: string | null;
   whatsappOptIn?: boolean;
   weeklyRecapOptIn?: boolean;
+  reminderAdaptive?: boolean;
   phone?: string;
   email?: string;
   timezone?: string;
@@ -128,6 +131,7 @@ export async function updateProfile(
     habitAnchorTime?: string | null;
     whatsappOptIn?: boolean;
     weeklyRecapOptIn?: boolean;
+    reminderAdaptive?: boolean;
     phone?: string;
     email?: string;
     timezone?: string;
@@ -280,6 +284,27 @@ export async function updateProfile(
     data.weeklyRecapOptIn = input.weeklyRecapOptIn;
   }
 
+  if (input.reminderAdaptive !== undefined) {
+    if (input.reminderAdaptive) {
+      const stored = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { phone: true, whatsappOptIn: true },
+      });
+      const effectivePhone = data.phone ?? stored?.phone;
+      const effectiveWhatsapp =
+        data.whatsappOptIn ?? stored?.whatsappOptIn ?? false;
+
+      if (!effectivePhone || !effectiveWhatsapp) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message:
+            'Add a phone number and enable WhatsApp reminders before enabling adaptive timing',
+        });
+      }
+    }
+    data.reminderAdaptive = input.reminderAdaptive;
+  }
+
   if (input.email !== undefined) {
     const existingByEmail = await prisma.user.findUnique({
       where: { email: input.email },
@@ -337,6 +362,7 @@ export async function updateProfile(
     habitAnchorTime: true,
     whatsappOptIn: true,
     weeklyRecapOptIn: true,
+    reminderAdaptive: true,
     groupId: true,
   } as const;
 

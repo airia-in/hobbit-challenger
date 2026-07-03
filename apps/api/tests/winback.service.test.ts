@@ -17,6 +17,12 @@ type ReminderLogRow = {
 type ActivityLogRow = {
   challengeId: string;
   date: Date;
+  userId?: string;
+  createdAt?: Date | null;
+  state?: string | null;
+  tier?: string | null;
+  value?: number | null;
+  subPoints?: unknown;
 };
 
 function reminderLogKey(userId: string, date: Date, kind: string): string {
@@ -30,6 +36,7 @@ function createWinbackFakePrisma(seed: {
     phone: string | null;
     timezone: string;
     reminderTime: string | null;
+    reminderAdaptive?: boolean;
     whatsappOptIn: boolean;
     challengeTimezone?: string | null;
     challenge?: {
@@ -47,6 +54,7 @@ function createWinbackFakePrisma(seed: {
 }) {
   const users = seed.users.map((user) => ({
     ...user,
+    reminderAdaptive: user.reminderAdaptive ?? true,
     group: user.challengeTimezone
       ? { challengeTimezone: user.challengeTimezone }
       : null,
@@ -104,6 +112,28 @@ function createWinbackFakePrisma(seed: {
           challengeId,
           _max: { date: activityByChallenge.get(challengeId) ?? null },
         })),
+      findMany: async ({
+        where,
+      }: {
+        where?: {
+          userId?: { in?: string[] };
+          date?: { gte?: Date };
+        };
+      } = {}) =>
+        (seed.activityLogs ?? []).filter((log) => {
+          if (where?.userId?.in) {
+            if (!log.userId || !where.userId.in.includes(log.userId)) {
+              return false;
+            }
+          }
+          if (
+            where?.date?.gte &&
+            log.date.getTime() < where.date.gte.getTime()
+          ) {
+            return false;
+          }
+          return Boolean(log.userId);
+        }),
     },
     reminderLog: {
       findMany: async ({
@@ -549,5 +579,153 @@ describe('WinbackService', () => {
 
     await service.processWinbacks();
     expect(trySendWinback).not.toHaveBeenCalled();
+  });
+
+  function buildAdaptiveTimingLogs(
+    userId: string,
+    days: number,
+    minuteOfDay: number,
+    startDay = 10,
+  ) {
+    const hour = Math.floor(minuteOfDay / 60);
+    const minute = minuteOfDay % 60;
+    const logs: ActivityLogRow[] = [];
+    for (let index = 0; index < days; index += 1) {
+      const day = startDay + index;
+      const dateKey = `2026-06-${String(day).padStart(2, '0')}`;
+      logs.push({
+        challengeId: 'c1',
+        userId,
+        date: new Date(`${dateKey}T00:00:00.000Z`),
+        createdAt: new Date(
+          `${dateKey}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00.000Z`,
+        ),
+        state: 'DONE',
+        tier: null,
+        value: null,
+        subPoints: null,
+      });
+    }
+    return logs;
+  }
+
+  it('sends win-back once at adaptive effective time when shift is later', async () => {
+    const trySendWinback = vi
+      .fn()
+      .mockImplementation(async ({ prisma, userId, localDate }) => {
+        await prisma.reminderLog.upsert({
+          where: {
+            userId_date_kind: {
+              userId,
+              date: localDate,
+              kind: WINBACK_KIND,
+            },
+          },
+          create: {
+            userId,
+            date: localDate,
+            kind: WINBACK_KIND,
+            status: 'SENT',
+          },
+          update: { status: 'SENT' },
+        });
+      });
+    const lastLogDate = getUserLocalDate(
+      TZ,
+      new Date('2026-06-12T00:00:00.000Z'),
+    );
+
+    const { prisma } = createWinbackFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone: TZ,
+          reminderTime: '08:00',
+          reminderAdaptive: true,
+          whatsappOptIn: true,
+          challenge,
+        },
+      ],
+      activityLogs: [
+        { challengeId: 'c1', date: lastLogDate },
+        ...buildAdaptiveTimingLogs('u1', 5, 8 * 60 + 25, 8),
+      ],
+    });
+
+    const service = new WinbackService(
+      prisma as never,
+      { isConfigured: () => true, sendText: vi.fn() } as never,
+      { trySendWinback } as never,
+    );
+
+    vi.setSystemTime(new Date('2026-06-15T08:20:00.000Z'));
+    await service.processWinbacks();
+    expect(trySendWinback).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2026-06-15T08:25:00.000Z'));
+    await service.processWinbacks();
+    expect(trySendWinback).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends win-back at adaptive effective time when shift is earlier than fixed', async () => {
+    const trySendWinback = vi
+      .fn()
+      .mockImplementation(async ({ prisma, userId, localDate }) => {
+        await prisma.reminderLog.upsert({
+          where: {
+            userId_date_kind: {
+              userId,
+              date: localDate,
+              kind: WINBACK_KIND,
+            },
+          },
+          create: {
+            userId,
+            date: localDate,
+            kind: WINBACK_KIND,
+            status: 'SENT',
+          },
+          update: { status: 'SENT' },
+        });
+      });
+    const lastLogDate = getUserLocalDate(
+      TZ,
+      new Date('2026-06-12T00:00:00.000Z'),
+    );
+
+    const { prisma } = createWinbackFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone: TZ,
+          reminderTime: '08:00',
+          reminderAdaptive: true,
+          whatsappOptIn: true,
+          challenge,
+        },
+      ],
+      activityLogs: [
+        { challengeId: 'c1', date: lastLogDate },
+        ...buildAdaptiveTimingLogs('u1', 5, 7 * 60 + 30, 8),
+      ],
+    });
+
+    const service = new WinbackService(
+      prisma as never,
+      { isConfigured: () => true, sendText: vi.fn() } as never,
+      { trySendWinback } as never,
+    );
+
+    vi.setSystemTime(new Date('2026-06-15T07:30:00.000Z'));
+    await service.processWinbacks();
+    expect(trySendWinback).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2026-06-15T08:00:00.000Z'));
+    await service.processWinbacks();
+    expect(trySendWinback).toHaveBeenCalledTimes(1);
   });
 });

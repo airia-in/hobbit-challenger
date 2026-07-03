@@ -9,6 +9,7 @@ import {
   isLocalTimeMatch,
   isWithinLocalCatchUpWindow,
 } from './day-window';
+import { hhmmToMinutes } from './reminder-timing';
 
 /** Minimum consecutive local days without any ActivityLog before win-back. */
 export const WINBACK_DORMANT_DAYS_MIN = 3;
@@ -174,49 +175,122 @@ export function isWinbackEligible(input: WinbackEligibilityInput): boolean {
   });
 }
 
+/** Fixed and adaptive morning anchors for win-back union window ownership. */
+export function resolveWinbackMorningAnchors(input: {
+  reminderTime: string | null;
+  effectiveMorningTime?: string | null;
+}): [string, string] {
+  const fixedTime = input.reminderTime ?? WINBACK_DEFAULT_MORNING_TIME;
+  const effectiveTime = input.effectiveMorningTime ?? fixedTime;
+  if (fixedTime === effectiveTime) {
+    return [fixedTime, effectiveTime];
+  }
+  return hhmmToMinutes(fixedTime) <= hhmmToMinutes(effectiveTime)
+    ? [fixedTime, effectiveTime]
+    : [effectiveTime, fixedTime];
+}
+
 /**
  * True while win-back can still be attempted in the morning slot (exact minute,
  * catch-up, or FAILED retry window). After this closes without SENT, other
  * reminder kinds may take over the rest of the day.
+ *
+ * When adaptive timing shifts MORNING away from fixed reminderTime, win-back
+ * owns the union of both anchors through the later anchor + catch-up so
+ * dormant users never receive MORNING in the gap or before win-back fires.
  */
 export function isWinbackMorningWindowActionable(input: {
   timezone: string;
   reminderTime: string | null;
+  effectiveMorningTime?: string | null;
   winbackLogToday: { status: string } | null | undefined;
   now?: Date;
   catchUpMinutes?: number;
   retryWindowMinutes?: number;
 }): boolean {
   const now = input.now ?? new Date();
-  const morningTime = input.reminderTime ?? WINBACK_DEFAULT_MORNING_TIME;
   const catchUpMinutes =
     input.catchUpMinutes ?? WINBACK_FIRST_SEND_CATCH_UP_MINUTES;
   const retryWindowMinutes =
     input.retryWindowMinutes ?? WINBACK_FAILED_RETRY_WINDOW_MINUTES;
-
-  if (isLocalTimeMatch(input.timezone, morningTime, now)) {
-    return true;
-  }
-
-  if (input.winbackLogToday?.status === 'FAILED') {
-    return isWithinWinbackRetryWindow(
-      input.timezone,
-      morningTime,
-      now,
-      retryWindowMinutes,
-    );
-  }
+  const [earliestAnchor, latestAnchor] = resolveWinbackMorningAnchors({
+    reminderTime: input.reminderTime,
+    effectiveMorningTime: input.effectiveMorningTime,
+  });
+  // Cover BOTH resolved anchors so an adaptive shift earlier than reminderTime
+  // is still owned by win-back; using only the fixed time + latest anchor drops
+  // the earlier adaptive slot and leaves a FAILED-retry gap.
+  const anchorTimes = [...new Set([earliestAnchor, latestAnchor])];
 
   if (input.winbackLogToday?.status === 'SENT') {
     return false;
   }
 
-  return isWithinLocalCatchUpWindow(
+  for (const anchor of anchorTimes) {
+    if (isLocalTimeMatch(input.timezone, anchor, now)) {
+      return true;
+    }
+  }
+
+  if (input.winbackLogToday?.status === 'FAILED') {
+    for (const anchor of anchorTimes) {
+      if (
+        isWithinWinbackRetryWindow(
+          input.timezone,
+          anchor,
+          now,
+          retryWindowMinutes,
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  for (const anchor of anchorTimes) {
+    if (
+      isWithinLocalCatchUpWindow(input.timezone, anchor, now, catchUpMinutes)
+    ) {
+      return true;
+    }
+  }
+
+  return isWithinWinbackUnionCatchUpWindow(
     input.timezone,
-    morningTime,
+    earliestAnchor,
+    latestAnchor,
     now,
     catchUpMinutes,
   );
+}
+
+/** Catch-up spanning earliest anchor through latest anchor + catchUpMinutes. */
+function isWithinWinbackUnionCatchUpWindow(
+  timezone: string,
+  earliestAnchor: string,
+  latestAnchor: string,
+  now: Date,
+  catchUpMinutes: number,
+): boolean {
+  if (earliestAnchor === latestAnchor) {
+    return false;
+  }
+
+  const elapsedSinceEarliest = getLocalMinutesSinceTarget(
+    timezone,
+    earliestAnchor,
+    now,
+  );
+  if (elapsedSinceEarliest === null) {
+    return false;
+  }
+
+  const unionSpanMinutes =
+    hhmmToMinutes(latestAnchor) -
+    hhmmToMinutes(earliestAnchor) +
+    catchUpMinutes;
+  return elapsedSinceEarliest <= unionSpanMinutes;
 }
 
 function isWithinWinbackRetryWindow(
@@ -237,6 +311,7 @@ export type WinbackDeferInput = {
   lastWinbackSentAt: Date | null;
   winbackLogToday: { status: string } | null | undefined;
   reminderTime: string | null;
+  effectiveMorningTime?: string | null;
   now?: Date;
 };
 
@@ -256,6 +331,7 @@ export function shouldDeferRemindersForWinback(
   const morningActionable = isWinbackMorningWindowActionable({
     timezone: input.challengeTimezone,
     reminderTime: input.reminderTime,
+    effectiveMorningTime: input.effectiveMorningTime,
     winbackLogToday: input.winbackLogToday,
     now,
   });

@@ -70,6 +70,7 @@ const profileFixture = {
   reminderTime: '08:00',
   whatsappOptIn: true,
   weeklyRecapOptIn: true,
+  reminderAdaptive: true,
   needsPhoneMigration: false,
   groupId: null,
   groupName: null,

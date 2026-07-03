@@ -116,8 +116,51 @@ matching Digital Asset Links file at:
 https://<WEB_DOMAIN>/.well-known/assetlinks.json
 ```
 
-Example payload (replace `SHA256_CERT_FINGERPRINT` with the release keystore
-SHA-256 fingerprint from `keytool -list -v -keystore <keystore>`):
+`scripts/build-frontends.mjs` generates this file into
+`apps/web/public/.well-known/assetlinks.json` before each Astro static build.
+The staged bundle is served by `web-host` at the same path (no auth; JSON is
+cacheable for one hour).
+
+### Deploy step
+
+1. Obtain the SHA-256 certificate fingerprint for the APK signing key that
+   actually ships. Today the release workflow builds a **debug** APK
+   (`assembleDebug`); use the debug keystore until a release keystore is wired
+   (#180):
+
+   ```bash
+   keytool -list -v \
+     -keystore ~/.android/debug.keystore \
+     -alias androiddebugkey \
+     -storepass android -keypass android
+   ```
+
+   For a release keystore, swap `-keystore`, `-alias`, and passwords. Copy the
+   `SHA256:` value (colon-separated hex). Multiple keys (e.g. upload + app
+   signing): comma-separate fingerprints.
+
+2. Set the fingerprint when building the `web-host` image (not committed):
+
+   ```bash
+   export ANDROID_SHA256_CERT_FINGERPRINTS='AA:BB:CC:...'
+   docker compose build web-host
+   docker compose up -d
+   ```
+
+   `docker-compose.yml` passes `ANDROID_SHA256_CERT_FINGERPRINTS` as a build arg
+   to `apps/web-host/Dockerfile`. Override `ANDROID_PACKAGE_NAME` only if the
+   Capacitor `appId` changes (default `com.drcode.hobbit`).
+
+3. Verify after deploy:
+
+   ```bash
+   curl -sS "https://${WEB_DOMAIN}/.well-known/assetlinks.json" | jq .
+   ```
+
+   Expect `application/json`, `package_name: com.drcode.hobbit`, and your
+   fingerprint(s). Rebuild/redeploy `web-host` whenever the signing key changes.
+
+Example payload shape:
 
 ```json
 [
@@ -132,9 +175,8 @@ SHA-256 fingerprint from `keytool -list -v -keystore <keystore>`):
 ]
 ```
 
-Host this file on the same origin as `WEB_DOMAIN` (via `web-host` static
-assets or nginx). Until it is deployed, invite taps may show a disambiguation
-chooser (browser vs app) instead of opening the APK silently — that is expected.
+Until fingerprints are injected at image build, the file is still served but
+Android verification fails and invite taps may show a disambiguation chooser.
 
 ## Config layout
 

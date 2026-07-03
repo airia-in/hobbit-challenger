@@ -1,4 +1,5 @@
 export * from './activity-editor';
+export * from './android-app-links';
 export * from './brand';
 export * from './challenge';
 export * from './milestones';

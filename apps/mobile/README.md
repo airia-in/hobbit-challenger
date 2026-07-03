@@ -40,13 +40,15 @@ pnpm --filter @workspace-starter/mobile cap:open:android
 
 The APK (`com.drcode.hobbit`) declares verified App Links for `https://<WEB_DOMAIN>/join…` in `android/app/src/main/AndroidManifest.xml` (`android:autoVerify="true"`).
 
-Production must serve a matching Digital Asset Links file at:
+Production serves the matching Digital Asset Links file at:
 
 ```text
 https://<WEB_DOMAIN>/.well-known/assetlinks.json
 ```
 
-See [production-hosting.md](../../docs/guides/production-hosting.md#android-app-links-digital-asset-links) for the example payload and hosting notes. Until `assetlinks.json` is deployed, invite taps may show a browser vs app chooser — that is expected.
+The file is generated at `web-host` image build from `ANDROID_SHA256_CERT_FINGERPRINTS`. See [production-hosting.md](../../docs/guides/production-hosting.md#android-app-links-digital-asset-links) for deploy steps and `keytool` fingerprint instructions.
+
+**Signing key today:** the release workflow ships a **debug** APK (`assembleDebug`). Use the debug keystore SHA-256 until a release keystore is configured (#180). When you switch to release signing, update `ANDROID_SHA256_CERT_FINGERPRINTS` and redeploy `web-host`.
 
 ## Adding iOS later
 

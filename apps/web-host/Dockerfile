@@ -18,6 +18,9 @@ RUN pnpm install --frozen-lockfile --offline
 ARG PUBLIC_API_URL=http://localhost:3001
 ENV PUBLIC_API_URL=${PUBLIC_API_URL}
 
+ARG ANDROID_SHA256_CERT_FINGERPRINTS=
+ENV ANDROID_SHA256_CERT_FINGERPRINTS=${ANDROID_SHA256_CERT_FINGERPRINTS}
+
 # Build the host server, then build and stage every Astro frontend under
 # apps/* into apps/web-host/sites (discovered automatically).
 RUN pnpm --filter @workspace-starter/web-host build

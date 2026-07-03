@@ -69,6 +69,14 @@ describe('light theme accent contrast', () => {
     expect(contrastRatio(success, surfaceRaised)).toBeGreaterThanOrEqual(4.5);
   });
 
+  it('keeps podium silver and bronze text at or above 4.5:1 on light surfaces', () => {
+    for (const key of ['--silver', '--bronze'] as const) {
+      const value = tokens[key]!;
+      expect(contrastRatio(value, surface)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(value, surfaceRaised)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it('keeps muted text at or above 4.5:1 on bg-base', () => {
     const muted = tokens['--text-muted']!;
     expect(contrastRatio(muted, bgBase)).toBeGreaterThanOrEqual(4.5);

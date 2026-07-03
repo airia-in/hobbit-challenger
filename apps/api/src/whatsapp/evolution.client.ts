@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-export type SendMessageResult = { ok: true } | { ok: false; error: string };
+export type SendFailureKind = 'client' | 'transport';
+
+export type SendMessageResult =
+  | { ok: true }
+  | { ok: false; error: string; failureKind: SendFailureKind };
 
 export type SendTextResult = SendMessageResult;
 
@@ -15,6 +19,14 @@ export type SendButtonsInput = {
   description: string;
   footer?: string;
   buttons: SendButton[];
+};
+
+export type SendMediaInput = {
+  mediatype: 'image';
+  mimetype: 'image/png' | 'image/webp';
+  caption: string;
+  media: string;
+  fileName: string;
 };
 
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -38,7 +50,11 @@ export class EvolutionApiClient {
 
   async sendText(toPhoneE164: string, text: string): Promise<SendTextResult> {
     if (!this.isConfigured()) {
-      return { ok: false, error: 'Evolution API not configured' };
+      return {
+        ok: false,
+        error: 'Evolution API not configured',
+        failureKind: 'client',
+      };
     }
 
     const endpoint = `${this.url}/message/sendText/${this.instance}`;
@@ -52,7 +68,11 @@ export class EvolutionApiClient {
     input: SendButtonsInput,
   ): Promise<SendMessageResult> {
     if (!this.isConfigured()) {
-      return { ok: false, error: 'Evolution API not configured' };
+      return {
+        ok: false,
+        error: 'Evolution API not configured',
+        failureKind: 'client',
+      };
     }
 
     const endpoint = `${this.url}/message/sendButtons/${this.instance}`;
@@ -66,6 +86,31 @@ export class EvolutionApiClient {
         displayText: button.displayText,
         id: button.id,
       })),
+    });
+
+    return this.postWithRetry(endpoint, body);
+  }
+
+  async sendMedia(
+    toPhoneE164: string,
+    input: SendMediaInput,
+  ): Promise<SendMessageResult> {
+    if (!this.isConfigured()) {
+      return {
+        ok: false,
+        error: 'Evolution API not configured',
+        failureKind: 'client',
+      };
+    }
+
+    const endpoint = `${this.url}/message/sendMedia/${this.instance}`;
+    const body = JSON.stringify({
+      number: toPhoneE164,
+      mediatype: input.mediatype,
+      mimetype: input.mimetype,
+      caption: input.caption,
+      media: input.media,
+      fileName: input.fileName,
     });
 
     return this.postWithRetry(endpoint, body);
@@ -99,18 +144,26 @@ export class EvolutionApiClient {
           this.logger.error(
             `Evolution API send failed (${response.status}): ${errorText}`,
           );
-          return { ok: false, error: `HTTP ${response.status}: ${errorText}` };
+          return {
+            ok: false,
+            error: `HTTP ${response.status}: ${errorText}`,
+            failureKind: isRetryable ? 'transport' : 'client',
+          };
         }
       } catch (error) {
         if (attempt === 1) {
           const message =
             error instanceof Error ? error.message : String(error);
           this.logger.error(`Evolution API send failed: ${message}`);
-          return { ok: false, error: message };
+          return { ok: false, error: message, failureKind: 'transport' };
         }
       }
     }
 
-    return { ok: false, error: 'Unknown send failure' };
+    return {
+      ok: false,
+      error: 'Unknown send failure',
+      failureKind: 'transport',
+    };
   }
 }

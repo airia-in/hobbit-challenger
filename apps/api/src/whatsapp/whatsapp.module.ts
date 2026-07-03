@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ActivitiesModule } from '../modules/activities.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { MilestoneCardService } from '../services/milestone-card.service';
 import { EvolutionApiClient } from './evolution.client';
 import { OpenAiReminderService } from './openai-reminder.service';
 import { ReminderContextService } from './reminder-context.service';
@@ -15,6 +16,7 @@ import { InteractiveCheckinService } from './interactive-checkin.service';
   imports: [PrismaModule, forwardRef(() => ActivitiesModule)],
   providers: [
     EvolutionApiClient,
+    MilestoneCardService,
     ReminderContextService,
     OpenAiReminderService,
     StreakFreezeMessageService,
@@ -26,6 +28,7 @@ import { InteractiveCheckinService } from './interactive-checkin.service';
   ],
   exports: [
     EvolutionApiClient,
+    MilestoneCardService,
     ReminderContextService,
     OpenAiReminderService,
     StreakFreezeMessageService,

@@ -180,6 +180,9 @@ describe('EarnedMilestonesSection', () => {
     render(<EarnedMilestonesSection milestones={[milestone]} />);
     expect(screen.getByTestId('milestone-earned-streak_7')).toBeInTheDocument();
     expect(screen.getByText(milestone.title)).toBeInTheDocument();
+    expect(
+      screen.getByTestId('milestone-download-streak_7'),
+    ).toBeInTheDocument();
   });
 
   it('shows empty state when none earned', () => {

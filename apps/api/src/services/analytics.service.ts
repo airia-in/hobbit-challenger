@@ -11,6 +11,7 @@ export const PRODUCT_EVENT_KEYS = {
   STREAK_FREEZE_CONSUMED: 'streak.freeze_consumed',
   REMINDER_SENT: 'reminder.sent',
   MILESTONE_UNLOCKED: 'milestone.unlocked',
+  MILESTONE_SHARED: 'milestone.shared',
   USER_REGISTERED: 'user.registered',
   GROUP_JOINED: 'group.joined',
 } as const;

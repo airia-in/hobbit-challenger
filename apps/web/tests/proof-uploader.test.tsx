@@ -99,6 +99,33 @@ describe('ProofUploader', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('routes the gallery button to the capture-less input, not the camera', async () => {
+    render(
+      <ProofUploader
+        uploadUrl="http://localhost:3001/api/uploads"
+        authToken="test-token"
+        capture="environment"
+        onUploaded={vi.fn()}
+      />,
+    );
+
+    const inputs = document.querySelectorAll('input[type="file"]');
+    const cameraClick = vi.spyOn(inputs[0] as HTMLInputElement, 'click');
+    const galleryClick = vi.spyOn(inputs[1] as HTMLInputElement, 'click');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Upload from gallery' }),
+    );
+    expect(galleryClick).toHaveBeenCalledTimes(1);
+    expect(cameraClick).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Capture proof' }),
+    );
+    expect(cameraClick).toHaveBeenCalledTimes(1);
+    expect(galleryClick).toHaveBeenCalledTimes(1);
+  });
+
   it('uploads a gallery-picked file through the second input', async () => {
     vi.stubGlobal(
       'fetch',

@@ -211,9 +211,6 @@ importers:
       '@capacitor/haptics':
         specifier: ^7.0.2
         version: 7.0.5(@capacitor/core@7.6.7)
-      '@capacitor/ios':
-        specifier: ^7.4.2
-        version: 7.6.7(@capacitor/core@7.6.7)
       '@capacitor/splash-screen':
         specifier: ^7.0.2
         version: 7.0.5(@capacitor/core@7.6.7)
@@ -650,11 +647,6 @@ packages:
     resolution: {integrity: sha512-ujXuUkL8UG1YLhuJo/q+jiHr0K5JmclGZHmV1RttmiUBRG1XpC4Fc4gXUJyEX+6IoyfwWhgtPvJFRUB31HYnRQ==}
     peerDependencies:
       '@capacitor/core': '>=7.0.0'
-
-  '@capacitor/ios@7.6.7':
-    resolution: {integrity: sha512-ZXw1tO1orV6yDpkJyXxoerLC6S+UW8HFa280TX57Pgo4tPwuqWDF22vInjaolKmL/+k70R+zuRjul+hhiBWvlw==}
-    peerDependencies:
-      '@capacitor/core': ^7.6.0
 
   '@capacitor/splash-screen@7.0.5':
     resolution: {integrity: sha512-bPG2SamFL7VT5I3XsgsGgJhkiyxq3OXCOVKEDupSieVdtEiG7j2vLbSD0xL+91zteF/qLuxsjbugGy5LD8mS2A==}
@@ -5934,10 +5926,6 @@ snapshots:
       tslib: 2.8.1
 
   '@capacitor/haptics@7.0.5(@capacitor/core@7.6.7)':
-    dependencies:
-      '@capacitor/core': 7.6.7
-
-  '@capacitor/ios@7.6.7(@capacitor/core@7.6.7)':
     dependencies:
       '@capacitor/core': 7.6.7
 

@@ -11,7 +11,7 @@ apps/
   web            Astro + React product UI
   web-host       Static host for production Astro builds
   api            NestJS + tRPC backend (auth, tasks, uploads, cron)
-  mobile         Capacitor shell for iOS and Android
+  mobile         Capacitor shell (Android-only today; see apps/mobile/README.md)
 packages/
   db             Prisma schema, client, and migrations
   ui             Shared React components (TaskCard, HeatmapGrid, …)

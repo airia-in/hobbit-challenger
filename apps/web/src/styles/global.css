@@ -95,4 +95,39 @@
   .confetti-drift-right {
     animation-name: confetti-drift-right-keyframes;
   }
+
+  @keyframes task-complete-status-ring {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 45%, transparent);
+      transform: scale(1);
+    }
+    45% {
+      box-shadow: 0 0 0 5px color-mix(in srgb, var(--success) 30%, transparent);
+      transform: scale(1.1);
+    }
+    100% {
+      box-shadow: 0 0 0 0 transparent;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes task-complete-card-settle {
+    0% {
+      transform: scale(1);
+    }
+    35% {
+      transform: scale(1.008);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  .task-card--completing {
+    animation: task-complete-card-settle 480ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .task-card-status--completing {
+    animation: task-complete-status-ring 480ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
 }

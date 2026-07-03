@@ -53,6 +53,7 @@ import {
 } from '../../lib/today-optimistic';
 import { PerfectDayBanner } from './PerfectDayBanner';
 import { PerfectDayCelebration } from './PerfectDayCelebration';
+import { useCompletionHaptics } from '../../lib/use-completion-haptics';
 import { StreakRecoveryBanner } from './StreakRecoveryBanner';
 import { MilestoneUnlockToast } from './MilestoneUnlockToast';
 import {
@@ -289,6 +290,7 @@ function ActivityCard({
   } = mutations;
 
   const askGuidance = trpc.guidance.ask.useMutation();
+  const onCompleted = useCompletionHaptics();
 
   return (
     <TaskCard
@@ -308,6 +310,7 @@ function ActivityCard({
       tiers={activity.tiers}
       defaultExpanded
       disabled={isPending}
+      onCompleted={onCompleted}
       className={
         highlighted
           ? variant === 'personal'

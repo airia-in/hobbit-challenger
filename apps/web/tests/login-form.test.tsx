@@ -2,6 +2,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LoginForm } from '../src/components/auth/LoginForm';
+import {
+  markNativeDeepLinkBootstrapSettled,
+  markNativeDeepLinkBootstrapStarted,
+  resetNativeDeepLinkBootstrapForTests,
+} from '../src/lib/native-deep-link-pending';
 
 const mockGetToken = vi.fn<() => string | null>(() => null);
 const mockMeUseQuery = vi.fn();
@@ -42,11 +47,13 @@ describe('LoginForm', () => {
   let locationHref = '';
 
   beforeEach(() => {
+    resetNativeDeepLinkBootstrapForTests();
     locationHref = '';
     mockGetToken.mockReturnValue(null);
     Object.defineProperty(window, 'location', {
       configurable: true,
       value: {
+        origin: 'http://localhost',
         get href() {
           return locationHref;
         },
@@ -68,6 +75,7 @@ describe('LoginForm', () => {
   });
 
   afterEach(() => {
+    resetNativeDeepLinkBootstrapForTests();
     vi.restoreAllMocks();
     mockGetToken.mockReset();
     mockMeUseQuery.mockReset();
@@ -175,11 +183,35 @@ describe('LoginForm', () => {
     });
   });
 
+  it('waits for native deep-link bootstrap before auth redirect', async () => {
+    markNativeDeepLinkBootstrapStarted();
+    mockGetToken.mockReturnValue('existing-token');
+    mockMeUseQuery.mockReturnValue({
+      data: { user: { groupId: 'group-123' }, attempt: null },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<LoginForm />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Checking session…')).toBeInTheDocument();
+    });
+    expect(locationHref).toBe('');
+
+    markNativeDeepLinkBootstrapSettled();
+
+    await waitFor(() => {
+      expect(locationHref).toBe('/dashboard');
+    });
+  });
+
   it('honors returnTo on the mount redirect (invite deep-link)', async () => {
     mockGetToken.mockReturnValue('existing-token');
     Object.defineProperty(window, 'location', {
       configurable: true,
       value: {
+        origin: 'http://localhost',
         get href() {
           return locationHref;
         },
@@ -199,6 +231,34 @@ describe('LoginForm', () => {
 
     await waitFor(() => {
       expect(locationHref).toBe('/join?token=abc123');
+    });
+  });
+
+  it('falls back to dashboard when returnTo is an open redirect', async () => {
+    mockGetToken.mockReturnValue('existing-token');
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        origin: 'http://localhost',
+        get href() {
+          return locationHref;
+        },
+        set href(value: string) {
+          locationHref = value;
+        },
+        search: '?returnTo=//evil.com',
+      },
+    });
+    mockMeUseQuery.mockReturnValue({
+      data: { user: { groupId: 'group-123' }, attempt: null },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<LoginForm />);
+
+    await waitFor(() => {
+      expect(locationHref).toBe('/dashboard');
     });
   });
 

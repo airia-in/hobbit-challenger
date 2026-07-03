@@ -1,5 +1,6 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetNativeDeepLinkBootstrapForTests } from '../src/lib/native-deep-link-pending';
 import { useNativeDeepLinks } from '../src/lib/use-native-deep-links';
 
 const getLaunchUrlMock = vi.fn();
@@ -21,10 +22,21 @@ vi.mock('@capacitor/app', () => ({
 
 describe('useNativeDeepLinks', () => {
   const assignMock = vi.fn();
+  const callOrder: string[] = [];
 
   beforeEach(() => {
+    resetNativeDeepLinkBootstrapForTests();
     window.history.pushState({}, '', '/');
     assignMock.mockClear();
+    callOrder.length = 0;
+    getLaunchUrlMock.mockImplementation(async () => {
+      callOrder.push('getLaunchUrl');
+      return undefined;
+    });
+    addListenerMock.mockImplementation(async (_event, _handler) => {
+      callOrder.push('addListener');
+      return { remove: removeMock };
+    });
     Object.defineProperty(window, 'location', {
       configurable: true,
       value: {
@@ -38,6 +50,7 @@ describe('useNativeDeepLinks', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    resetNativeDeepLinkBootstrapForTests();
   });
 
   it('no-ops on web (non-native platform)', async () => {
@@ -52,13 +65,29 @@ describe('useNativeDeepLinks', () => {
     });
   });
 
+  it('registers appUrlOpen before consuming getLaunchUrl', async () => {
+    const { Capacitor } = await import('@capacitor/core');
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+    getLaunchUrlMock.mockImplementation(async () => {
+      callOrder.push('getLaunchUrl');
+      return {
+        url: 'https://hobbit.drcode.ai/join?token=cold-start',
+      };
+    });
+
+    renderHook(() => useNativeDeepLinks());
+
+    await waitFor(() => {
+      expect(callOrder).toEqual(['addListener', 'getLaunchUrl']);
+    });
+  });
+
   it('routes cold-start launch URL into the WebView', async () => {
     const { Capacitor } = await import('@capacitor/core');
     vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
     getLaunchUrlMock.mockResolvedValue({
       url: 'https://hobbit.drcode.ai/join?token=cold-start',
     });
-    addListenerMock.mockResolvedValue({ remove: removeMock });
 
     renderHook(() => useNativeDeepLinks());
 
@@ -97,6 +126,28 @@ describe('useNativeDeepLinks', () => {
     expect(assignMock).toHaveBeenCalledWith('/join?token=legacy-token');
   });
 
+  it('dedupes getLaunchUrl when appUrlOpen already handled the same URL', async () => {
+    const { Capacitor } = await import('@capacitor/core');
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+    const launchUrl = 'https://hobbit.drcode.ai/join?token=shared';
+
+    addListenerMock.mockImplementation(async (event, handler) => {
+      if (event === 'appUrlOpen') {
+        handler({ url: launchUrl });
+      }
+      return { remove: removeMock };
+    });
+    getLaunchUrlMock.mockResolvedValue({ url: launchUrl });
+
+    renderHook(() => useNativeDeepLinks());
+
+    await waitFor(() => {
+      expect(getLaunchUrlMock).toHaveBeenCalled();
+    });
+    expect(assignMock).toHaveBeenCalledTimes(1);
+    expect(assignMock).toHaveBeenCalledWith('/join?token=shared');
+  });
+
   it('skips navigation when already on the target path', async () => {
     const { Capacitor } = await import('@capacitor/core');
     vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
@@ -112,7 +163,6 @@ describe('useNativeDeepLinks', () => {
     getLaunchUrlMock.mockResolvedValue({
       url: 'https://hobbit.drcode.ai/join?token=same',
     });
-    addListenerMock.mockResolvedValue({ remove: removeMock });
 
     renderHook(() => useNativeDeepLinks());
 
@@ -126,7 +176,6 @@ describe('useNativeDeepLinks', () => {
     const { Capacitor } = await import('@capacitor/core');
     vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
     getLaunchUrlMock.mockResolvedValue(undefined);
-    addListenerMock.mockResolvedValue({ remove: removeMock });
 
     const { unmount } = renderHook(() => useNativeDeepLinks());
 
@@ -138,6 +187,28 @@ describe('useNativeDeepLinks', () => {
 
     await waitFor(() => {
       expect(removeMock).toHaveBeenCalled();
+    });
+  });
+
+  it('settles bootstrap and skips listener registration after fast unmount', async () => {
+    const { Capacitor } = await import('@capacitor/core');
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+
+    let resolveAddListener: (value: { remove: typeof removeMock }) => void;
+    const pendingListener = new Promise<{ remove: typeof removeMock }>(
+      (resolve) => {
+        resolveAddListener = resolve;
+      },
+    );
+    addListenerMock.mockReturnValue(pendingListener);
+
+    const { unmount } = renderHook(() => useNativeDeepLinks());
+    unmount();
+
+    resolveAddListener!({ remove: removeMock });
+
+    await waitFor(() => {
+      expect(removeMock).not.toHaveBeenCalled();
     });
   });
 });

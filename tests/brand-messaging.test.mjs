@@ -53,6 +53,7 @@ test('Android manifest App Link host matches DEFAULT_WEB_DOMAIN', async () => {
   );
   assert.match(manifest, /android:autoVerify="true"/);
   assert.match(manifest, /android:scheme="https"/);
+  assert.match(manifest, /android:pathPrefix="\/join"/);
 });
 
 test('mobile prepare-web defaults to production HOBBIT API URL', async () => {

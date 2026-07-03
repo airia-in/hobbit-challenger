@@ -30,7 +30,7 @@ const { title = BRAND_DEFAULT_TITLE, description = BRAND_DEFAULT_DESCRIPTION } =
     class="min-h-screen bg-[var(--bg-black)] text-[var(--text-primary)] antialiased"
     style="font-family: var(--font-body);"
   >
-    <NativeDeepLinkBootstrap client:only="react" />
+    <NativeDeepLinkBootstrap client:load />
     <slot />
   </body>
 </html>

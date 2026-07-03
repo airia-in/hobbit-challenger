@@ -5,7 +5,8 @@ import {
 
 /**
  * Map an external invite/deep-link URL to an in-app path for the Capacitor WebView.
- * Mirrors Astro middleware and web-host static redirect for legacy `/join/{token}` paths.
+ * Only join invite URLs are accepted; mirrors Astro middleware and web-host static
+ * redirect for legacy `/join/{token}` paths.
  */
 export function resolveNativeDeepLinkTarget(
   url: string,
@@ -15,6 +16,10 @@ export function resolveNativeDeepLinkTarget(
   try {
     parsed = new URL(url);
   } catch {
+    return null;
+  }
+
+  if (parsed.protocol !== 'https:') {
     return null;
   }
 
@@ -30,5 +35,13 @@ export function resolveNativeDeepLinkTarget(
     return `/join?token=${encodeURIComponent(joinMatch[1])}`;
   }
 
-  return `${pathname}${parsed.search}${parsed.hash}`;
+  if (pathname === '/join') {
+    const token = parsed.searchParams.get('token');
+    if (!token) {
+      return null;
+    }
+    return `/join?token=${encodeURIComponent(token)}`;
+  }
+
+  return null;
 }

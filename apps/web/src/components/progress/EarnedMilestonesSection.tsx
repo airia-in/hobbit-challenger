@@ -1,4 +1,7 @@
 import type { EarnedMilestone } from '@workspace-starter/types';
+import { getToken } from '../../lib/auth';
+
+const apiUrl = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
 
 type EarnedMilestonesSectionProps = {
   milestones: EarnedMilestone[];
@@ -11,6 +14,31 @@ function formatUnlockDate(value: Date | string): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+async function downloadMilestoneCard(milestoneKey: string): Promise<void> {
+  const token = getToken();
+  if (!token) {
+    return;
+  }
+
+  const response = await fetch(
+    `${apiUrl}/api/milestones/${milestoneKey}/card`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!response.ok) {
+    throw new Error('Could not download milestone card');
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = `hobbit-${milestoneKey}.png`;
+  anchor.click();
+  URL.revokeObjectURL(objectUrl);
 }
 
 export function EarnedMilestonesSection({
@@ -57,13 +85,27 @@ export function EarnedMilestonesSection({
                   {milestone.description}
                 </p>
               </div>
-              <time
-                className="shrink-0 text-xs uppercase tracking-wider text-[var(--text-muted)]"
-                dateTime={new Date(milestone.unlockedAt).toISOString()}
-                style={{ fontFamily: 'var(--font-mono)' }}
-              >
-                {formatUnlockDate(milestone.unlockedAt)}
-              </time>
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                <time
+                  className="text-xs uppercase tracking-wider text-[var(--text-muted)]"
+                  dateTime={new Date(milestone.unlockedAt).toISOString()}
+                  style={{ fontFamily: 'var(--font-mono)' }}
+                >
+                  {formatUnlockDate(milestone.unlockedAt)}
+                </time>
+                <button
+                  type="button"
+                  className="rounded-full border border-[var(--border)] px-3 py-1 text-xs uppercase tracking-wider text-[var(--text-primary)] hover:border-[var(--accent-red)]"
+                  data-testid={`milestone-download-${milestone.key}`}
+                  onClick={() => {
+                    void downloadMilestoneCard(milestone.key).catch(() => {
+                      // Download failures are non-blocking for the progress view.
+                    });
+                  }}
+                >
+                  Download card
+                </button>
+              </div>
             </div>
           </li>
         ))}

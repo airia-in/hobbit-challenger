@@ -17,6 +17,14 @@ export type SendButtonsInput = {
   buttons: SendButton[];
 };
 
+export type SendMediaInput = {
+  mediatype: 'image';
+  mimetype: 'image/png' | 'image/webp';
+  caption: string;
+  media: string;
+  fileName: string;
+};
+
 const REQUEST_TIMEOUT_MS = 15_000;
 
 @Injectable()
@@ -66,6 +74,27 @@ export class EvolutionApiClient {
         displayText: button.displayText,
         id: button.id,
       })),
+    });
+
+    return this.postWithRetry(endpoint, body);
+  }
+
+  async sendMedia(
+    toPhoneE164: string,
+    input: SendMediaInput,
+  ): Promise<SendMessageResult> {
+    if (!this.isConfigured()) {
+      return { ok: false, error: 'Evolution API not configured' };
+    }
+
+    const endpoint = `${this.url}/message/sendMedia/${this.instance}`;
+    const body = JSON.stringify({
+      number: toPhoneE164,
+      mediatype: input.mediatype,
+      mimetype: input.mimetype,
+      caption: input.caption,
+      media: input.media,
+      fileName: input.fileName,
     });
 
     return this.postWithRetry(endpoint, body);

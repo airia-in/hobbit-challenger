@@ -6,12 +6,21 @@ import {
   type MilestoneKey,
   MILESTONE_DAY_REMINDER_KIND,
   getMilestoneDefinition,
+  isShareCardMilestone,
   milestoneBatchSummaryLine,
 } from '@workspace-starter/types';
 import { loadPromptFile } from '../services/prompt-loader';
 import type { PrismaService } from '../prisma/prisma.service';
 import { EvolutionApiClient } from './evolution.client';
-import { trackReminderSentFireAndForget } from '../services/analytics.service';
+import {
+  PRODUCT_EVENT_KEYS,
+  trackProductEventFireAndForget,
+  trackReminderSentFireAndForget,
+} from '../services/analytics.service';
+import {
+  extractFirstName,
+  MilestoneCardService,
+} from '../services/milestone-card.service';
 import {
   buildReminderMessaging,
   type ReminderMessaging,
@@ -77,6 +86,7 @@ export class MilestoneMessageService {
   constructor(
     private readonly config: ConfigService,
     private readonly evolution: EvolutionApiClient,
+    private readonly milestoneCard: MilestoneCardService,
   ) {
     const apiKey = this.config.get<string>('OPENAI_API_KEY');
     const baseURL = this.config.get<string>('OPENAI_BASE_URL');
@@ -185,8 +195,45 @@ export class MilestoneMessageService {
     };
 
     const text = await this.compose(context);
-    const result = await this.evolution.sendText(input.phone, text);
-    const status: MilestoneMessageStatus = result.ok ? 'SENT' : 'FAILED';
+    let status: MilestoneMessageStatus = 'FAILED';
+    let mediaSent = false;
+
+    if (isShareCardMilestone(input.primaryMilestoneKey)) {
+      try {
+        const card = await this.milestoneCard.getOrCreateCard({
+          userId: input.userId,
+          firstName: extractFirstName(input.userName),
+          milestoneKey: input.primaryMilestoneKey,
+        });
+        const mediaResult = await this.evolution.sendMedia(input.phone, {
+          mediatype: 'image',
+          mimetype: 'image/png',
+          caption: text,
+          media: card.buffer.toString('base64'),
+          fileName: `hobbit-${input.primaryMilestoneKey}.png`,
+        });
+        if (mediaResult.ok) {
+          status = 'SENT';
+          mediaSent = true;
+          trackProductEventFireAndForget(
+            input.prisma,
+            input.userId,
+            PRODUCT_EVENT_KEYS.MILESTONE_SHARED,
+            {
+              milestoneKey: input.primaryMilestoneKey,
+              channel: 'whatsapp',
+            },
+          );
+        }
+      } catch (error) {
+        this.logger.error('Milestone share card media failed:', error);
+      }
+    }
+
+    if (!mediaSent) {
+      const result = await this.evolution.sendText(input.phone, text);
+      status = result.ok ? 'SENT' : 'FAILED';
+    }
 
     await this.upsertMilestoneLog(input.prisma, logKey, status);
     trackReminderSentFireAndForget(

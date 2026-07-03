@@ -126,6 +126,36 @@ describe('EvolutionApiClient', () => {
     expect(body.buttons[0].id).toBe('checkin:done');
   });
 
+  it('sendMedia posts to sendMedia endpoint', async () => {
+    const client = createClient({
+      EVOLUTION_API_URL: 'https://evo.example.com',
+      EVOLUTION_API_KEY: 'key',
+      EVOLUTION_INSTANCE: 'inst',
+    });
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+    } as Response);
+
+    const result = await client.sendMedia('+15551234567', {
+      mediatype: 'image',
+      mimetype: 'image/png',
+      caption: 'Milestone unlocked',
+      media: 'base64data',
+      fileName: 'hobbit-streak_7.png',
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledWith(
+      'https://evo.example.com/message/sendMedia/inst',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    const body = JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string);
+    expect(body.mediatype).toBe('image');
+    expect(body.fileName).toBe('hobbit-streak_7.png');
+  });
+
   it('sendButtons retries once on 5xx', async () => {
     const client = createClient({
       EVOLUTION_API_URL: 'https://evo.example.com',

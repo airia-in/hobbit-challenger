@@ -29,6 +29,8 @@ import {
 } from './whatsapp/evolution-webhook.handler';
 import { MAX_WEBHOOK_BODY_BYTES } from './whatsapp/evolution-inbound.parser';
 import { InteractiveCheckinService } from './whatsapp/interactive-checkin.service';
+import { MilestoneCardService } from './services/milestone-card.service';
+import { createMilestoneCardHandler } from './milestones/milestone-card.handler';
 
 async function bootstrap() {
   const allowedOrigins = (
@@ -75,6 +77,7 @@ async function bootstrap() {
   const activitiesService = app.get(ActivitiesService);
   const guidanceService = app.get(GuidanceService);
   const interactiveCheckin = app.get(InteractiveCheckinService);
+  const milestoneCardService = app.get(MilestoneCardService);
   const createContext = createContextFactory({
     prisma,
     authService,
@@ -124,6 +127,14 @@ async function bootstrap() {
   fastify.get<{ Params: { filename?: string } }>(
     '/uploads/:filename',
     createUploadFileHandler({ uploadDir, authService, prisma }),
+  );
+  fastify.get<{ Params: { milestoneKey?: string } }>(
+    '/api/milestones/:milestoneKey/card',
+    createMilestoneCardHandler({
+      cardService: milestoneCardService,
+      authService,
+      prisma,
+    }),
   );
 
   await fastify.register(fastifyTRPCPlugin, {

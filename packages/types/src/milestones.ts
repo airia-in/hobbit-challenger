@@ -152,6 +152,56 @@ export function milestoneBatchSummaryLine(additionalCount: number): string {
 /** One WhatsApp per user per local evaluation day (batched unlocks). */
 export const MILESTONE_DAY_REMINDER_KIND = 'MILESTONE:DAY';
 
+/** Major streak milestones that receive a share-card image on WhatsApp (#174). */
+export const SHARE_CARD_MILESTONE_KEYS = [
+  'streak_7',
+  'streak_30',
+  'streak_66',
+] as const satisfies readonly MilestoneKey[];
+
+export type ShareCardMilestoneKey = (typeof SHARE_CARD_MILESTONE_KEYS)[number];
+
+export function isShareCardMilestone(
+  key: MilestoneKey,
+): key is ShareCardMilestoneKey {
+  return (SHARE_CARD_MILESTONE_KEYS as readonly string[]).includes(key);
+}
+
+export type MilestoneCardStat = {
+  label: string;
+  value: string;
+};
+
+/** Deterministic stat line for milestone postcard art (#174). */
+export function getMilestoneCardStat(key: MilestoneKey): MilestoneCardStat {
+  switch (key) {
+    case 'streak_7':
+      return { label: 'Challenge streak', value: '7 days' };
+    case 'streak_21':
+      return { label: 'Challenge streak', value: '21 days' };
+    case 'streak_30':
+      return { label: 'Challenge streak', value: '30 days' };
+    case 'streak_66':
+      return { label: 'Challenge streak', value: '66 days' };
+    case 'first_perfect_day':
+      return { label: 'Perfect day', value: 'All habits' };
+    case 'first_perfect_week':
+      return { label: 'Perfect week', value: '7 days' };
+    case 'total_logs_100':
+      return { label: 'Habit logs', value: '100' };
+    case 'habit_streak_14':
+      return { label: 'Habit streak', value: '14 days' };
+    case 'comeback':
+      return { label: 'Back on trail', value: 'Return' };
+    case 'first_freeze_consumed':
+      return { label: 'Rain cloak', value: 'Used once' };
+    default: {
+      const _exhaustive: never = key;
+      return _exhaustive;
+    }
+  }
+}
+
 export function milestoneReminderKind(key: MilestoneKey): string {
   return `MILESTONE:${key}`;
 }

@@ -1,7 +1,10 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetNativeDeepLinkBootstrapForTests } from '../src/lib/native-deep-link-pending';
-import { useNativeDeepLinks } from '../src/lib/use-native-deep-links';
+import {
+  resetLaunchUrlProcessedForTests,
+  useNativeDeepLinks,
+} from '../src/lib/use-native-deep-links';
 
 const getLaunchUrlMock = vi.fn();
 const addListenerMock = vi.fn();
@@ -26,6 +29,7 @@ describe('useNativeDeepLinks', () => {
 
   beforeEach(() => {
     resetNativeDeepLinkBootstrapForTests();
+    resetLaunchUrlProcessedForTests();
     window.history.pushState({}, '', '/');
     assignMock.mockClear();
     callOrder.length = 0;
@@ -98,6 +102,31 @@ describe('useNativeDeepLinks', () => {
       'appUrlOpen',
       expect.any(Function),
     );
+  });
+
+  it('processes the launch URL only once across remounts (view transitions)', async () => {
+    const { Capacitor } = await import('@capacitor/core');
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+    getLaunchUrlMock.mockResolvedValue({
+      url: 'https://hobbit.drcode.ai/join?token=cold-start',
+    });
+
+    const first = renderHook(() => useNativeDeepLinks());
+    await waitFor(() => {
+      expect(getLaunchUrlMock).toHaveBeenCalledTimes(1);
+      expect(assignMock).toHaveBeenCalledTimes(1);
+    });
+    first.unmount();
+
+    // A subsequent in-app navigation remounts the bootstrap; it must NOT
+    // re-consume the stale launch URL and yank the user back.
+    assignMock.mockClear();
+    renderHook(() => useNativeDeepLinks());
+    await waitFor(() => {
+      expect(addListenerMock).toHaveBeenCalled();
+    });
+    expect(getLaunchUrlMock).toHaveBeenCalledTimes(1);
+    expect(assignMock).not.toHaveBeenCalled();
   });
 
   it('routes warm appUrlOpen events into the WebView', async () => {

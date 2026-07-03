@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import { ClientRouter } from 'astro:transitions';
 import { BRAND_DEFAULT_DESCRIPTION, BRAND_DEFAULT_TITLE } from '../lib/brand';
 import { themeInitScript } from '../lib/theme';
 import { NativeDeepLinkBootstrap } from '../components/NativeDeepLinkBootstrap';
@@ -21,7 +22,10 @@ const { title = BRAND_DEFAULT_TITLE, description = BRAND_DEFAULT_DESCRIPTION } =
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
     <meta name="theme-color" content="#0a0a0a" />
-    <script is:inline set:html={themeInitScript} />
+    <ClientRouter />
+    <!-- data-astro-rerun re-applies the theme on each view transition so the
+         resolved theme never flashes when navigating between pages. -->
+    <script is:inline set:html={themeInitScript} data-astro-rerun />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

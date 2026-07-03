@@ -35,6 +35,7 @@ model User {
   activityLogs   ActivityLog[]
   reminderLogs   ReminderLog[]
   milestones     UserMilestone[]
+  productEvents  ProductEvent[]
   primaryAdminOf Group[]       @relation("GroupPrimaryAdmin")
   groupAdminOf   GroupAdmin[]
 }
@@ -189,6 +190,19 @@ model UserMilestone {
 
   @@unique([userId, milestoneKey])
   @@index([userId, unlockedAt])
+}
+
+/// Lightweight product analytics events for retention cohort metrics (#148).
+model ProductEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  eventKey  String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([eventKey, createdAt])
+  @@index([userId, createdAt])
 }
 
 model DayLabel {

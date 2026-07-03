@@ -13,6 +13,7 @@ import {
   type WeeklyRecapRollup,
 } from '../utils/weekly-recap-rollup';
 import { EvolutionApiClient } from './evolution.client';
+import { trackReminderSentFireAndForget } from '../services/analytics.service';
 import {
   buildReminderMessaging,
   type ReminderMessaging,
@@ -231,6 +232,12 @@ export class WeeklyRecapMessageService {
     const status: WeeklyRecapStatus = result.ok ? 'SENT' : 'FAILED';
 
     await this.upsertWeeklyRecapLog(input.prisma, logKey, status);
+    trackReminderSentFireAndForget(
+      input.prisma,
+      input.userId,
+      WEEKLY_RECAP_KIND,
+      status,
+    );
   }
 
   private async upsertWeeklyRecapLog(

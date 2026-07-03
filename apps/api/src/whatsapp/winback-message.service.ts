@@ -6,6 +6,7 @@ import { loadPromptFile } from '../services/prompt-loader';
 import type { PrismaService } from '../prisma/prisma.service';
 import { WINBACK_KIND, shouldRetryWinback } from '../utils/winback-dormancy';
 import { EvolutionApiClient } from './evolution.client';
+import { trackReminderSentFireAndForget } from '../services/analytics.service';
 import {
   buildReminderMessaging,
   type ReminderMessaging,
@@ -203,6 +204,12 @@ export class WinbackMessageService {
     const status: WinbackStatus = result.ok ? 'SENT' : 'FAILED';
 
     await this.upsertWinbackLog(input.prisma, logKey, status);
+    trackReminderSentFireAndForget(
+      input.prisma,
+      input.userId,
+      WINBACK_KIND,
+      status,
+    );
   }
 
   private async upsertWinbackLog(

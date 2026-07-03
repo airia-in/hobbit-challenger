@@ -11,6 +11,7 @@ import {
 } from '../utils/day-window';
 import type { PrismaService } from '../prisma/prisma.service';
 import { EvolutionApiClient } from './evolution.client';
+import { trackReminderSentFireAndForget } from '../services/analytics.service';
 import {
   buildReminderMessaging,
   type ReminderMessaging,
@@ -359,6 +360,12 @@ export class StreakFreezeMessageService {
     const status: StreakFreezeMessageStatus = result.ok ? 'SENT' : 'FAILED';
 
     await this.upsertStreakFreezeLog(input.prisma, logKey, status);
+    trackReminderSentFireAndForget(
+      input.prisma,
+      input.userId,
+      STREAK_FREEZE_GRANTED_KIND,
+      status,
+    );
   }
 
   async trySendConsumeMessage(input: {
@@ -409,6 +416,12 @@ export class StreakFreezeMessageService {
     const status: StreakFreezeMessageStatus = result.ok ? 'SENT' : 'FAILED';
 
     await this.upsertStreakFreezeLog(input.prisma, logKey, status);
+    trackReminderSentFireAndForget(
+      input.prisma,
+      input.userId,
+      STREAK_FREEZE_CONSUMED_KIND,
+      status,
+    );
   }
 
   private async upsertStreakFreezeLog(

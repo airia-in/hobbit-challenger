@@ -24,6 +24,10 @@ import {
 } from '../../utils/group-admin';
 import { getMemberStatus } from '../../utils/member-status';
 import { publicProcedure, protectedProcedure, router } from '../trpc';
+import {
+  PRODUCT_EVENT_KEYS,
+  trackProductEventFireAndForget,
+} from '../../services/analytics.service';
 
 const challengeRangeInput = z
   .object({
@@ -541,6 +545,13 @@ export const groupsRouter = router({
           }
         }
       });
+
+      trackProductEventFireAndForget(
+        ctx.prisma,
+        ctx.user.id,
+        PRODUCT_EVENT_KEYS.GROUP_JOINED,
+        { groupId: group.id },
+      );
 
       return { groupId: group.id, groupName: group.name };
     }),

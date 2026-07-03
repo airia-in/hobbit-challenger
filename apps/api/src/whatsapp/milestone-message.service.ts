@@ -11,6 +11,7 @@ import {
 import { loadPromptFile } from '../services/prompt-loader';
 import type { PrismaService } from '../prisma/prisma.service';
 import { EvolutionApiClient } from './evolution.client';
+import { trackReminderSentFireAndForget } from '../services/analytics.service';
 import {
   buildReminderMessaging,
   type ReminderMessaging,
@@ -188,6 +189,12 @@ export class MilestoneMessageService {
     const status: MilestoneMessageStatus = result.ok ? 'SENT' : 'FAILED';
 
     await this.upsertMilestoneLog(input.prisma, logKey, status);
+    trackReminderSentFireAndForget(
+      input.prisma,
+      input.userId,
+      MILESTONE_DAY_REMINDER_KIND,
+      status,
+    );
   }
 
   /** @deprecated Per-key sends replaced by trySendBatchUnlockMessage. */

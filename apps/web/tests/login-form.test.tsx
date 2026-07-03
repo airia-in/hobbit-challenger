@@ -283,7 +283,9 @@ describe('LoginForm', () => {
     await waitFor(() => {
       expect(screen.getByPlaceholderText('Your name')).toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: 'Create Account' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Create Account' }),
+    ).toBeInTheDocument();
   });
 
   it('renders the form when the token is invalid or expired', () => {

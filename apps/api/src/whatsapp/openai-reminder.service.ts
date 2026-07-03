@@ -8,6 +8,7 @@ import {
   buildDashboardUrl,
 } from '@workspace-starter/types';
 import { loadPromptFile } from '../services/prompt-loader';
+import { buildAnchorPromptLine } from '../utils/sanitize-prompt-input';
 import type { ReminderContext } from './reminder-context.service';
 
 export type ReminderKind =
@@ -41,6 +42,7 @@ export type ReminderCopyLines = {
   yesterdayMissLine: string;
   streakAtRiskLine: string;
   recoveryLine: string;
+  anchorLine: string;
 };
 
 export function buildReminderMessaging(
@@ -103,6 +105,10 @@ export function buildReminderCopyLines(
           ? "Fresh morning air after yesterday's rain."
           : 'Good trail weather for small wins today.';
 
+  const anchorLine = context.habitAnchorText
+    ? buildAnchorPromptLine(context.habitAnchorText)
+    : '';
+
   return {
     themedIntro,
     unloggedHabitsLine,
@@ -112,6 +118,7 @@ export function buildReminderCopyLines(
     yesterdayMissLine,
     streakAtRiskLine,
     recoveryLine,
+    anchorLine,
   };
 }
 
@@ -298,6 +305,12 @@ const MORNING_TASKS: readonly string[] = [
   'Morning, {{name}}! {{brandName}} here — day {{dayNumber}} with {{tasksRemaining}} habit(s) to log before sunset.',
 ];
 
+const MORNING_WITH_ANCHOR: readonly string[] = [
+  "Good morning, {{name}}! {{brandName}} here — after {{anchorPhrase}}, the trail's waiting with {{tasksRemaining}} log(s).",
+  "Morning, {{name}}! {{brandName}} here — once {{anchorPhrase}} is done, {{tasksRemaining}} habit(s) are on today's path.",
+  'Hey {{name}}, {{brandName}} here — {{anchorPhrase}} then check in? {{tasksRemaining}} task(s) for day {{dayNumber}}.',
+];
+
 const EVENING_MILESTONE: readonly string[] = [
   'Hi {{name}}, {{brandName}} here — milestone evening on day {{dayNumber}}. {{tasksRemaining}} task(s) before the campfire dims.',
   'Evening, {{name}}! {{brandName}} here — day {{dayNumber}} milestone; log {{tasksRemaining}} before midnight.',
@@ -345,13 +358,15 @@ function fillFallbackTemplate(
 ): string {
   const rankSuffix =
     context.rank != null ? ` You're rank #${context.rank}.` : '';
+  const anchorPhrase = context.habitAnchorText ?? '';
   const filled = template
     .replaceAll('{{name}}', context.name)
     .replaceAll('{{brandName}}', messaging.brandName)
     .replaceAll('{{dayNumber}}', String(context.dayNumber))
     .replaceAll('{{tasksRemaining}}', String(context.tasksRemaining))
     .replaceAll('{{xpAtRisk}}', String(context.xpAtRisk))
-    .replaceAll('{{currentStreak}}', String(context.currentStreak));
+    .replaceAll('{{currentStreak}}', String(context.currentStreak))
+    .replaceAll('{{anchorPhrase}}', anchorPhrase);
   return `${filled}${rankSuffix}`;
 }
 
@@ -375,6 +390,9 @@ function selectMorningTemplate(context: ReminderContext, seed: number): string {
         : MORNING_STREAK_AT_RISK,
       seed,
     );
+  }
+  if (context.habitAnchorText) {
+    return pickVariant(MORNING_WITH_ANCHOR, seed);
   }
   return pickVariant(MORNING_TASKS, seed);
 }
@@ -447,6 +465,7 @@ export const FALLBACK_VARIANT_TEMPLATES = [
   ...MORNING_STREAK_AT_RISK,
   ...MORNING_STREAK_AT_RISK_WITH_CLOAK,
   ...MORNING_TASKS,
+  ...MORNING_WITH_ANCHOR,
   ...EVENING_MILESTONE,
   ...EVENING_STREAK_AT_RISK,
   ...EVENING_STREAK_AT_RISK_WITH_CLOAK,

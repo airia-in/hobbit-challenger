@@ -10,10 +10,16 @@ import {
 type FirstWeekChecklistProps = {
   currentDay: number;
   hasReminder: boolean;
+  hasAnchor: boolean;
   hasCompletedHabit: boolean;
   onStateChange?: () => void;
 };
 
+/**
+ * Four steps (not three): reminder + anchor are paired setup actions from #137,
+ * then habit completion and invite — keeps each step scannable without merging
+ * implementation-intention capture into the reminder-time form.
+ */
 const STEPS: {
   id: OnboardingStep;
   label: string;
@@ -26,6 +32,13 @@ const STEPS: {
     label: 'Set your morning reminder',
     description: 'Pick a time for Hobbit to nudge you onto the trail.',
     href: '/profile?focus=reminder',
+  },
+  {
+    id: 'anchor',
+    label: 'Link a daily habit',
+    description:
+      'After I ___ , I will check in — anchor your trail to something you already do.',
+    href: '/profile?focus=anchor',
   },
   {
     id: 'habit',
@@ -44,6 +57,7 @@ const STEPS: {
 export function FirstWeekChecklist({
   currentDay,
   hasReminder,
+  hasAnchor,
   hasCompletedHabit,
   onStateChange,
 }: FirstWeekChecklistProps) {
@@ -52,11 +66,12 @@ export function FirstWeekChecklist({
   useEffect(() => {
     const derived: OnboardingStep[] = [];
     if (hasReminder) derived.push('reminder');
+    if (hasAnchor) derived.push('anchor');
     if (hasCompletedHabit) derived.push('habit');
     const merged = mergeOnboardingSteps(derived);
     setState(merged);
     onStateChange?.();
-  }, [hasReminder, hasCompletedHabit, onStateChange]);
+  }, [hasReminder, hasAnchor, hasCompletedHabit, onStateChange]);
 
   if (currentDay < 1 || currentDay > 7) return null;
   if (state.dismissed) return null;

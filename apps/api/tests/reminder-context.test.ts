@@ -30,6 +30,7 @@ import {
   formatLocalDateKey,
   getUserLocalDate,
 } from '../src/utils/day-window';
+import * as statsService from '../src/services/stats.service';
 
 function scoredActivity(
   overrides: Partial<TodayActivity> & { id: string },
@@ -73,6 +74,7 @@ function emptyToday(overrides: Partial<GetTodayResult> = {}): GetTodayResult {
 describe('reminder-context helpers', () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('counts done and remaining tasks', () => {
@@ -215,6 +217,7 @@ describe('reminder-context helpers', () => {
       currentStreak: STREAK_AT_RISK_MIN,
       longestStreak: 12,
       streakFreezesAvailable: 0,
+      habitAnchorText: null,
     });
   });
 
@@ -540,5 +543,77 @@ describe('reminder-context helpers', () => {
     );
 
     expect(context.missedYesterday).toBe(false);
+  });
+
+  it('passes habitAnchorText through buildReminderContextFromFixture', () => {
+    const context = buildReminderContextFromFixture({
+      name: 'Sam',
+      today: emptyToday({ currentDay: 2 }),
+      todayNetXp: 0,
+      totalXp: 0,
+      habitAnchorText: 'morning chai',
+    });
+    expect(context.habitAnchorText).toBe('morning chai');
+  });
+
+  it('leaves habitAnchorText null when unset', () => {
+    const context = buildReminderContextFromFixture({
+      name: 'Sam',
+      today: emptyToday({ currentDay: 2 }),
+      todayNetXp: 0,
+      totalXp: 0,
+    });
+    expect(context.habitAnchorText).toBeNull();
+  });
+
+  it('sanitizes poisoned habitAnchorText and name at render time in buildContext', async () => {
+    vi.spyOn(statsService, 'getDashboardStats').mockResolvedValue({
+      totalXp: 0,
+      todayNetXp: 0,
+      currentDay: 2,
+      lengthDays: 30,
+      startDate: null,
+      todayDate: new Date('2026-06-15T12:00:00.000Z'),
+      estimatedFinishDate: null,
+      currentStreak: 0,
+      longestStreak: 0,
+      totalDaysCompleted: 0,
+      successRate: 0,
+      streakBreak: { occurred: false, brokeOnDate: null },
+      streakFreezesAvailable: 0,
+      milestones: [],
+    });
+
+    const user = {
+      id: 'user-poison',
+      name: 'Stored Name',
+      habitAnchorText: '{% x %}{{evil}} chai',
+      timezone: 'UTC',
+      groupId: null,
+      group: null,
+    };
+
+    const prisma = {
+      user: {
+        findUnique: async () => user,
+      },
+      challenge: {
+        findFirst: async () => null,
+      },
+    };
+
+    const activitiesService = {
+      getToday: vi.fn().mockResolvedValue(emptyToday({ currentDay: 2 })),
+    };
+
+    const service = new ReminderContextService(activitiesService as never);
+    const context = await service.buildContext(
+      prisma as never,
+      user.id,
+      '{{tasksRemaining}} Sam',
+    );
+
+    expect(context.habitAnchorText).toBe('chai');
+    expect(context.name).toBe('Sam');
   });
 });

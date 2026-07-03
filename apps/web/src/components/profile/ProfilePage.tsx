@@ -11,6 +11,14 @@ import { trpc } from '../../lib/trpc';
 
 const apiUrl = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
 
+const ANCHOR_SUGGESTIONS = [
+  'morning coffee',
+  'brushing teeth',
+  'dinner',
+] as const;
+
+const HABIT_ANCHOR_TEXT_MAX_LENGTH = 80;
+
 function phoneToLocalInput(e164: string | null): string {
   if (!e164) return '';
   if (e164.startsWith('+91')) return e164.slice(3);
@@ -51,6 +59,8 @@ export function ProfileContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [reminderTime, setReminderTime] = useState('');
+  const [habitAnchorText, setHabitAnchorText] = useState('');
+  const [habitAnchorTime, setHabitAnchorTime] = useState('');
   const [timezone, setTimezone] = useState('UTC');
   const [whatsappOptIn, setWhatsappOptIn] = useState(true);
   const [weeklyRecapOptIn, setWeeklyRecapOptIn] = useState(true);
@@ -59,7 +69,9 @@ export function ProfileContent() {
   const [exportError, setExportError] = useState<string | null>(null);
   const phoneInputRef = useRef<HTMLInputElement>(null);
   const reminderInputRef = useRef<HTMLInputElement>(null);
+  const anchorInputRef = useRef<HTMLInputElement>(null);
   const reminderFocusHandledRef = useRef(false);
+  const anchorFocusHandledRef = useRef(false);
 
   const utils = trpc.useUtils();
   const profile = trpc.profile.get.useQuery();
@@ -98,6 +110,8 @@ export function ProfileContent() {
       setPhone(phoneToLocalInput(profile.data.phone));
       setEmail(profile.data.email ?? '');
       setReminderTime(profile.data.reminderTime ?? '');
+      setHabitAnchorText(profile.data.habitAnchorText ?? '');
+      setHabitAnchorTime(profile.data.habitAnchorTime ?? '');
       setTimezone(profile.data.timezone);
       setWhatsappOptIn(profile.data.whatsappOptIn);
       setWeeklyRecapOptIn(profile.data.weeklyRecapOptIn);
@@ -129,6 +143,31 @@ export function ProfileContent() {
     });
     reminderInputRef.current.focus();
   }, [profile.data]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (anchorFocusHandledRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('focus') !== 'anchor' || !anchorInputRef.current) return;
+    anchorFocusHandledRef.current = true;
+    anchorInputRef.current.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    });
+    anchorInputRef.current.focus();
+  }, [profile.data]);
+
+  function handleAlignReminderToAnchor() {
+    if (!habitAnchorTime) return;
+    setMessage(null);
+    setReminderTime(habitAnchorTime);
+    updateProfile.mutate({ reminderTime: habitAnchorTime });
+  }
+
+  const anchorTimeDiffersFromReminder =
+    Boolean(habitAnchorTime) && habitAnchorTime !== reminderTime;
+  const anchorSuggestsReminderTime =
+    Boolean(habitAnchorTime) && !reminderTime && !profile.data?.reminderTime;
 
   function handleWhatsappOptInChange(enabled: boolean) {
     setWhatsappOptIn(enabled);
@@ -322,6 +361,10 @@ export function ProfileContent() {
                 : undefined,
             password: password || undefined,
             reminderTime: reminderTime || null,
+            habitAnchorText: habitAnchorText.trim()
+              ? habitAnchorText.trim()
+              : null,
+            habitAnchorTime: habitAnchorTime || null,
             timezone: timezone !== data.timezone ? timezone : undefined,
           });
         }}
@@ -435,6 +478,72 @@ export function ProfileContent() {
           <p className="mt-1 text-xs text-[var(--text-muted)]">
             Used for WhatsApp morning reminders in your timezone.
           </p>
+          {anchorSuggestsReminderTime && (
+            <p className="mt-2 text-xs text-[var(--text-muted)]">
+              Your habit anchor is around {habitAnchorTime}.{' '}
+              <button
+                type="button"
+                onClick={() => setReminderTime(habitAnchorTime)}
+                className="text-[var(--accent-red)] hover:underline"
+              >
+                Use this time for reminders
+              </button>
+            </p>
+          )}
+        </div>
+
+        <div id="habit-anchor">
+          <label className="mb-1 block text-xs uppercase tracking-wider text-[var(--text-muted)]">
+            After I… I will check in
+          </label>
+          <input
+            id="habit-anchor-input"
+            ref={anchorInputRef}
+            type="text"
+            value={habitAnchorText}
+            onChange={(e) =>
+              setHabitAnchorText(
+                e.target.value.slice(0, HABIT_ANCHOR_TEXT_MAX_LENGTH),
+              )
+            }
+            placeholder="morning coffee, brushing teeth…"
+            maxLength={HABIT_ANCHOR_TEXT_MAX_LENGTH}
+            className="w-full rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-[var(--text-primary)]"
+          />
+          <div className="mt-2 flex flex-wrap gap-2">
+            {ANCHOR_SUGGESTIONS.map((suggestion) => (
+              <button
+                key={suggestion}
+                type="button"
+                onClick={() => setHabitAnchorText(suggestion)}
+                className="rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-muted)] hover:border-[var(--accent-red)] hover:text-[var(--text-primary)]"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+          <label className="mb-1 mt-3 block text-xs uppercase tracking-wider text-[var(--text-muted)]">
+            Anchor time <span className="normal-case">(optional)</span>
+          </label>
+          <input
+            type="time"
+            value={habitAnchorTime}
+            onChange={(e) => setHabitAnchorTime(e.target.value)}
+            className="w-full rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-[var(--text-primary)]"
+          />
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            When you usually do this — helps suggest a reminder time.
+          </p>
+          {anchorTimeDiffersFromReminder && (
+            <button
+              type="button"
+              onClick={handleAlignReminderToAnchor}
+              disabled={updateProfile.isPending}
+              className="mt-2 text-xs text-[var(--accent-red)] hover:underline disabled:opacity-50"
+            >
+              Align morning reminder to {habitAnchorTime}
+            </button>
+          )}
         </div>
 
         <div className="flex items-center justify-between">

@@ -137,6 +137,14 @@ function parseTargetHHMM(targetHHMM: string): {
   return { targetHour, targetMinute };
 }
 
+/** True when value is HH:MM with hour 00–23 and minute 00–59. */
+export function isValidWallClockHHMM(hhmm: string): boolean {
+  if (!/^\d{2}:\d{2}$/.test(hhmm)) {
+    return false;
+  }
+  return parseTargetHHMM(hhmm) !== null;
+}
+
 /** Minutes elapsed since targetHHMM in timezone; null when local time is before target. */
 export function getLocalMinutesSinceTarget(
   timezone: string,

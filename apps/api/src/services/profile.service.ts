@@ -4,11 +4,20 @@ import { normalizePhone, PhoneValidationError } from '../auth/phone';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { AuthService } from './auth.service';
 import { activeChallengeRelationArgs } from '../utils/challenge-query';
-import { getUserLocalDate, isValidTimeZone } from '../utils/day-window';
+import {
+  getUserLocalDate,
+  isValidTimeZone,
+  isValidWallClockHHMM,
+} from '../utils/day-window';
 import {
   getGroupAdminUserIds,
   getReplacementAdminId,
 } from '../utils/group-admin';
+import {
+  HABIT_ANCHOR_TEXT_MAX_LENGTH,
+  sanitizeUserPromptText,
+  USER_NAME_MAX_LENGTH,
+} from '../utils/sanitize-prompt-input';
 
 export type ProfileData = {
   id: string;
@@ -18,6 +27,8 @@ export type ProfileData = {
   avatarUrl: string | null;
   timezone: string;
   reminderTime: string | null;
+  habitAnchorText: string | null;
+  habitAnchorTime: string | null;
   whatsappOptIn: boolean;
   weeklyRecapOptIn: boolean;
   needsPhoneMigration: boolean;
@@ -73,6 +84,8 @@ export async function getProfile(
     avatarUrl: user.avatarUrl,
     timezone: user.timezone,
     reminderTime: user.reminderTime,
+    habitAnchorText: user.habitAnchorText,
+    habitAnchorTime: user.habitAnchorTime,
     whatsappOptIn: user.whatsappOptIn,
     weeklyRecapOptIn: user.weeklyRecapOptIn,
     needsPhoneMigration:
@@ -91,6 +104,8 @@ export type UpdateProfileInput = {
   name?: string;
   password?: string;
   reminderTime?: string | null;
+  habitAnchorText?: string | null;
+  habitAnchorTime?: string | null;
   whatsappOptIn?: boolean;
   weeklyRecapOptIn?: boolean;
   phone?: string;
@@ -109,6 +124,8 @@ export async function updateProfile(
     name?: string;
     passwordHash?: string;
     reminderTime?: string | null;
+    habitAnchorText?: string | null;
+    habitAnchorTime?: string | null;
     whatsappOptIn?: boolean;
     weeklyRecapOptIn?: boolean;
     phone?: string;
@@ -124,7 +141,17 @@ export async function updateProfile(
         message: 'Name cannot be empty',
       });
     }
-    data.name = input.name.trim();
+    const sanitizedName = sanitizeUserPromptText(
+      input.name.trim(),
+      USER_NAME_MAX_LENGTH,
+    );
+    if (sanitizedName.length === 0) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Name cannot be empty',
+      });
+    }
+    data.name = sanitizedName;
   }
 
   if (input.password !== undefined) {
@@ -140,7 +167,7 @@ export async function updateProfile(
   if (input.reminderTime !== undefined) {
     if (
       input.reminderTime !== null &&
-      !/^\d{2}:\d{2}$/.test(input.reminderTime)
+      !isValidWallClockHHMM(input.reminderTime)
     ) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
@@ -148,6 +175,39 @@ export async function updateProfile(
       });
     }
     data.reminderTime = input.reminderTime;
+  }
+
+  if (input.habitAnchorText !== undefined) {
+    if (input.habitAnchorText === null || input.habitAnchorText.trim() === '') {
+      data.habitAnchorText = null;
+    } else {
+      const raw = input.habitAnchorText.trim();
+      if (raw.length > HABIT_ANCHOR_TEXT_MAX_LENGTH) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Habit anchor must be at most ${HABIT_ANCHOR_TEXT_MAX_LENGTH} characters`,
+        });
+      }
+      const trimmed = sanitizeUserPromptText(raw);
+      data.habitAnchorText = trimmed.length === 0 ? null : trimmed;
+    }
+  }
+
+  if (input.habitAnchorTime !== undefined) {
+    if (
+      input.habitAnchorTime !== null &&
+      input.habitAnchorTime !== '' &&
+      !isValidWallClockHHMM(input.habitAnchorTime)
+    ) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Habit anchor time must be HH:MM format',
+      });
+    }
+    data.habitAnchorTime =
+      input.habitAnchorTime === null || input.habitAnchorTime === ''
+        ? null
+        : input.habitAnchorTime;
   }
 
   if (input.phone !== undefined) {
@@ -273,6 +333,8 @@ export async function updateProfile(
     avatarUrl: true,
     timezone: true,
     reminderTime: true,
+    habitAnchorText: true,
+    habitAnchorTime: true,
     whatsappOptIn: true,
     weeklyRecapOptIn: true,
     groupId: true,

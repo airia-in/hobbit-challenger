@@ -20,6 +20,10 @@ import {
 import { addLocalDays, getUserLocalDate } from '../utils/day-window';
 import { getLiveStreak } from '../utils/live-streak';
 import type { PrismaService } from '../prisma/prisma.service';
+import {
+  sanitizeUserPromptText,
+  USER_NAME_MAX_LENGTH,
+} from '../utils/sanitize-prompt-input';
 
 export const UNLOGGED_HABITS_CAP = 3;
 export const STREAK_AT_RISK_MIN = 3;
@@ -55,6 +59,8 @@ export type ReminderContext = {
   currentStreak: number;
   longestStreak: number;
   streakFreezesAvailable: number;
+  /** Sanitized habit anchor for morning reminders; null when unset. */
+  habitAnchorText: string | null;
 };
 
 function todayActivityToScored(activity: TodayActivity): ScoredActivity {
@@ -191,6 +197,7 @@ export function buildReminderContextFromToday(
   recoveryEligible: boolean,
   recoveryBreakDate: string | null,
   challengeInRange: boolean,
+  habitAnchorText: string | null = null,
 ): ReminderContext {
   const { tasksDone, tasksRemaining } = countTasksFromToday(
     today.scoredActivities,
@@ -225,6 +232,7 @@ export function buildReminderContextFromToday(
     currentStreak: stats.currentStreak,
     longestStreak: stats.longestStreak,
     streakFreezesAvailable: stats.streakFreezesAvailable ?? 0,
+    habitAnchorText,
   };
 }
 
@@ -380,8 +388,15 @@ export class ReminderContextService {
       },
     );
 
+    const habitAnchorText = user?.habitAnchorText
+      ? sanitizeUserPromptText(user.habitAnchorText) || null
+      : null;
+
+    const name =
+      sanitizeUserPromptText(userName, USER_NAME_MAX_LENGTH) || 'Member';
+
     return buildReminderContextFromToday(
-      userName,
+      name,
       today,
       {
         todayNetXp: stats.todayNetXp,
@@ -395,6 +410,7 @@ export class ReminderContextService {
       recoveryEligible,
       recoveryBreakDate,
       challengeInRange,
+      habitAnchorText,
     );
   }
 }
@@ -411,6 +427,7 @@ export function buildReminderContextFromFixture(input: {
   recoveryEligible?: boolean;
   recoveryBreakDate?: string | null;
   challengeInRange?: boolean;
+  habitAnchorText?: string | null;
 }): ReminderContext {
   const missedYesterday = input.missedYesterday ?? false;
   const challengeInRange = input.challengeInRange ?? true;
@@ -435,5 +452,6 @@ export function buildReminderContextFromFixture(input: {
     recoveryEligible,
     recoveryBreakDate,
     challengeInRange,
+    input.habitAnchorText ?? null,
   );
 }

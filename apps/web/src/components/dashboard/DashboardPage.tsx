@@ -567,6 +567,10 @@ export function DashboardContent() {
           <FirstWeekChecklist
             currentDay={stats.currentDay}
             hasReminder={Boolean(profileQuery.data?.reminderTime)}
+            hasAnchor={Boolean(
+              profileQuery.data?.habitAnchorText ||
+              profileQuery.data?.habitAnchorTime,
+            )}
             hasCompletedHabit={anyActivityCompleted(today)}
           />
         )}

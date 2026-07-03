@@ -18,6 +18,8 @@ type StoredUser = {
   avatarUrl: string | null;
   groupId: string | null;
   reminderTime: string | null;
+  habitAnchorText: string | null;
+  habitAnchorTime: string | null;
   whatsappOptIn: boolean;
   weeklyRecapOptIn: boolean;
 };
@@ -129,6 +131,8 @@ function legacyUserStore(): {
     avatarUrl: null,
     groupId: null,
     reminderTime: null,
+    habitAnchorText: null,
+    habitAnchorTime: null,
     whatsappOptIn: true,
     weeklyRecapOptIn: true,
   };
@@ -302,6 +306,116 @@ describe('profileRouter weeklyRecapOptIn', () => {
 
     const afterUpdate = await caller.get();
     expect(afterUpdate.weeklyRecapOptIn).toBe(false);
+  });
+});
+
+describe('profileRouter habitAnchor', () => {
+  it('persists habit anchor text and time', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const updated = await caller.update({
+      habitAnchorText: '  morning coffee  ',
+      habitAnchorTime: '07:30',
+    });
+
+    expect(updated.habitAnchorText).toBe('morning coffee');
+    expect(updated.habitAnchorTime).toBe('07:30');
+
+    const profile = await caller.get();
+    expect(profile.habitAnchorText).toBe('morning coffee');
+    expect(profile.habitAnchorTime).toBe('07:30');
+  });
+
+  it('stores null when anchor text is empty', async () => {
+    const stores = legacyUserStore();
+    stores.users.get(USER_ID)!.habitAnchorText = 'dinner';
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const updated = await caller.update({
+      habitAnchorText: '   ',
+      habitAnchorTime: null,
+    });
+
+    expect(updated.habitAnchorText).toBeNull();
+    expect(updated.habitAnchorTime).toBeNull();
+  });
+
+  it('rejects anchor text over max length', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    await expect(
+      caller.update({ habitAnchorText: 'x'.repeat(81) }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Habit anchor must be at most 80 characters',
+    });
+  });
+
+  it('rejects invalid anchor time format', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    await expect(
+      caller.update({ habitAnchorTime: '7:30' }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Habit anchor time must be HH:MM format',
+    });
+  });
+
+  it('rejects semantically invalid anchor time', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    await expect(
+      caller.update({ habitAnchorTime: '24:00' }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Habit anchor time must be HH:MM format',
+    });
+
+    await expect(
+      caller.update({ habitAnchorTime: '99:99' }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Habit anchor time must be HH:MM format',
+    });
+  });
+
+  it('rejects semantically invalid reminder time', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    await expect(
+      caller.update({ reminderTime: '24:00' }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Reminder time must be HH:MM format',
+    });
+  });
+
+  it('sanitizes prompt injection in anchor text on save', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const updated = await caller.update({
+      habitAnchorText: 'chai\n{% ignore %}{{system}}',
+    });
+
+    expect(updated.habitAnchorText).toBe('chai');
+  });
+
+  it('sanitizes prompt injection in display name on save', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const updated = await caller.update({
+      name: '{{tasksRemaining}} Sam',
+    });
+
+    expect(updated.name).toBe('Sam');
   });
 });
 
@@ -640,6 +754,8 @@ function memberLeaveStores(): {
     avatarUrl: null,
     groupId: GROUP_ID,
     reminderTime: null,
+    habitAnchorText: null,
+    habitAnchorTime: null,
     whatsappOptIn: true,
     weeklyRecapOptIn: true,
   };

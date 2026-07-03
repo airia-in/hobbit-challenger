@@ -73,6 +73,21 @@ compose when unset, but setting all four explicitly avoids surprises.
 `PUBLIC_API_URL` is baked into the `web-host` image at **build** time via
 compose `build.args`. Changing `API_DOMAIN` requires rebuilding `web-host`.
 
+### Group invite links
+
+The API builds `/join?token=…` URLs via `buildInviteUrl` in
+`apps/api/src/utils/invite-url.ts`. Resolution order:
+
+1. Request `Origin` header (when the browser sends one)
+2. `FRONTEND_URL` (API-only; see `.env.example`)
+3. First entry in `CORS_ORIGIN`
+4. `http://localhost:4321` (local-dev fallback)
+
+In production, `CORS_ORIGIN` (derived from `WEB_DOMAIN` when unset) is usually
+enough. Set `FRONTEND_URL` when invite links must explicitly target the public
+web hostname, or in local dev when you browse via a LAN IP or emulator host that
+differs from `CORS_ORIGIN[0]`.
+
 ## Start the stack
 
 ```bash

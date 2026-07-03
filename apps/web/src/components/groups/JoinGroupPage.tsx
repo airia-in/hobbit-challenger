@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { BRAND_NAME, BRAND_SUBTITLE, BRAND_TAGLINE } from '../../lib/brand';
-import { getToken } from '../../lib/auth';
+import { clearToken, getToken } from '../../lib/auth';
 import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
 
@@ -34,6 +34,9 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
 
   const me = trpc.auth.me.useQuery(undefined, {
     enabled: Boolean(token) && Boolean(getToken()),
+    // A stale token can't be validated — one failure is definitive, so don't
+    // retry (which would delay the redirect below and hammer the API).
+    retry: false,
   });
 
   const join = trpc.groups.join.useMutation({
@@ -42,13 +45,36 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
     },
   });
 
+  // A stale/invalid session is signalled specifically by an UNAUTHORIZED
+  // response — the token verified but no matching user exists. Gate on the code
+  // (not any error) so a transient network/500 failure on a *valid* session
+  // — e.g. a refetch on window refocus — never clears a good token.
+  const isStaleSession = me.isError && me.error?.data?.code === 'UNAUTHORIZED';
+
+  // Whether we're on our way to the login page rather than staying on the
+  // invite. Both the no-token and stale-session cases redirect, so keep the
+  // card in a "checking" state instead of flashing a Join button that fails.
+  const hasToken = Boolean(getToken());
+  const isRedirecting = !hasToken || isStaleSession;
+
   useEffect(() => {
     if (!token) return;
+    const returnTo = `/join?token=${encodeURIComponent(token)}`;
+
+    // No session at all: send the user to sign in, then back to the invite.
     if (!getToken()) {
-      const returnTo = `/join?token=${encodeURIComponent(token)}`;
       window.location.href = `/?returnTo=${encodeURIComponent(returnTo)}`;
+      return;
     }
-  }, [token]);
+
+    // Stale/invalid session (e.g. the account data was reset): the token can't
+    // be validated, so clear it and open the Register tab to make a fresh
+    // account rather than showing a Join button the API rejects as UNAUTHORIZED.
+    if (isStaleSession) {
+      clearToken();
+      window.location.href = `/?returnTo=${encodeURIComponent(returnTo)}&mode=register`;
+    }
+  }, [token, isStaleSession]);
 
   if (!token) {
     return (
@@ -118,9 +144,10 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
           </p>
         )}
 
-        {me.isLoading ? (
-          // Signed-in members hit this while membership loads; avoid flashing a
-          // Join button (which the API would reject) before we know their group.
+        {isRedirecting || me.isLoading ? (
+          // Signed-in members hit this while membership loads, and stale/no-token
+          // visitors hit it while the redirect effect runs; either way avoid
+          // flashing a Join button (which the API would reject) prematurely.
           <button
             type="button"
             disabled

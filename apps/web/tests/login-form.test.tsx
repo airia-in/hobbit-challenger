@@ -262,6 +262,32 @@ describe('LoginForm', () => {
     });
   });
 
+  it('opens the Register tab when redirected with ?mode=register', async () => {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        origin: 'http://localhost',
+        get href() {
+          return locationHref;
+        },
+        set href(value: string) {
+          locationHref = value;
+        },
+        search: '?returnTo=/join?token=abc123&mode=register',
+      },
+    });
+
+    render(<LoginForm />);
+
+    // The register-only Name field is present once the Register tab is active.
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Your name')).toBeInTheDocument();
+    });
+    expect(
+      screen.getByRole('button', { name: 'Create Account' }),
+    ).toBeInTheDocument();
+  });
+
   it('renders the form when the token is invalid or expired', () => {
     mockGetToken.mockReturnValue('expired-token');
     mockMeUseQuery.mockReturnValue({

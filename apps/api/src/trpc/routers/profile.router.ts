@@ -17,6 +17,8 @@ export const profileRouter = router({
         name: z.string().min(1).optional(),
         password: z.string().min(8).optional(),
         reminderTime: z.string().nullable().optional(),
+        habitAnchorText: z.string().nullable().optional(),
+        habitAnchorTime: z.string().nullable().optional(),
         whatsappOptIn: z.boolean().optional(),
         weeklyRecapOptIn: z.boolean().optional(),
         phone: z.string().min(1).optional(),

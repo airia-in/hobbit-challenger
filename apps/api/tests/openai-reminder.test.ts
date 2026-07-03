@@ -33,6 +33,7 @@ const baseContext: ReminderContext = {
   currentStreak: STREAK_AT_RISK_MIN + 2,
   longestStreak: 15,
   streakFreezesAvailable: 0,
+  habitAnchorText: null,
 };
 
 const messaging = buildReminderMessaging('staging.hobbit.example');
@@ -185,6 +186,20 @@ describe('buildReminderCopyLines', () => {
     });
     expect(lines.recoveryLine).toContain('never miss twice');
   });
+
+  it('omits anchorLine when habit anchor is unset', () => {
+    const lines = buildReminderCopyLines(baseContext);
+    expect(lines.anchorLine).toBe('');
+  });
+
+  it('builds anchorLine when habit anchor is set', () => {
+    const lines = buildReminderCopyLines({
+      ...baseContext,
+      habitAnchorText: 'morning chai',
+    });
+    expect(lines.anchorLine).toContain('morning chai');
+    expect(lines.anchorLine).toMatch(/naturally/i);
+  });
 });
 
 describe('buildFallbackMessage', () => {
@@ -283,6 +298,28 @@ describe('buildFallbackMessage', () => {
       0,
     );
     expect(message).not.toMatch(/rain cloak|cloak/i);
+  });
+
+  it('uses anchor-aware morning fallback when habit anchor is set', () => {
+    const message = buildFallbackMessage(
+      'MORNING',
+      {
+        ...baseContext,
+        habitAnchorText: 'morning chai',
+        streakAtRisk: false,
+        journeyMilestone: null,
+        missedYesterday: false,
+      },
+      messaging,
+      0,
+    );
+    expect(message).toMatch(/morning chai|chai/i);
+    expect(message).toContain('HOBBIT');
+  });
+
+  it('morning fallback without anchor does not mention anchor phrase slot', () => {
+    const message = buildFallbackMessage('MORNING', baseContext, messaging, 0);
+    expect(message).not.toContain('{{anchorPhrase}}');
   });
 
   it('selects recovery and streak-at-risk fallbacks deterministically', () => {

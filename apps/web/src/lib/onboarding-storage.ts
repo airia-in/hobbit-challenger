@@ -2,7 +2,7 @@ import { readStorageItem, writeStorageItem } from './browser-storage';
 
 const STORAGE_KEY = 'hobbit:onboarding-checklist';
 
-export type OnboardingStep = 'reminder' | 'habit' | 'invite';
+export type OnboardingStep = 'reminder' | 'anchor' | 'habit' | 'invite';
 
 export type OnboardingChecklistState = {
   dismissed: boolean;
@@ -26,7 +26,10 @@ function readRaw(): OnboardingChecklistState {
       completedSteps: Array.isArray(parsed.completedSteps)
         ? parsed.completedSteps.filter(
             (step): step is OnboardingStep =>
-              step === 'reminder' || step === 'habit' || step === 'invite',
+              step === 'reminder' ||
+              step === 'anchor' ||
+              step === 'habit' ||
+              step === 'invite',
           )
         : [],
       inviteClicked: parsed.inviteClicked ?? false,

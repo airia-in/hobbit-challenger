@@ -25,7 +25,9 @@ model User {
   avatarUrl      String?
   groupId        String?
   group          Group?        @relation(fields: [groupId], references: [id])
-  reminderTime   String?
+  reminderTime      String?
+  habitAnchorText   String?
+  habitAnchorTime   String?
   whatsappOptIn     Boolean       @default(true)
   weeklyRecapOptIn  Boolean       @default(true)
   createdAt      DateTime      @default(now())

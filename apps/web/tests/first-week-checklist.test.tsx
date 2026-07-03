@@ -18,6 +18,7 @@ describe('FirstWeekChecklist', () => {
       <FirstWeekChecklist
         currentDay={8}
         hasReminder={false}
+        hasAnchor={false}
         hasCompletedHabit={false}
       />,
     );
@@ -29,6 +30,7 @@ describe('FirstWeekChecklist', () => {
       <FirstWeekChecklist
         currentDay={3}
         hasReminder={false}
+        hasAnchor={false}
         hasCompletedHabit={false}
       />,
     );
@@ -37,6 +39,9 @@ describe('FirstWeekChecklist', () => {
     expect(
       screen.getByRole('link', { name: /set your morning reminder/i }),
     ).toHaveAttribute('href', '/profile?focus=reminder');
+    expect(
+      screen.getByRole('link', { name: /link a daily habit/i }),
+    ).toHaveAttribute('href', '/profile?focus=anchor');
   });
 
   it('persists dismissal in localStorage', async () => {
@@ -44,6 +49,7 @@ describe('FirstWeekChecklist', () => {
       <FirstWeekChecklist
         currentDay={2}
         hasReminder={false}
+        hasAnchor={false}
         hasCompletedHabit={false}
       />,
     );
@@ -55,11 +61,19 @@ describe('FirstWeekChecklist', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('marks reminder and habit steps from props', () => {
-    render(<FirstWeekChecklist currentDay={5} hasReminder hasCompletedHabit />);
+  it('marks reminder, anchor, and habit steps from props', () => {
+    render(
+      <FirstWeekChecklist
+        currentDay={5}
+        hasReminder
+        hasAnchor
+        hasCompletedHabit
+      />,
+    );
 
     const state = getOnboardingState();
     expect(state.completedSteps).toContain('reminder');
+    expect(state.completedSteps).toContain('anchor');
     expect(state.completedSteps).toContain('habit');
     expect(screen.getByText(/set your morning reminder/i)).toHaveClass(
       'line-through',
@@ -67,7 +81,14 @@ describe('FirstWeekChecklist', () => {
   });
 
   it('marks invite step when invite link is used', async () => {
-    render(<FirstWeekChecklist currentDay={4} hasReminder hasCompletedHabit />);
+    render(
+      <FirstWeekChecklist
+        currentDay={4}
+        hasReminder
+        hasAnchor
+        hasCompletedHabit
+      />,
+    );
 
     markInviteStepClicked();
     dismissOnboardingChecklist();
@@ -81,7 +102,12 @@ describe('FirstWeekChecklist', () => {
     );
 
     const { container } = render(
-      <FirstWeekChecklist currentDay={4} hasReminder hasCompletedHabit />,
+      <FirstWeekChecklist
+        currentDay={4}
+        hasReminder
+        hasAnchor
+        hasCompletedHabit
+      />,
     );
     expect(container).toBeEmptyDOMElement();
   });

@@ -215,6 +215,7 @@ describe('reminder-context helpers', () => {
       currentStreak: STREAK_AT_RISK_MIN,
       longestStreak: 12,
       streakFreezesAvailable: 0,
+      habitAnchorText: null,
     });
   });
 
@@ -540,5 +541,26 @@ describe('reminder-context helpers', () => {
     );
 
     expect(context.missedYesterday).toBe(false);
+  });
+
+  it('passes habitAnchorText through buildReminderContextFromFixture', () => {
+    const context = buildReminderContextFromFixture({
+      name: 'Sam',
+      today: emptyToday({ currentDay: 2 }),
+      todayNetXp: 0,
+      totalXp: 0,
+      habitAnchorText: 'morning chai',
+    });
+    expect(context.habitAnchorText).toBe('morning chai');
+  });
+
+  it('leaves habitAnchorText null when unset', () => {
+    const context = buildReminderContextFromFixture({
+      name: 'Sam',
+      today: emptyToday({ currentDay: 2 }),
+      todayNetXp: 0,
+      totalXp: 0,
+    });
+    expect(context.habitAnchorText).toBeNull();
   });
 });

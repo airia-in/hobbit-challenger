@@ -22,6 +22,11 @@ Internal packages use the `@workspace-starter/*` scope. When adding a new app or
 
 Copy [.env.example](../../.env.example) for local setup. Never commit secrets.
 
+Set `FRONTEND_URL` when group invite links must use a web origin different from
+the first `CORS_ORIGIN` entry (for example a LAN IP or mobile emulator). See
+[group invite links](./production-hosting.md#group-invite-links) for precedence
+details.
+
 ## Database Changes
 
 Schema and migrations live in `packages/db`. After editing the Prisma schema:

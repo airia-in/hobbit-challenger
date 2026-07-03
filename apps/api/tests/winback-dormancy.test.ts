@@ -6,6 +6,7 @@ import {
   isWinbackMorningWindowActionable,
   isWinbackSuppressed,
   localCalendarDaysBetween,
+  resolveWinbackMorningAnchors,
   shouldBlockOtherRemindersForWinback,
   shouldDeferRemindersForWinback,
   shouldRetryWinback,
@@ -284,5 +285,88 @@ describe('winback exclusions and precedence helpers', () => {
   it('documents dormant and suppression constants', () => {
     expect(WINBACK_DORMANT_DAYS_MIN).toBe(3);
     expect(WINBACK_SUPPRESSION_DAYS).toBe(7);
+  });
+});
+
+describe('winback adaptive morning union window', () => {
+  const lastLogDate = localDay('2026-06-12T08:00:00.000Z');
+
+  it('keeps defer active in gap when adaptive shifts later than fixed time', () => {
+    const inGap = new Date('2026-06-15T12:20:00.000Z');
+
+    expect(
+      isWinbackMorningWindowActionable({
+        timezone: TZ,
+        reminderTime: '08:00',
+        effectiveMorningTime: '08:25',
+        winbackLogToday: null,
+        now: inGap,
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldDeferRemindersForWinback({
+        lastActivityDate: lastLogDate,
+        challengeStartDate: activeChallenge.startDate,
+        challengeTimezone: TZ,
+        challenge: activeChallenge,
+        lastWinbackSentAt: null,
+        winbackLogToday: null,
+        reminderTime: '08:00',
+        effectiveMorningTime: '08:25',
+        now: inGap,
+      }),
+    ).toBe(true);
+  });
+
+  it('defers before adaptive effective time when shift is earlier than fixed', () => {
+    const atAdaptiveSlot = new Date('2026-06-15T11:30:00.000Z');
+
+    expect(
+      isWinbackMorningWindowActionable({
+        timezone: TZ,
+        reminderTime: '08:00',
+        effectiveMorningTime: '07:30',
+        winbackLogToday: null,
+        now: atAdaptiveSlot,
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldDeferRemindersForWinback({
+        lastActivityDate: lastLogDate,
+        challengeStartDate: activeChallenge.startDate,
+        challengeTimezone: TZ,
+        challenge: activeChallenge,
+        lastWinbackSentAt: null,
+        winbackLogToday: null,
+        reminderTime: '08:00',
+        effectiveMorningTime: '07:30',
+        now: atAdaptiveSlot,
+      }),
+    ).toBe(true);
+  });
+
+  it('releases union window after later anchor catch-up closes', () => {
+    const afterUnion = new Date('2026-06-15T12:41:00.000Z');
+
+    expect(
+      isWinbackMorningWindowActionable({
+        timezone: TZ,
+        reminderTime: '08:00',
+        effectiveMorningTime: '08:25',
+        winbackLogToday: null,
+        now: afterUnion,
+      }),
+    ).toBe(false);
+  });
+
+  it('orders anchors earliest-first regardless of input order', () => {
+    expect(
+      resolveWinbackMorningAnchors({
+        reminderTime: '08:00',
+        effectiveMorningTime: '07:30',
+      }),
+    ).toEqual(['07:30', '08:00']);
   });
 });

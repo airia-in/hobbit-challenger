@@ -6,6 +6,7 @@ import {
 import type { ReminderContext } from '../src/whatsapp/reminder-context.service';
 import { addLocalDays, parseLocalDateKey } from '../src/utils/day-window';
 import { STREAK_FREEZE_CONSUMED_KIND } from '../src/whatsapp/streak-freeze-message.service';
+import { WinbackService } from '../src/cron/winback.service';
 
 type ReminderLogRow = {
   id: string;
@@ -60,7 +61,72 @@ function createReminderFakePrisma(seed: {
       findMany: async () => users,
     },
     reminderLog: {
-      findFirst: async () => null,
+      findFirst: async ({
+        where,
+      }: {
+        where?: {
+          userId?: string;
+          date?: Date;
+          kind?: string | { in: string[] };
+          status?: string;
+        };
+      } = {}) => {
+        for (const log of reminderLogs.values()) {
+          if (where?.userId && log.userId !== where.userId) continue;
+          if (where?.date && log.date.getTime() !== where.date.getTime()) {
+            continue;
+          }
+          if (typeof where?.kind === 'string' && log.kind !== where.kind) {
+            continue;
+          }
+          if (
+            where?.kind &&
+            typeof where.kind === 'object' &&
+            !where.kind.in.includes(log.kind)
+          ) {
+            continue;
+          }
+          if (where?.status && log.status !== where.status) continue;
+          return log;
+        }
+        return null;
+      },
+      findMany: async ({
+        where,
+      }: {
+        where?: {
+          userId?: { in?: string[] };
+          kind?: string;
+          status?: string;
+          date?: Date | { in?: Date[] };
+        };
+      } = {}) =>
+        [...reminderLogs.values()].filter((log) => {
+          if (where?.userId?.in && !where.userId.in.includes(log.userId)) {
+            return false;
+          }
+          if (where?.kind && log.kind !== where.kind) {
+            return false;
+          }
+          if (where?.status && log.status !== where.status) {
+            return false;
+          }
+          if (where?.date) {
+            if (where.date instanceof Date) {
+              if (log.date.getTime() !== where.date.getTime()) {
+                return false;
+              }
+            } else if (where.date.in) {
+              const matches = where.date.in.some(
+                (date) => date.getTime() === log.date.getTime(),
+              );
+              if (!matches) {
+                return false;
+              }
+            }
+          }
+          return true;
+        }),
       findUnique: async ({
         where,
       }: {
@@ -143,6 +209,7 @@ function createReminderFakePrisma(seed: {
     },
     challenge: {
       findFirst: async () => null,
+      findMany: async () => [],
     },
     activityLog: {
       aggregate: async () => ({ _max: { date: null } }),
@@ -1503,6 +1570,171 @@ describe('ReminderService', () => {
 
     expect(winbackService.shouldDeferRemindersForUser).toHaveBeenCalled();
     expect(countReminderOutboundSends(evolution)).toBe(0);
+  });
+
+  it('defers morning through adaptive winback union gap for dormant users', async () => {
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Good morning!');
+    const buildContext = vi.fn().mockResolvedValue(defaultContext);
+    const lastLogDate = new Date('2026-06-12T00:00:00.000Z');
+    const challengeRecord = {
+      id: 'c1',
+      userId: 'u1',
+      startDate: new Date('2026-06-01T00:00:00.000Z'),
+      endDate: new Date('2026-06-30T00:00:00.000Z'),
+      lengthDays: 30,
+      currentDay: 15,
+      isActive: true,
+      stoppedAt: null,
+    };
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          reminderAdaptive: true,
+          whatsappOptIn: true,
+        },
+      ],
+      activityLogs: buildAdaptiveActivityLogs('u1', 5, 8 * 60 + 25),
+    });
+    prisma.challenge.findMany = async () => [challengeRecord];
+    prisma.activityLog.groupBy = async () => [
+      { challengeId: 'c1', _max: { date: lastLogDate } },
+    ];
+
+    const winbackService = new WinbackService(
+      prisma as never,
+      { isConfigured: () => true, sendText: vi.fn() } as never,
+      { trySendWinback: vi.fn() } as never,
+    );
+
+    const evolution = { isConfigured: () => true, sendText };
+    const service = createReminderService(
+      prisma,
+      evolution,
+      { buildContext },
+      { compose },
+      winbackService as never,
+    );
+
+    vi.setSystemTime(new Date('2026-06-15T08:20:00.000Z'));
+    await service.processReminders();
+    expect(countReminderOutboundSends(evolution)).toBe(0);
+
+    vi.setSystemTime(new Date('2026-06-15T08:25:00.000Z'));
+    await service.processReminders();
+    expect(countReminderOutboundSends(evolution)).toBe(0);
+  });
+
+  it('defers morning before fixed time when adaptive shift is earlier', async () => {
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Good morning!');
+    const buildContext = vi.fn().mockResolvedValue(defaultContext);
+    const lastLogDate = new Date('2026-06-12T00:00:00.000Z');
+    const challengeRecord = {
+      id: 'c1',
+      userId: 'u1',
+      startDate: new Date('2026-06-01T00:00:00.000Z'),
+      endDate: new Date('2026-06-30T00:00:00.000Z'),
+      lengthDays: 30,
+      currentDay: 15,
+      isActive: true,
+      stoppedAt: null,
+    };
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          reminderAdaptive: true,
+          whatsappOptIn: true,
+        },
+      ],
+      activityLogs: buildAdaptiveActivityLogs('u1', 5, 7 * 60 + 30),
+    });
+    prisma.challenge.findMany = async () => [challengeRecord];
+    prisma.activityLog.groupBy = async () => [
+      { challengeId: 'c1', _max: { date: lastLogDate } },
+    ];
+
+    const winbackService = new WinbackService(
+      prisma as never,
+      { isConfigured: () => true, sendText: vi.fn() } as never,
+      { trySendWinback: vi.fn() } as never,
+    );
+
+    const evolution = { isConfigured: () => true, sendText };
+    const service = createReminderService(
+      prisma,
+      evolution,
+      { buildContext },
+      { compose },
+      winbackService as never,
+    );
+
+    vi.setSystemTime(new Date('2026-06-15T07:30:00.000Z'));
+    await service.processReminders();
+    expect(countReminderOutboundSends(evolution)).toBe(0);
+  });
+
+  it('falls back to fixed timing when activity history uses migration-batch timestamps', async () => {
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Good morning!');
+    const buildContext = vi.fn().mockResolvedValue(defaultContext);
+    const migrationInstant = new Date('2026-07-03T14:00:00.000Z');
+    const poisonedLogs = Array.from({ length: 5 }, (_, index) => {
+      const day = 10 + index;
+      const dateKey = `2026-06-${String(day).padStart(2, '0')}`;
+      return {
+        userId: 'u1',
+        date: new Date(`${dateKey}T00:00:00.000Z`),
+        createdAt: migrationInstant,
+        state: 'DONE',
+        tier: null,
+        value: null,
+        subPoints: null,
+      };
+    });
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          reminderAdaptive: true,
+          whatsappOptIn: true,
+        },
+      ],
+      activityLogs: poisonedLogs,
+    });
+
+    const evolution = { isConfigured: () => true, sendText };
+    const service = createReminderService(
+      prisma,
+      evolution,
+      { buildContext },
+      { compose },
+    );
+
+    vi.setSystemTime(new Date('2026-06-15T08:30:00.000Z'));
+    await service.processReminders();
+    expect(countReminderOutboundSends(evolution)).toBe(0);
+
+    vi.setSystemTime(new Date('2026-06-15T08:00:00.000Z'));
+    await service.processReminders();
+    expect(countReminderOutboundSends(evolution)).toBe(1);
   });
 });
 

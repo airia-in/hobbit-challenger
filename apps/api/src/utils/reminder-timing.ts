@@ -18,7 +18,7 @@ export const ADAPTIVE_ABSOLUTE_LATEST = '12:00';
 export type ActivityLogTimingRow = {
   userId: string;
   date: Date;
-  createdAt: Date;
+  createdAt: Date | null;
   state: string | null;
   tier: string | null;
   value: number | null;
@@ -75,21 +75,70 @@ export function createdAtToLocalMinutes(
   return hour * 60 + minute;
 }
 
+/**
+ * Pre-migration ActivityLog rows have NULL createdAt (see migration.sql).
+ * Rows backfilled with DEFAULT CURRENT_TIMESTAMP share one instant across many
+ * distinct log dates; exclude those batches so adaptive stays on fixed timing
+ * until real post-migration check-ins accumulate.
+ */
+export function isTrustedAdaptiveTimingSample(
+  log: ActivityLogTimingRow,
+  poisonedCreatedAtMs: ReadonlySet<number>,
+): boolean {
+  if (log.createdAt == null) {
+    return false;
+  }
+  return !poisonedCreatedAtMs.has(log.createdAt.getTime());
+}
+
+export function findMigrationPoisonedCreatedAtMs(
+  logs: ActivityLogTimingRow[],
+): Set<number> {
+  const byTimestamp = new Map<number, Set<number>>();
+
+  for (const log of logs) {
+    if (log.createdAt == null) {
+      continue;
+    }
+    const timestamp = log.createdAt.getTime();
+    const dayKeys = byTimestamp.get(timestamp) ?? new Set<number>();
+    dayKeys.add(log.date.getTime());
+    byTimestamp.set(timestamp, dayKeys);
+  }
+
+  const poisoned = new Set<number>();
+  for (const [timestamp, dayKeys] of byTimestamp) {
+    if (dayKeys.size >= ADAPTIVE_MIN_DAYS_WITH_LOGS) {
+      poisoned.add(timestamp);
+    }
+  }
+  return poisoned;
+}
+
 export function aggregateFirstLogMinutesByDay(
   logs: ActivityLogTimingRow[],
   timezone: string,
+  now = new Date(),
 ): number[] {
+  const localTodayKey = getUserLocalDate(timezone, now).getTime();
+  const poisonedCreatedAtMs = findMigrationPoisonedCreatedAtMs(logs);
   const firstLogByDay = new Map<number, Date>();
 
   for (const log of logs) {
     if (!isActivityLogLogged(log)) {
       continue;
     }
+    if (!isTrustedAdaptiveTimingSample(log, poisonedCreatedAtMs)) {
+      continue;
+    }
+    if (log.date.getTime() === localTodayKey) {
+      continue;
+    }
 
     const dayKey = log.date.getTime();
     const existing = firstLogByDay.get(dayKey);
-    if (!existing || log.createdAt.getTime() < existing.getTime()) {
-      firstLogByDay.set(dayKey, log.createdAt);
+    if (!existing || log.createdAt!.getTime() < existing.getTime()) {
+      firstLogByDay.set(dayKey, log.createdAt!);
     }
   }
 

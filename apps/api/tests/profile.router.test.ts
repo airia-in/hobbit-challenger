@@ -333,6 +333,21 @@ describe('profileRouter reminderAdaptive', () => {
     const afterUpdate = await caller.get();
     expect(afterUpdate.reminderAdaptive).toBe(false);
   });
+
+  it('requires phone and WhatsApp before enabling reminderAdaptive', async () => {
+    const stores = legacyUserStore();
+    stores.users.get(USER_ID)!.phone = null;
+    stores.users.get(USER_ID)!.whatsappOptIn = false;
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    await expect(
+      caller.update({ reminderAdaptive: true }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message:
+        'Add a phone number and enable WhatsApp reminders before enabling adaptive timing',
+    });
+  });
 });
 
 describe('profileRouter habitAnchor', () => {

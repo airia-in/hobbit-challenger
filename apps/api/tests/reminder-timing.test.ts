@@ -5,6 +5,7 @@ import {
   buildAdaptiveTimingMap,
   computeAdaptiveWindowStart,
   createdAtToLocalMinutes,
+  findMigrationPoisonedCreatedAtMs,
   medianAbsoluteDeviation,
   medianMinutes,
   resolveEffectiveMorningTime,
@@ -14,7 +15,7 @@ function logRow(
   overrides: Partial<{
     userId: string;
     date: Date;
-    createdAt: Date;
+    createdAt: Date | null;
     state: string | null;
     tier: string | null;
     value: number | null;
@@ -23,7 +24,7 @@ function logRow(
   return {
     userId: 'u1',
     date: new Date('2026-06-10T00:00:00.000Z'),
-    createdAt: new Date('2026-06-10T08:20:00.000Z'),
+    createdAt: new Date('2026-06-10T08:20:00.000Z') as Date | null,
     state: 'DONE' as string | null,
     tier: null,
     value: null,
@@ -203,5 +204,75 @@ describe('reminder-timing', () => {
     const now = new Date('2026-06-15T12:00:00.000Z');
     const start = computeAdaptiveWindowStart(now, ['UTC', 'Asia/Kolkata']);
     expect(start.getTime()).toBeLessThan(now.getTime());
+  });
+
+  it('ignores migration-batch createdAt timestamps on many distinct days', () => {
+    const migrationInstant = new Date('2026-07-03T14:00:00.000Z');
+    const poisonedLogs = Array.from({ length: 5 }, (_, index) =>
+      logRow({
+        date: new Date(
+          `2026-06-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+        ),
+        createdAt: migrationInstant,
+      }),
+    );
+
+    expect(findMigrationPoisonedCreatedAtMs(poisonedLogs)).toEqual(
+      new Set([migrationInstant.getTime()]),
+    );
+
+    const minutes = aggregateFirstLogMinutesByDay(poisonedLogs, 'UTC');
+    expect(minutes).toEqual([]);
+
+    const effective = resolveEffectiveMorningTime({
+      baseReminderTime: '08:00',
+      reminderAdaptive: true,
+      firstLogMinutesByDay: minutes,
+    });
+    expect(effective).toBe('08:00');
+  });
+
+  it('ignores NULL createdAt from pre-migration rows', () => {
+    const logs = Array.from({ length: 5 }, (_, index) =>
+      logRow({
+        date: new Date(
+          `2026-06-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+        ),
+        createdAt: null,
+      }),
+    );
+
+    expect(aggregateFirstLogMinutesByDay(logs, 'UTC')).toEqual([]);
+  });
+
+  it('excludes current local day from adaptive samples', () => {
+    const now = new Date('2026-06-15T08:25:00.000Z');
+    const today = new Date('2026-06-15T00:00:00.000Z');
+    const logs = [
+      logRow({
+        date: today,
+        createdAt: new Date('2026-06-15T06:00:00.000Z'),
+      }),
+      logRow({
+        date: new Date('2026-06-14T00:00:00.000Z'),
+        createdAt: new Date('2026-06-14T08:20:00.000Z'),
+      }),
+    ];
+
+    expect(aggregateFirstLogMinutesByDay(logs, 'UTC', now)).toEqual([500]);
+  });
+
+  it('aggregates first-log minutes across DST spring-forward day', () => {
+    const springForwardDay = new Date('2026-03-08T05:00:00.000Z');
+    const minutes = aggregateFirstLogMinutesByDay(
+      [
+        logRow({
+          date: springForwardDay,
+          createdAt: new Date('2026-03-08T14:30:00.000Z'),
+        }),
+      ],
+      'America/New_York',
+    );
+    expect(minutes).toEqual([10 * 60 + 30]);
   });
 });

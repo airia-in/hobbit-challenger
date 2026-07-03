@@ -285,6 +285,23 @@ export async function updateProfile(
   }
 
   if (input.reminderAdaptive !== undefined) {
+    if (input.reminderAdaptive) {
+      const stored = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { phone: true, whatsappOptIn: true },
+      });
+      const effectivePhone = data.phone ?? stored?.phone;
+      const effectiveWhatsapp =
+        data.whatsappOptIn ?? stored?.whatsappOptIn ?? false;
+
+      if (!effectivePhone || !effectiveWhatsapp) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message:
+            'Add a phone number and enable WhatsApp reminders before enabling adaptive timing',
+        });
+      }
+    }
     data.reminderAdaptive = input.reminderAdaptive;
   }
 

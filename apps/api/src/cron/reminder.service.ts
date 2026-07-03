@@ -51,6 +51,7 @@ import {
 const STREAK_AT_RISK_TIME = '18:00';
 const EVENING_TIME = '21:00';
 const FAILED_RETRY_WINDOW_MINUTES = 15;
+/** First-send catch-up after target; same window for fixed and adaptive morning slots. */
 const FIRST_SEND_CATCH_UP_MINUTES = 15;
 /** 18:00–20:59; 21:00 evening block owns final catch-up + EVENING fallback. */
 const STREAK_AT_RISK_SLOT_CATCH_UP_MINUTES = 179;
@@ -105,6 +106,10 @@ export class ReminderService {
     const deferUsers = users.map((user) => ({
       id: user.id,
       reminderTime: user.reminderTime,
+      effectiveMorningTime:
+        morningTimeByUser.get(user.id) ??
+        user.reminderTime ??
+        DEFAULT_MORNING_TIME,
       challengeTimezone: user.group?.challengeTimezone ?? user.timezone,
     }));
     const deferBatch =
@@ -127,7 +132,7 @@ export class ReminderService {
 
   /**
    * Batches ActivityLog history for adaptive morning timing (one query per cron tick).
-   * Winback defer still uses fixed user.reminderTime — not this map.
+   * Winback defer uses the same effectiveMorningTime map (union with fixed reminderTime).
    */
   private async loadAdaptiveMorningTimes(
     users: Array<{
@@ -159,6 +164,11 @@ export class ReminderService {
       where: {
         userId: { in: adaptiveUsers.map((user) => user.id) },
         date: { gte: windowStart },
+        OR: [
+          { state: { not: null } },
+          { tier: { not: null } },
+          { value: { not: null } },
+        ],
       },
       select: {
         userId: true,
@@ -206,7 +216,14 @@ export class ReminderService {
       return;
     }
 
-    if (this.shouldDeferToWinback(user, reminderTimezone, deferBatch)) {
+    if (
+      this.shouldDeferToWinback(
+        user,
+        reminderTimezone,
+        deferBatch,
+        effectiveMorningTime,
+      )
+    ) {
       return;
     }
     const morningTime = effectiveMorningTime;
@@ -369,12 +386,14 @@ export class ReminderService {
     },
     reminderTimezone: string,
     deferBatch: WinbackDeferBatchContext,
+    effectiveMorningTime: string,
   ): boolean {
     return this.winbackService.shouldDeferRemindersForUser(
       {
         userId: user.id,
         challengeTimezone: reminderTimezone,
         reminderTime: user.reminderTime,
+        effectiveMorningTime,
       },
       deferBatch,
     );

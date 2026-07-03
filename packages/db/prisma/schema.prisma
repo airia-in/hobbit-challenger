@@ -155,7 +155,7 @@ model ActivityLog {
   xpAwarded   Int       @default(0)
   proofUrl    String?
   aiVerdict   String?
-  createdAt   DateTime      @default(now())
+  createdAt   DateTime?     @default(now())
 
   @@unique([challengeId, activityId, date])
   @@index([userId, activityId, date])

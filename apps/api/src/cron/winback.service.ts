@@ -13,6 +13,12 @@ import {
   WINBACK_KIND,
   type WinbackDeferInput,
 } from '../utils/winback-dormancy';
+import {
+  buildAdaptiveTimingMap,
+  computeAdaptiveWindowStart,
+  DEFAULT_MORNING_TIME,
+  type ActivityLogTimingRow,
+} from '../utils/reminder-timing';
 import { EvolutionApiClient } from '../whatsapp/evolution.client';
 import { WinbackMessageService } from '../whatsapp/winback-message.service';
 
@@ -22,6 +28,7 @@ type WinbackCandidate = {
   phone: string;
   timezone: string;
   reminderTime: string | null;
+  reminderAdaptive: boolean;
   challengeTimezone: string;
   challenge: {
     id: string;
@@ -37,6 +44,7 @@ type WinbackCandidate = {
 export type WinbackDeferUserInput = {
   id: string;
   reminderTime: string | null;
+  effectiveMorningTime?: string | null;
   challengeTimezone: string;
 };
 
@@ -85,6 +93,7 @@ export class WinbackService {
         phone: true,
         timezone: true,
         reminderTime: true,
+        reminderAdaptive: true,
         group: { select: { challengeTimezone: true } },
         challenges: activeChallengeRelationArgs(),
       },
@@ -102,6 +111,7 @@ export class WinbackService {
         phone: user.phone,
         timezone: user.timezone,
         reminderTime: user.reminderTime,
+        reminderAdaptive: user.reminderAdaptive,
         challengeTimezone: user.group?.challengeTimezone ?? user.timezone,
         challenge,
       });
@@ -142,12 +152,18 @@ export class WinbackService {
       }
     }
 
+    const effectiveMorningByUser =
+      await this.loadEffectiveMorningTimes(candidates);
+
     for (const candidate of candidates) {
       try {
         await this.processCandidate(
           candidate,
           lastActivityByChallenge.get(candidate.challenge.id) ?? null,
           lastWinbackByUser.get(candidate.id) ?? null,
+          effectiveMorningByUser.get(candidate.id) ??
+            candidate.reminderTime ??
+            DEFAULT_MORNING_TIME,
         );
       } catch (error) {
         this.logger.error(`Win-back failed for user ${candidate.id}:`, error);
@@ -264,6 +280,7 @@ export class WinbackService {
       userId: string;
       challengeTimezone: string;
       reminderTime: string | null;
+      effectiveMorningTime?: string | null;
       now?: Date;
     } & Partial<WinbackDeferInput>,
     batch?: WinbackDeferBatchContext,
@@ -283,6 +300,7 @@ export class WinbackService {
         lastWinbackSentAt: batch.lastWinbackByUser.get(input.userId) ?? null,
         winbackLogToday: batch.winbackLogTodayByUser.get(input.userId) ?? null,
         reminderTime: input.reminderTime,
+        effectiveMorningTime: input.effectiveMorningTime,
         now: input.now,
       });
     }
@@ -304,14 +322,60 @@ export class WinbackService {
       lastWinbackSentAt: input.lastWinbackSentAt,
       winbackLogToday: input.winbackLogToday,
       reminderTime: input.reminderTime,
+      effectiveMorningTime: input.effectiveMorningTime,
       now: input.now,
     });
+  }
+
+  private async loadEffectiveMorningTimes(
+    candidates: WinbackCandidate[],
+  ): Promise<Map<string, string>> {
+    const timingUsers = candidates.map((candidate) => ({
+      id: candidate.id,
+      reminderTime: candidate.reminderTime,
+      reminderAdaptive: candidate.reminderAdaptive,
+      challengeTimezone: candidate.challengeTimezone,
+    }));
+
+    const adaptiveUsers = timingUsers.filter((user) => user.reminderAdaptive);
+    if (adaptiveUsers.length === 0) {
+      return buildAdaptiveTimingMap(timingUsers, []);
+    }
+
+    const timezones = [
+      ...new Set(adaptiveUsers.map((user) => user.challengeTimezone)),
+    ];
+    const windowStart = computeAdaptiveWindowStart(new Date(), timezones);
+
+    const logs = await this.prisma.activityLog.findMany({
+      where: {
+        userId: { in: adaptiveUsers.map((user) => user.id) },
+        date: { gte: windowStart },
+        OR: [
+          { state: { not: null } },
+          { tier: { not: null } },
+          { value: { not: null } },
+        ],
+      },
+      select: {
+        userId: true,
+        date: true,
+        createdAt: true,
+        state: true,
+        tier: true,
+        value: true,
+        subPoints: true,
+      },
+    });
+
+    return buildAdaptiveTimingMap(timingUsers, logs as ActivityLogTimingRow[]);
   }
 
   private async processCandidate(
     candidate: WinbackCandidate,
     lastActivityDate: Date | null,
     lastWinbackSentAt: Date | null,
+    effectiveMorningTime: string,
   ): Promise<void> {
     const { challengeTimezone } = candidate;
     const localDate = getUserLocalDate(challengeTimezone);
@@ -330,6 +394,7 @@ export class WinbackService {
       !isWinbackMorningWindowActionable({
         timezone: challengeTimezone,
         reminderTime: candidate.reminderTime,
+        effectiveMorningTime,
         winbackLogToday: winbackLog,
       })
     ) {

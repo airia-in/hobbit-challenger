@@ -140,6 +140,24 @@ function createFakePrisma(seed: FakePrismaSeed) {
         }
         return matches[0] ?? null;
       },
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: { totalXp?: { increment: number } };
+      }) => {
+        const challenge = challenges.get(where.id);
+        if (!challenge) {
+          throw new Error(`Challenge not found: ${where.id}`);
+        }
+        const updated = {
+          ...challenge,
+          totalXp: challenge.totalXp + (data.totalXp?.increment ?? 0),
+        };
+        challenges.set(where.id, updated);
+        return { ...updated };
+      },
       findUniqueOrThrow: async ({ where }: { where: { id: string } }) => {
         const challenge = challenges.get(where.id);
         if (!challenge) {
@@ -473,6 +491,7 @@ const CHECKBOX_ACTIVITY_ID = 'act-progress-photo';
 const DIET_ACTIVITY_ID = 'act-diet';
 const PERSONAL_ACTIVITY_ID = 'act-personal';
 const WATER_ACTIVITY_ID = 'act-water';
+const TIERED_ACTIVITY_ID = 'act-no-reels';
 
 function addUtcDays(date: Date, days: number): Date {
   const next = new Date(date);
@@ -486,12 +505,14 @@ function createActivityLog({
   id = `${activityId}-${date.toISOString()}`,
   state = 'DONE',
   value = null,
+  xpAwarded,
 }: {
   activityId: string;
   date: Date;
   id?: string;
   state?: ActivityLog['state'];
   value?: number | null;
+  xpAwarded?: number;
 }): ActivityLog {
   return {
     id,
@@ -503,7 +524,7 @@ function createActivityLog({
     tier: null,
     subPoints: null,
     state,
-    xpAwarded: state === 'DONE' || value != null ? 100 : 0,
+    xpAwarded: xpAwarded ?? (state === 'DONE' || value != null ? 100 : 0),
     proofUrl: null,
     aiVerdict: null,
   };
@@ -1351,7 +1372,7 @@ describe('activities service', () => {
     expect(stored?.xpDeducted).toBe(0);
   });
 
-  it('getToday exposes date navigation and read-only logged activities for a past day', async () => {
+  it('getToday keeps NUMBER activities editable when logged on a past day', async () => {
     const today = getUserLocalDate('UTC');
     const yesterday = addUtcDays(today, -1);
     const yesterdayKey = yesterday.toISOString().slice(0, 10);
@@ -1370,6 +1391,17 @@ describe('activities service', () => {
         id: 'photo-yesterday',
       }),
     );
+    fake.stores.activityLogs.set(
+      activityLogKey(CHALLENGE_ID, WATER_ACTIVITY_ID, yesterday),
+      createActivityLog({
+        activityId: WATER_ACTIVITY_ID,
+        date: yesterday,
+        id: 'water-yesterday',
+        state: null,
+        value: 1,
+        xpAwarded: 26,
+      }),
+    );
 
     const result = await service.getToday(fake.prisma, USER_ID, yesterdayKey);
 
@@ -1382,14 +1414,85 @@ describe('activities service', () => {
     const diet = result.scoredActivities.find(
       (activity) => activity.id === DIET_ACTIVITY_ID,
     );
+    const water = result.scoredActivities.find(
+      (activity) => activity.id === WATER_ACTIVITY_ID,
+    );
     expect(progressPhoto?.canEdit).toBe(false);
     expect(diet?.canEdit).toBe(true);
+    expect(water?.canEdit).toBe(true);
   });
 
-  it('markActivity rejects backfill when a past-day entry already exists', async () => {
+  it('logNumber updates an existing logged past-day value and recomputes finalized score deltas', async () => {
     const today = getUserLocalDate('UTC');
     const yesterday = addUtcDays(today, -1);
     const yesterdayKey = yesterday.toISOString().slice(0, 10);
+    const challenge = fake.stores.challenges.get(CHALLENGE_ID);
+    expect(challenge).toBeDefined();
+    fake.stores.challenges.set(CHALLENGE_ID, {
+      ...challenge!,
+      startDate: addUtcDays(today, -5),
+      totalXp: 26,
+    });
+    fake.stores.activityLogs.set(
+      activityLogKey(CHALLENGE_ID, WATER_ACTIVITY_ID, yesterday),
+      createActivityLog({
+        activityId: WATER_ACTIVITY_ID,
+        date: yesterday,
+        id: 'water-yesterday',
+        state: null,
+        value: 1,
+        xpAwarded: 26,
+      }),
+    );
+    fake.stores.dayScores.set(dayScoreKey(CHALLENGE_ID, yesterday), {
+      id: 'score-yesterday',
+      challengeId: CHALLENGE_ID,
+      userId: USER_ID,
+      date: yesterday,
+      dayNumber: 5,
+      xpEarned: 26,
+      xpDeducted: 0,
+      netXp: 26,
+      personalXp: 0,
+      breakdown: { allScoredLogged: false, entries: [] },
+      finalized: true,
+    });
+
+    const result = await service.logNumber(
+      fake.prisma,
+      USER_ID,
+      WATER_ACTIVITY_ID,
+      3.8,
+      yesterdayKey,
+    );
+
+    expect(result.log.value).toBe(3.8);
+    expect(result.log.xpAwarded).toBe(100);
+    expect(result.dayTotals).toEqual({
+      netXp: 100,
+      personalXp: 0,
+      xpEarned: 100,
+      xpDeducted: 0,
+    });
+    const storedScore = fake.stores.dayScores.get(
+      dayScoreKey(CHALLENGE_ID, yesterday),
+    );
+    expect(storedScore?.finalized).toBe(true);
+    expect(storedScore?.netXp).toBe(100);
+    expect(storedScore?.xpEarned).toBe(100);
+    expect(fake.stores.challenges.get(CHALLENGE_ID)?.totalXp).toBe(100);
+  });
+
+  it('markActivity rejects backfill when a CHECKBOX past-day entry already exists', async () => {
+    const today = getUserLocalDate('UTC');
+    const yesterday = addUtcDays(today, -1);
+    const yesterdayKey = yesterday.toISOString().slice(0, 10);
+    const challenge = fake.stores.challenges.get(CHALLENGE_ID);
+    expect(challenge).toBeDefined();
+    fake.stores.challenges.set(CHALLENGE_ID, {
+      ...challenge!,
+      startDate: addUtcDays(today, -5),
+    });
 
     fake.stores.activityLogs.set(
       activityLogKey(CHALLENGE_ID, CHECKBOX_ACTIVITY_ID, yesterday),
@@ -1413,10 +1516,86 @@ describe('activities service', () => {
     });
   });
 
+  it('setTier rejects backfill when a TIERED past-day entry already exists', async () => {
+    const today = getUserLocalDate('UTC');
+    const yesterday = addUtcDays(today, -1);
+    const yesterdayKey = yesterday.toISOString().slice(0, 10);
+    const challenge = fake.stores.challenges.get(CHALLENGE_ID);
+    expect(challenge).toBeDefined();
+    fake.stores.challenges.set(CHALLENGE_ID, {
+      ...challenge!,
+      startDate: addUtcDays(today, -5),
+    });
+    fake.stores.activities.set(TIERED_ACTIVITY_ID, {
+      id: TIERED_ACTIVITY_ID,
+      groupId: GROUP_ID,
+      ownerUserId: null,
+      seedKey: 'NO_REELS',
+      title: 'No reels',
+      emoji: null,
+      kind: ActivityKind.TIERED,
+      scored: true,
+      isPersonal: false,
+      xpComplete: null,
+      xpMiss: null,
+      unitLabel: null,
+      xpPerUnit: null,
+      xpCap: null,
+      missXp: null,
+      subPoints: null,
+      tiers: [
+        { key: 'NONE', label: 'None', maxMinutes: 0, xp: 100 },
+        { key: 'LOW', label: 'Low', maxMinutes: 15, xp: 50 },
+      ],
+      deductMultiplier: 2,
+      allowsProof: false,
+      autoCompleteOnProof: false,
+      sortOrder: 6,
+      active: true,
+      createdAt: new Date(),
+    });
+    fake.stores.activityLogs.set(
+      activityLogKey(CHALLENGE_ID, TIERED_ACTIVITY_ID, yesterday),
+      {
+        id: 'tier-yesterday',
+        challengeId: CHALLENGE_ID,
+        userId: USER_ID,
+        activityId: TIERED_ACTIVITY_ID,
+        date: yesterday,
+        state: null,
+        value: null,
+        tier: 'LOW',
+        subPoints: null,
+        xpAwarded: 50,
+        proofUrl: null,
+        aiVerdict: null,
+      },
+    );
+
+    await expect(
+      service.setTier(
+        fake.prisma,
+        USER_ID,
+        TIERED_ACTIVITY_ID,
+        'NONE',
+        yesterdayKey,
+      ),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Entry already recorded for this date',
+    });
+  });
+
   it('markActivity allows backfill for an unlogged activity on a past day', async () => {
     const today = getUserLocalDate('UTC');
     const yesterday = addUtcDays(today, -1);
     const yesterdayKey = yesterday.toISOString().slice(0, 10);
+    const challenge = fake.stores.challenges.get(CHALLENGE_ID);
+    expect(challenge).toBeDefined();
+    fake.stores.challenges.set(CHALLENGE_ID, {
+      ...challenge!,
+      startDate: addUtcDays(today, -5),
+    });
 
     const result = await service.markActivity(
       fake.prisma,
@@ -1428,5 +1607,22 @@ describe('activities service', () => {
     expect(result.log.activityId).toBe(DIET_ACTIVITY_ID);
     expect(result.log.state).toBe('DONE');
     expect(result.dayTotals.netXp).toBeGreaterThan(0);
+  });
+
+  it('logNumber rejects future dates', async () => {
+    const tomorrow = addUtcDays(getUserLocalDate('UTC'), 1);
+    const tomorrowKey = tomorrow.toISOString().slice(0, 10);
+
+    await expect(
+      service.logNumber(
+        fake.prisma,
+        USER_ID,
+        WATER_ACTIVITY_ID,
+        3.8,
+        tomorrowKey,
+      ),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
   });
 });

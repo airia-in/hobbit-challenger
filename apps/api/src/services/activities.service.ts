@@ -218,6 +218,7 @@ function mapActivityToToday(
 }
 
 function computeActivityCanEdit(
+  activity: Pick<Activity, 'kind'>,
   log: ActivityLog | null,
   isViewingToday: boolean,
   todayWindowOpen: boolean,
@@ -226,6 +227,9 @@ function computeActivityCanEdit(
     return todayWindowOpen;
   }
   if (!log) {
+    return true;
+  }
+  if (activity.kind === 'NUMBER') {
     return true;
   }
   return !isActivityLogLogged({
@@ -760,7 +764,7 @@ async function assertCanMutateForDate(
   timezone: string,
   targetDate: Date,
   activityId: string,
-  options: { allowUndo?: boolean } = {},
+  options: { activityKind: Activity['kind']; allowUndo?: boolean },
 ) {
   const todayDate = getUserLocalDate(timezone);
   const todayKey = formatLocalDateKey(todayDate, timezone);
@@ -809,6 +813,7 @@ async function assertCanMutateForDate(
   });
 
   if (
+    options.activityKind !== 'NUMBER' &&
     existing &&
     isActivityLogLogged({
       state: existing.state,
@@ -1018,6 +1023,7 @@ export class ActivitiesService {
     for (const activity of activities) {
       const log = logByActivityId.get(activity.id) ?? null;
       const activityCanEdit = computeActivityCanEdit(
+        activity,
         log,
         isViewingToday,
         todayWindowOpenForEdit,
@@ -1165,7 +1171,7 @@ export class ActivitiesService {
       ctx.user.timezone,
       viewedDate,
       activityId,
-      { allowUndo: true },
+      { activityKind: ctx.activity.kind, allowUndo: true },
     );
 
     return prisma.$transaction(async (tx) => {
@@ -1249,6 +1255,7 @@ export class ActivitiesService {
       mutationTimezone,
       viewedDate,
       activityId,
+      { activityKind: ctx.activity.kind },
     );
 
     const scored = mapActivityToScored(ctx.activity);
@@ -1443,6 +1450,7 @@ export class ActivitiesService {
       mutationTimezone,
       viewedDate,
       activityId,
+      { activityKind: ctx.activity.kind },
     );
 
     const scored = mapActivityToScored(ctx.activity);

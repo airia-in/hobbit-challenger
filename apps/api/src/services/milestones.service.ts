@@ -11,6 +11,7 @@ import { Prisma } from '@workspace-starter/db';
 import type { PrismaService } from '../prisma/prisma.service';
 import { isInterimDayCompleted } from '../utils/day-completion';
 import { formatLocalDateKey } from '../utils/day-window';
+import { buildUserActivityOrConditions } from '../utils/user-activities-query';
 import {
   computeDormantDaysBefore,
   computeLongestCompletedHabitStreak,
@@ -255,19 +256,7 @@ export async function loadMilestoneEvaluationContext(
     }),
     prisma.activity.findMany({
       where: {
-        OR: [
-          { ownerUserId: input.userId, isPersonal: true, active: true },
-          ...(input.groupId
-            ? [
-                {
-                  groupId: input.groupId,
-                  scored: true,
-                  isPersonal: false,
-                  active: true,
-                },
-              ]
-            : []),
-        ],
+        OR: buildUserActivityOrConditions(input.userId, input.groupId),
         kind: { in: ['CHECKBOX', 'SUBPOINTS', 'TIERED'] },
       },
       select: { id: true },

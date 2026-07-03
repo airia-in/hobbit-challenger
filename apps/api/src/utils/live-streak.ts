@@ -1,6 +1,7 @@
 import type { PrismaService } from '../prisma/prisma.service';
 import { computeCurrentStreak } from './day-completion';
 import { getUserLocalDate } from './day-window';
+import { buildUserActivityOrConditions } from './user-activities-query';
 
 type LiveStreakParams = {
   challengeId: string;
@@ -23,15 +24,8 @@ export async function getLiveStreak(
   prisma: PrismaService,
   { challengeId, userId, groupId, timezone, storedStreak }: LiveStreakParams,
 ): Promise<number> {
-  const orConditions: Array<Record<string, unknown>> = [
-    { ownerUserId: userId, isPersonal: true, active: true },
-  ];
-  if (groupId) {
-    orConditions.unshift({ groupId, active: true, scored: true });
-  }
-
   const activities = await prisma.activity.findMany({
-    where: { OR: orConditions },
+    where: { OR: buildUserActivityOrConditions(userId, groupId) },
     select: { id: true, scored: true, isPersonal: true },
   });
 

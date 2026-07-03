@@ -24,11 +24,67 @@ export function LeaderboardContent() {
   const [sortBy, setSortBy] = useState<LeaderboardSortBy>('xp');
   const [window, setWindow] = useState<LeaderboardWindow>('today');
   const me = trpc.auth.me.useQuery();
+  const hasGroup = Boolean(me.data?.user.groupId);
 
   const leaderboard = trpc.leaderboard.get.useQuery(
     { window, sortBy },
-    { refetchInterval: 60_000 },
+    { refetchInterval: 60_000, enabled: hasGroup },
   );
+
+  if (me.isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-sm uppercase tracking-[0.3em] text-[var(--text-muted)]">
+          Loading leaderboard...
+        </p>
+      </div>
+    );
+  }
+
+  if (me.isError) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-12 text-center">
+        <QueryErrorState
+          message={me.error?.message}
+          onRetry={() => void me.refetch()}
+        />
+      </div>
+    );
+  }
+
+  if (!hasGroup) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-12 text-center">
+        <h1
+          className="mb-3 text-3xl text-[var(--text-primary)] sm:text-4xl"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
+          {JOURNEY_LABELS.fellowTravelers}
+        </h1>
+        <p className="text-[var(--text-muted)]">
+          No fellowship yet — your own trail stats live on the dashboard.
+        </p>
+        <p className="mt-2 text-sm text-[var(--text-muted)]">
+          Travel with others when you&apos;re ready, or keep walking your own
+          path.
+        </p>
+        <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+          <a
+            href="/join"
+            className="inline-block rounded bg-[var(--accent-red)] px-6 py-3 text-sm font-bold uppercase tracking-widest text-white hover:bg-[#c42a22]"
+          >
+            Start or join a fellowship
+          </a>
+          <a
+            href="/dashboard"
+            className="text-sm text-[var(--text-muted)] hover:text-[var(--accent-red)]"
+          >
+            Back to dashboard →
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   if (leaderboard.isLoading) {
     return (

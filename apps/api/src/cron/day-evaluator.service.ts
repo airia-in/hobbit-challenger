@@ -18,6 +18,7 @@ import {
   formatLocalDateKey,
   getUserLocalDate,
 } from '../utils/day-window';
+import { buildUserActivityOrConditions } from '../utils/user-activities-query';
 import { MilestoneMessageService } from '../whatsapp/milestone-message.service';
 import { StreakFreezeMessageService } from '../whatsapp/streak-freeze-message.service';
 
@@ -108,16 +109,8 @@ export class DayEvaluatorService {
       isActive: boolean;
     },
   ) {
-    const orConditions: Array<Record<string, unknown>> = [
-      { ownerUserId: userId, isPersonal: true, active: true },
-    ];
-    // Mirror loadUserActivities: only match group/scored activities when the user has a group.
-    if (groupId) {
-      orConditions.unshift({ groupId, active: true, scored: true });
-    }
-
     const activities = await this.prisma.activity.findMany({
-      where: { OR: orConditions },
+      where: { OR: buildUserActivityOrConditions(userId, groupId) },
     });
 
     const scoredActivities = activities.filter(

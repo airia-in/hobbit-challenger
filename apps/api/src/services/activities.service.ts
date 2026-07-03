@@ -11,6 +11,7 @@ import {
   type Activity,
   type ActivityLog,
   type Challenge,
+  ensureSoloActivities,
 } from '@workspace-starter/db';
 import type { PrismaService } from '../prisma/prisma.service';
 
@@ -28,6 +29,7 @@ import {
   isLocalDateKey,
   parseLocalDateKey,
 } from '../utils/day-window';
+import { buildUserActivityOrConditions } from '../utils/user-activities-query';
 import {
   clampDateRange,
   countDaysInclusive,
@@ -637,16 +639,8 @@ async function loadUserActivities(
   prisma: PrismaClientLike,
   { userId, groupId }: { userId: string; groupId: string | null },
 ) {
-  const orConditions: Prisma.ActivityWhereInput[] = [
-    { ownerUserId: userId, isPersonal: true, active: true },
-  ];
-
-  if (groupId) {
-    orConditions.unshift({ groupId, active: true, scored: true });
-  }
-
   return prisma.activity.findMany({
-    where: { OR: orConditions },
+    where: { OR: buildUserActivityOrConditions(userId, groupId) },
     orderBy: { sortOrder: 'asc' },
   });
 }
@@ -889,6 +883,10 @@ export class ActivitiesService {
     });
     if (!user) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+    }
+
+    if (!user.groupId) {
+      await ensureSoloActivities(prisma, userId);
     }
 
     const timezone = options?.timezone ?? user.timezone;

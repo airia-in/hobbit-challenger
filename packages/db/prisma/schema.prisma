@@ -132,6 +132,7 @@ model Activity {
   logs             ActivityLog[]
 
   @@unique([groupId, seedKey])
+  @@unique([ownerUserId, seedKey])
   @@index([groupId])
   @@index([ownerUserId])
 }

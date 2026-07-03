@@ -1,8 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import { TRPCError } from '@trpc/server';
+import {
+  seedSoloActivities,
+  ensureSoloActivities,
+} from '@workspace-starter/db';
 import { authRouter } from '../src/trpc/routers/auth.router';
 import { DEFAULT_CHALLENGE_WINDOW_DAYS } from '../src/utils/challenge-range';
 import type { Context } from '../src/trpc/context';
+
+vi.mock('@workspace-starter/db', async (importOriginal) => ({
+  ...(await importOriginal()),
+  seedSoloActivities: vi.fn(async () => {}),
+  ensureSoloActivities: vi.fn(async () => true),
+}));
 
 const USER_ID = 'user-1';
 const PHONE = '+919876543210';
@@ -157,6 +167,7 @@ describe('authRouter register/login', () => {
     );
     expect(stores.challenges[0]?.endDate).toBeInstanceOf(Date);
     expect(ctx.authService.hashPassword).toHaveBeenCalledWith(PASSWORD);
+    expect(seedSoloActivities).toHaveBeenCalledWith(expect.anything(), USER_ID);
   });
 
   it('rejects duplicate phone on register', async () => {
@@ -275,5 +286,36 @@ describe('authRouter register/login', () => {
     expect(result.token).toBe('jwt-token');
     expect(result.user.email).toBe('legacy@example.com');
     expect(result.user.phone).toBeNull();
+  });
+
+  it('backfills solo seeds on me for groupless users', async () => {
+    const existing: StoredUser = {
+      id: USER_ID,
+      name: 'Legacy',
+      phone: PHONE,
+      email: null,
+      passwordHash: PASSWORD_HASH,
+      timezone: 'UTC',
+      avatarUrl: null,
+      groupId: null,
+    };
+    const stores = {
+      users: new Map([[USER_ID, existing]]),
+      usersByPhone: new Map([[PHONE, existing]]),
+      usersByEmail: new Map<string, StoredUser>(),
+      challenges: [] as Array<{ userId: string }>,
+    };
+    const caller = authRouter.createCaller({
+      ...createAuthContext(stores),
+      user: { id: USER_ID },
+    });
+
+    const result = await caller.me();
+
+    expect(ensureSoloActivities).toHaveBeenCalledWith(
+      expect.anything(),
+      USER_ID,
+    );
+    expect(result.hasSoloSeeds).toBe(true);
   });
 });

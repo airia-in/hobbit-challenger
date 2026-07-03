@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
-import { seedGroupActivities } from '@workspace-starter/db';
+import {
+  seedGroupActivities,
+  deactivateSoloActivities,
+  migrateSoloActivityLogs,
+} from '@workspace-starter/db';
 import { z } from 'zod';
 import { latestChallengeRelationArgs } from '../../utils/challenge-query';
 import {
@@ -10,6 +14,7 @@ import {
   buildDefaultChallengeRange,
   deriveChallengeProgress,
   lengthDaysFromRange,
+  mergeChallengeOnGroupJoin,
 } from '../../utils/challenge-range';
 import { buildInviteUrl } from '../../utils/invite-url';
 import {
@@ -95,15 +100,32 @@ export const groupsRouter = router({
           where: { userId: ctx.user.id, isActive: true },
           orderBy: { startDate: 'desc' },
         });
+
         if (activeChallenge) {
+          await migrateSoloActivityLogs(
+            tx,
+            ctx.user.id,
+            activeChallenge.id,
+            created.id,
+          );
+        }
+        await deactivateSoloActivities(tx, ctx.user.id);
+
+        if (activeChallenge) {
+          const merged = mergeChallengeOnGroupJoin(
+            activeChallenge,
+            range.startDate,
+            range.endDate,
+            timezone,
+          );
           await tx.challenge.update({
             where: { id: activeChallenge.id },
             data: {
               groupId: created.id,
-              startDate: range.startDate,
-              endDate: range.endDate,
-              lengthDays: range.lengthDays,
-              currentDay: range.currentDay,
+              startDate: merged.startDate,
+              endDate: merged.endDate,
+              lengthDays: merged.lengthDays,
+              currentDay: merged.currentDay,
               stoppedAt: null,
             },
           });
@@ -456,6 +478,16 @@ export const groupsRouter = router({
           where: { userId: ctx.user.id, isActive: true },
         });
 
+        if (existingChallenge) {
+          await migrateSoloActivityLogs(
+            tx,
+            ctx.user.id,
+            existingChallenge.id,
+            group.id,
+          );
+        }
+        await deactivateSoloActivities(tx, ctx.user.id);
+
         if (!existingChallenge) {
           const timezone = group.challengeTimezone ?? user.timezone;
           const range =
@@ -480,27 +512,33 @@ export const groupsRouter = router({
           });
         } else {
           const timezone = group.challengeTimezone ?? user.timezone;
-          const range =
-            group.challengeStartDate && group.challengeEndDate
-              ? buildChallengeRange(
-                  group.challengeStartDate,
-                  group.challengeEndDate,
-                  timezone,
-                )
-              : deriveChallengeProgress(existingChallenge, timezone);
-
-          await tx.challenge.update({
-            where: { id: existingChallenge.id },
-            data: {
-              groupId: group.id,
-              startDate:
-                group.challengeStartDate ?? existingChallenge.startDate,
-              endDate: range.endDate,
-              lengthDays: range.lengthDays,
-              currentDay: range.currentDay,
-              stoppedAt: null,
-            },
-          });
+          if (group.challengeStartDate && group.challengeEndDate) {
+            const merged = mergeChallengeOnGroupJoin(
+              existingChallenge,
+              group.challengeStartDate,
+              group.challengeEndDate,
+              timezone,
+            );
+            await tx.challenge.update({
+              where: { id: existingChallenge.id },
+              data: {
+                groupId: group.id,
+                startDate: merged.startDate,
+                endDate: merged.endDate,
+                lengthDays: merged.lengthDays,
+                currentDay: merged.currentDay,
+                stoppedAt: null,
+              },
+            });
+          } else {
+            await tx.challenge.update({
+              where: { id: existingChallenge.id },
+              data: {
+                groupId: group.id,
+                stoppedAt: null,
+              },
+            });
+          }
         }
       });
 

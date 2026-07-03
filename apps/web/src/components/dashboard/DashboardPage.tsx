@@ -622,6 +622,37 @@ export function DashboardContent() {
               }
             />
 
+            {today.scoredActivities.length === 0 &&
+              today.personalActivities.length === 0 && (
+                <div
+                  className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 text-center"
+                  data-testid="dashboard-empty-state"
+                >
+                  <p className="text-sm text-[var(--text-primary)]">
+                    Your trail is ready
+                  </p>
+                  <p className="mt-2 text-sm text-[var(--text-muted)]">
+                    Built-in habits will appear here once seeded. Add personal
+                    habits from your profile, or join a fellowship when you want
+                    company on the road.
+                  </p>
+                  <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+                    <a
+                      href="/join"
+                      className="inline-block rounded bg-[var(--accent-red)] px-6 py-3 text-sm font-bold uppercase tracking-widest text-white hover:bg-[#c42a22]"
+                    >
+                      Choose your path
+                    </a>
+                    <a
+                      href="/profile"
+                      className="text-sm text-[var(--text-muted)] hover:text-[var(--accent-red)]"
+                    >
+                      Add personal habits →
+                    </a>
+                  </div>
+                </div>
+              )}
+
             {allScoredComplete &&
               !perfectDayBannerDismissed &&
               today.scoredActivities.length > 0 && (

@@ -60,6 +60,10 @@ export function AppNav({ currentPath = '' }: AppNavProps) {
     !profile.isLoading &&
     !profile.isError &&
     profile.data?.isGroupAdmin === true;
+  const hasGroup = Boolean(profile.data?.groupId);
+  const navItems = NAV_ITEMS.filter(
+    (item) => item.href !== '/leaderboard' || hasGroup,
+  );
 
   return (
     <>
@@ -77,7 +81,7 @@ export function AppNav({ currentPath = '' }: AppNavProps) {
           </p>
         </div>
         <div className="flex flex-1 flex-col gap-1">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <NavLink
               key={item.href}
               {...item}
@@ -136,7 +140,7 @@ export function AppNav({ currentPath = '' }: AppNavProps) {
           </div>
         )}
         <div className="flex">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const active =
               path === item.href || path.startsWith(`${item.href}/`);
             return (

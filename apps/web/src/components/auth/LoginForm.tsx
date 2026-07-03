@@ -12,13 +12,13 @@ function getReturnTo(): string | null {
   return new URLSearchParams(window.location.search).get('returnTo');
 }
 
-function routeAfterAuth(groupId: string | null | undefined) {
+function routeAfterAuth(_groupId: string | null | undefined) {
   const returnTo = getReturnTo();
   if (returnTo) {
     window.location.href = returnTo;
     return;
   }
-  window.location.href = groupId ? '/dashboard' : '/join';
+  window.location.href = '/dashboard';
 }
 
 function LoginFormInner() {

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { TRPCError } from '@trpc/server';
-import { seedGroupActivities } from '@workspace-starter/db';
+import {
+  seedGroupActivities,
+  deactivateSoloActivities,
+  migrateSoloActivityLogs,
+} from '@workspace-starter/db';
 import { groupsRouter } from '../src/trpc/routers/groups.router';
 import { DEFAULT_CHALLENGE_WINDOW_DAYS } from '../src/utils/challenge-range';
 import type { Context } from '../src/trpc/context';
@@ -8,6 +12,8 @@ import type { Context } from '../src/trpc/context';
 vi.mock('@workspace-starter/db', async (importOriginal) => ({
   ...(await importOriginal()),
   seedGroupActivities: vi.fn(async () => {}),
+  deactivateSoloActivities: vi.fn(async () => {}),
+  migrateSoloActivityLogs: vi.fn(async () => {}),
 }));
 
 const CALLER_ID = 'user-caller';
@@ -549,17 +555,29 @@ function seedActiveChallenge(
     id = CHALLENGE_ID,
     userId = CALLER_ID,
     groupId = null,
-  }: { id?: string; userId?: string; groupId?: string | null } = {},
+    startDate = new Date('2026-06-01T00:00:00.000Z'),
+    endDate = new Date('2026-06-30T00:00:00.000Z'),
+    currentDay = 1,
+    lengthDays = DEFAULT_CHALLENGE_WINDOW_DAYS,
+  }: {
+    id?: string;
+    userId?: string;
+    groupId?: string | null;
+    startDate?: Date;
+    endDate?: Date | null;
+    currentDay?: number;
+    lengthDays?: number;
+  } = {},
 ): StoredChallenge {
   const challenge: StoredChallenge = {
     id,
     userId,
     groupId,
     isActive: true,
-    startDate: new Date('2026-06-01T00:00:00.000Z'),
-    currentDay: 1,
-    lengthDays: DEFAULT_CHALLENGE_WINDOW_DAYS,
-    endDate: new Date('2026-06-30T00:00:00.000Z'),
+    startDate,
+    currentDay,
+    lengthDays,
+    endDate,
     stoppedAt: null,
   };
   stores.challenges.set(id, challenge);
@@ -568,6 +586,8 @@ function seedActiveChallenge(
 
 beforeEach(() => {
   vi.mocked(seedGroupActivities).mockClear();
+  vi.mocked(deactivateSoloActivities).mockClear();
+  vi.mocked(migrateSoloActivityLogs).mockClear();
   vi.setSystemTime(new Date('2026-06-15T12:00:00.000Z'));
 });
 
@@ -587,6 +607,10 @@ describe('groupsRouter create', () => {
     expect(seedGroupActivities).toHaveBeenCalledWith(
       expect.anything(),
       result.group.id,
+    );
+    expect(deactivateSoloActivities).toHaveBeenCalledWith(
+      expect.anything(),
+      CALLER_ID,
     );
     expect(result.inviteUrl).toContain('token=');
     expect(result.inviteUrl).toContain(
@@ -633,15 +657,40 @@ describe('groupsRouter join', () => {
 
   it('updates an existing active challenge groupId instead of creating a duplicate', async () => {
     const stores = createGroupsStores();
-    seedGroup(stores);
-    seedActiveChallenge(stores, { groupId: null });
+    seedGroup(stores, {
+      challengeStartDate: new Date('2026-06-10T00:00:00.000Z'),
+      challengeEndDate: new Date('2026-07-09T00:00:00.000Z'),
+      challengeTimezone: 'UTC',
+    });
+    seedActiveChallenge(stores, {
+      groupId: null,
+      startDate: new Date('2026-06-01T00:00:00.000Z'),
+      endDate: new Date('2026-06-30T00:00:00.000Z'),
+    });
     const caller = groupsRouter.createCaller(createGroupsContext(stores));
 
     await caller.join({ token: INVITE_TOKEN });
 
     expect(stores.challenges.size).toBe(1);
-    expect(stores.challenges.get(CHALLENGE_ID)?.groupId).toBe(GROUP_ID);
+    const challenge = stores.challenges.get(CHALLENGE_ID);
+    expect(challenge?.groupId).toBe(GROUP_ID);
+    expect(challenge?.startDate.toISOString()).toBe(
+      new Date('2026-06-01T00:00:00.000Z').toISOString(),
+    );
+    expect(challenge?.endDate?.toISOString()).toBe(
+      new Date('2026-07-09T00:00:00.000Z').toISOString(),
+    );
     expect(stores.users.get(CALLER_ID)?.groupId).toBe(GROUP_ID);
+    expect(migrateSoloActivityLogs).toHaveBeenCalledWith(
+      expect.anything(),
+      CALLER_ID,
+      CHALLENGE_ID,
+      GROUP_ID,
+    );
+    expect(deactivateSoloActivities).toHaveBeenCalledWith(
+      expect.anything(),
+      CALLER_ID,
+    );
   });
 
   it('rejects join with an invalid token', async () => {
@@ -677,6 +726,10 @@ describe('groupsRouter join', () => {
     expect(seedGroupActivities).toHaveBeenCalledWith(
       expect.anything(),
       GROUP_ID,
+    );
+    expect(deactivateSoloActivities).toHaveBeenCalledWith(
+      expect.anything(),
+      CALLER_ID,
     );
   });
 

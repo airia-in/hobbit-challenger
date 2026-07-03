@@ -7,6 +7,10 @@ import { loadPromptFile } from '../services/prompt-loader';
 import type { PrismaService } from '../prisma/prisma.service';
 import { EvolutionApiClient } from './evolution.client';
 import {
+  PRODUCT_EVENT_KEYS,
+  trackProductEventFireAndForget,
+} from '../services/analytics.service';
+import {
   buildReminderMessaging,
   type ReminderMessaging,
 } from './openai-reminder.service';
@@ -233,6 +237,12 @@ export class CheckinAckMessageService {
 
       if (!this.evolution.isConfigured()) {
         await this.recordTerminalCheckinAckLog(input.prisma, logKey, 'FAILED');
+        trackProductEventFireAndForget(
+          input.prisma,
+          input.userId,
+          PRODUCT_EVENT_KEYS.REMINDER_SENT,
+          { kind: CHECKIN_ACK_KIND, status: 'FAILED' },
+        );
         return;
       }
 
@@ -260,6 +270,12 @@ export class CheckinAckMessageService {
       }
 
       await this.finalizeCheckinAckLog(input.prisma, logKey, status);
+      trackProductEventFireAndForget(
+        input.prisma,
+        input.userId,
+        PRODUCT_EVENT_KEYS.REMINDER_SENT,
+        { kind: CHECKIN_ACK_KIND, status },
+      );
     } catch (error) {
       this.logger.error('Check-in ack failed:', error);
     }

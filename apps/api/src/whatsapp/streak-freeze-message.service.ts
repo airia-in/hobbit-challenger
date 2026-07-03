@@ -12,6 +12,10 @@ import {
 import type { PrismaService } from '../prisma/prisma.service';
 import { EvolutionApiClient } from './evolution.client';
 import {
+  PRODUCT_EVENT_KEYS,
+  trackProductEventFireAndForget,
+} from '../services/analytics.service';
+import {
   buildReminderMessaging,
   type ReminderMessaging,
 } from './openai-reminder.service';
@@ -345,6 +349,12 @@ export class StreakFreezeMessageService {
 
     if (!evolutionConfigured) {
       await this.upsertStreakFreezeLog(input.prisma, logKey, 'FAILED');
+      trackProductEventFireAndForget(
+        input.prisma,
+        input.userId,
+        PRODUCT_EVENT_KEYS.REMINDER_SENT,
+        { kind: STREAK_FREEZE_GRANTED_KIND, status: 'FAILED' },
+      );
       return;
     }
 
@@ -359,6 +369,12 @@ export class StreakFreezeMessageService {
     const status: StreakFreezeMessageStatus = result.ok ? 'SENT' : 'FAILED';
 
     await this.upsertStreakFreezeLog(input.prisma, logKey, status);
+    trackProductEventFireAndForget(
+      input.prisma,
+      input.userId,
+      PRODUCT_EVENT_KEYS.REMINDER_SENT,
+      { kind: STREAK_FREEZE_GRANTED_KIND, status },
+    );
   }
 
   async trySendConsumeMessage(input: {
@@ -396,6 +412,12 @@ export class StreakFreezeMessageService {
 
     if (!evolutionConfigured) {
       await this.upsertStreakFreezeLog(input.prisma, logKey, 'FAILED');
+      trackProductEventFireAndForget(
+        input.prisma,
+        input.userId,
+        PRODUCT_EVENT_KEYS.REMINDER_SENT,
+        { kind: STREAK_FREEZE_CONSUMED_KIND, status: 'FAILED' },
+      );
       return;
     }
 
@@ -409,6 +431,12 @@ export class StreakFreezeMessageService {
     const status: StreakFreezeMessageStatus = result.ok ? 'SENT' : 'FAILED';
 
     await this.upsertStreakFreezeLog(input.prisma, logKey, status);
+    trackProductEventFireAndForget(
+      input.prisma,
+      input.userId,
+      PRODUCT_EVENT_KEYS.REMINDER_SENT,
+      { kind: STREAK_FREEZE_CONSUMED_KIND, status },
+    );
   }
 
   private async upsertStreakFreezeLog(

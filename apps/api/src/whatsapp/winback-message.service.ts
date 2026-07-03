@@ -7,6 +7,10 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { WINBACK_KIND, shouldRetryWinback } from '../utils/winback-dormancy';
 import { EvolutionApiClient } from './evolution.client';
 import {
+  PRODUCT_EVENT_KEYS,
+  trackProductEventFireAndForget,
+} from '../services/analytics.service';
+import {
   buildReminderMessaging,
   type ReminderMessaging,
 } from './openai-reminder.service';
@@ -195,6 +199,12 @@ export class WinbackMessageService {
 
     if (!this.evolution.isConfigured()) {
       await this.upsertWinbackLog(input.prisma, logKey, 'FAILED');
+      trackProductEventFireAndForget(
+        input.prisma,
+        input.userId,
+        PRODUCT_EVENT_KEYS.REMINDER_SENT,
+        { kind: WINBACK_KIND, status: 'FAILED' },
+      );
       return;
     }
 
@@ -203,6 +213,12 @@ export class WinbackMessageService {
     const status: WinbackStatus = result.ok ? 'SENT' : 'FAILED';
 
     await this.upsertWinbackLog(input.prisma, logKey, status);
+    trackProductEventFireAndForget(
+      input.prisma,
+      input.userId,
+      PRODUCT_EVENT_KEYS.REMINDER_SENT,
+      { kind: WINBACK_KIND, status },
+    );
   }
 
   private async upsertWinbackLog(

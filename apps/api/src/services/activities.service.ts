@@ -58,6 +58,10 @@ import {
 } from '../utils/proof-completion';
 import { getLiveStreak } from '../utils/live-streak';
 import { CheckinAckMessageService } from '../whatsapp/checkin-ack-message.service';
+import {
+  PRODUCT_EVENT_KEYS,
+  trackProductEventFireAndForget,
+} from './analytics.service';
 
 export const LEGACY_TASK_TYPES = [
   'DIET',
@@ -1325,6 +1329,12 @@ export class ActivitiesService {
         return { log, dayTotals };
       })
       .then((result) => {
+        this.scheduleActivityLoggedEvent(
+          prisma,
+          userId,
+          ctx.challenge.id,
+          ctx.activity,
+        );
         this.scheduleCheckinAckIfDayJustCompleted(prisma, {
           user: ctx.user,
           challenge: ctx.challenge,
@@ -1512,6 +1522,12 @@ export class ActivitiesService {
         return { log, dayTotals };
       })
       .then((result) => {
+        this.scheduleActivityLoggedEvent(
+          prisma,
+          userId,
+          ctx.challenge.id,
+          ctx.activity,
+        );
         this.scheduleCheckinAckIfDayJustCompleted(prisma, {
           user: ctx.user,
           challenge: ctx.challenge,
@@ -1554,6 +1570,25 @@ export class ActivitiesService {
     });
 
     return computeDayLoggingStatus(scoredIds, logs).allScoredLogged;
+  }
+
+  private scheduleActivityLoggedEvent(
+    prisma: PrismaService,
+    userId: string,
+    challengeId: string,
+    activity: Activity,
+  ): void {
+    trackProductEventFireAndForget(
+      prisma,
+      userId,
+      PRODUCT_EVENT_KEYS.ACTIVITY_LOGGED,
+      {
+        activityId: activity.id,
+        challengeId,
+        activityKind: activity.kind,
+        scored: activity.scored,
+      },
+    );
   }
 
   private scheduleCheckinAckIfDayJustCompleted(

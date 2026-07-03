@@ -10,6 +10,10 @@ import {
   deriveChallengeProgress,
 } from '../../utils/challenge-range';
 import { publicProcedure, protectedProcedure, router } from '../trpc';
+import {
+  PRODUCT_EVENT_KEYS,
+  trackProductEventFireAndForget,
+} from '../../services/analytics.service';
 
 const userSelect = {
   id: true,
@@ -109,6 +113,13 @@ export const authRouter = router({
       });
 
       const token = ctx.authService.signToken({ userId: user.id });
+
+      trackProductEventFireAndForget(
+        ctx.prisma,
+        user.id,
+        PRODUCT_EVENT_KEYS.USER_REGISTERED,
+        { timezone },
+      );
 
       return { token, user };
     }),

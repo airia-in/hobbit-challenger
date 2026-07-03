@@ -21,6 +21,10 @@ import {
 import { buildUserActivityOrConditions } from '../utils/user-activities-query';
 import { MilestoneMessageService } from '../whatsapp/milestone-message.service';
 import { StreakFreezeMessageService } from '../whatsapp/streak-freeze-message.service';
+import {
+  PRODUCT_EVENT_KEYS,
+  trackProductEventFireAndForget,
+} from '../services/analytics.service';
 
 @Injectable()
 export class DayEvaluatorService {
@@ -314,6 +318,12 @@ export class DayEvaluatorService {
     });
 
     if (finalized) {
+      this.trackDayFinalizedEvents({
+        userId,
+        challengeId: challenge.id,
+        previousStreak: challenge.currentStreak,
+        result,
+      });
       this.markMilestoneSelfHealAttempted(
         challenge.id,
         evaluationDay,
@@ -442,6 +452,18 @@ export class DayEvaluatorService {
         streakFreezesUsed: input.streakFreezesUsed,
       });
 
+      for (const milestoneKey of newlyUnlocked) {
+        trackProductEventFireAndForget(
+          this.prisma,
+          input.userId,
+          PRODUCT_EVENT_KEYS.MILESTONE_UNLOCKED,
+          {
+            milestoneKey,
+            challengeId: input.challengeId,
+          },
+        );
+      }
+
       if (
         !this.milestoneMessage ||
         !input.userPhone ||
@@ -561,6 +583,52 @@ export class DayEvaluatorService {
       this.logger.error(
         `Streak freeze consume message failed for user ${input.userId}:`,
         error,
+      );
+    }
+  }
+
+  private trackDayFinalizedEvents(input: {
+    userId: string;
+    challengeId: string;
+    previousStreak: number;
+    result: ReturnType<typeof evaluateDayRollover>;
+  }): void {
+    const { result } = input;
+    trackProductEventFireAndForget(
+      this.prisma,
+      input.userId,
+      PRODUCT_EVENT_KEYS.DAY_FINALIZED,
+      {
+        challengeId: input.challengeId,
+        dayNumber: result.dayScore.dayNumber,
+        allScoredLogged: result.dayScore.breakdown.allScoredLogged,
+        netXp: result.dayScore.netXp,
+        currentStreak: result.challengeUpdate.currentStreak,
+      },
+    );
+
+    if (result.flags.freezeConsumed) {
+      trackProductEventFireAndForget(
+        this.prisma,
+        input.userId,
+        PRODUCT_EVENT_KEYS.STREAK_FREEZE_CONSUMED,
+        {
+          challengeId: input.challengeId,
+          currentStreak: result.challengeUpdate.currentStreak,
+        },
+      );
+    } else if (
+      input.previousStreak > 0 &&
+      result.challengeUpdate.currentStreak === 0
+    ) {
+      trackProductEventFireAndForget(
+        this.prisma,
+        input.userId,
+        PRODUCT_EVENT_KEYS.STREAK_BROKEN,
+        {
+          challengeId: input.challengeId,
+          previousStreak: input.previousStreak,
+        },
       );
     }
   }

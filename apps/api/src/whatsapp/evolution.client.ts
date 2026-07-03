@@ -1,7 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-export type SendTextResult = { ok: true } | { ok: false; error: string };
+export type SendMessageResult = { ok: true } | { ok: false; error: string };
+
+export type SendTextResult = SendMessageResult;
+
+export type SendButton = {
+  id: string;
+  displayText: string;
+};
+
+export type SendButtonsInput = {
+  title?: string;
+  description: string;
+  footer?: string;
+  buttons: SendButton[];
+};
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
@@ -30,6 +44,37 @@ export class EvolutionApiClient {
     const endpoint = `${this.url}/message/sendText/${this.instance}`;
     const body = JSON.stringify({ number: toPhoneE164, text });
 
+    return this.postWithRetry(endpoint, body);
+  }
+
+  async sendButtons(
+    toPhoneE164: string,
+    input: SendButtonsInput,
+  ): Promise<SendMessageResult> {
+    if (!this.isConfigured()) {
+      return { ok: false, error: 'Evolution API not configured' };
+    }
+
+    const endpoint = `${this.url}/message/sendButtons/${this.instance}`;
+    const body = JSON.stringify({
+      number: toPhoneE164,
+      title: input.title ?? '',
+      description: input.description,
+      footer: input.footer ?? '',
+      buttons: input.buttons.map((button) => ({
+        type: 'reply',
+        displayText: button.displayText,
+        id: button.id,
+      })),
+    });
+
+    return this.postWithRetry(endpoint, body);
+  }
+
+  private async postWithRetry(
+    endpoint: string,
+    body: string,
+  ): Promise<SendMessageResult> {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const response = await fetch(endpoint, {

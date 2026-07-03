@@ -32,6 +32,15 @@ import {
   type WinbackDeferBatchContext,
 } from './winback.service';
 import { trackReminderSentFireAndForget } from '../services/analytics.service';
+import {
+  buildCheckinTextFallback,
+  buildInteractiveReminderPayload,
+} from '../whatsapp/interactive-checkin-buttons';
+import {
+  isInteractiveCheckinReminderKind,
+  REST_DAY_KIND,
+  snoozeKindFor,
+} from '../whatsapp/interactive-checkin.constants';
 
 const DEFAULT_MORNING_TIME = '08:00';
 const STREAK_AT_RISK_TIME = '18:00';
@@ -127,6 +136,10 @@ export class ReminderService {
     }
 
     const localDate = getUserLocalDate(reminderTimezone);
+
+    if (await this.hasRestDay(user.id, localDate)) {
+      return;
+    }
 
     if (this.shouldDeferToWinback(user, reminderTimezone, deferBatch)) {
       return;
@@ -433,12 +446,37 @@ export class ReminderService {
       return;
     }
 
+    if (isInteractiveCheckinReminderKind(kind)) {
+      if (await this.shouldSkipForActiveSnooze(user.id, localDate, kind)) {
+        return;
+      }
+      await this.consumeExpiredSnoozeIfNeeded(user.id, localDate, kind);
+    }
+
     const context =
       prebuiltContext ??
       (await this.contextService.buildContext(this.prisma, user.id, user.name));
 
     const text = await this.openAiReminder.compose(kind, context);
-    const result = await this.evolution.sendText(user.phone!, text);
+    let result: { ok: boolean; error?: string };
+
+    if (isInteractiveCheckinReminderKind(kind)) {
+      const buttonsPayload = buildInteractiveReminderPayload(text);
+      const buttonsResult = await this.evolution.sendButtons(
+        user.phone!,
+        buttonsPayload,
+      );
+      if (buttonsResult.ok) {
+        result = buttonsResult;
+      } else {
+        result = await this.evolution.sendText(
+          user.phone!,
+          buildCheckinTextFallback(text),
+        );
+      }
+    } else {
+      result = await this.evolution.sendText(user.phone!, text);
+    }
 
     const status: ReminderStatus = result.ok ? 'SENT' : 'FAILED';
     await this.upsertReminderLog(user.id, localDate, kind, status);
@@ -467,6 +505,56 @@ export class ReminderService {
         status: 'SKIPPED_OPTOUT',
       },
     });
+  }
+
+  private async hasRestDay(userId: string, localDate: Date): Promise<boolean> {
+    const restDay = await this.prisma.reminderLog.findUnique({
+      where: {
+        userId_date_kind: {
+          userId,
+          date: localDate,
+          kind: REST_DAY_KIND,
+        },
+      },
+    });
+    return restDay?.status === 'SENT';
+  }
+
+  private async shouldSkipForActiveSnooze(
+    userId: string,
+    localDate: Date,
+    kind: ReminderKind,
+  ): Promise<boolean> {
+    const snoozeKind = snoozeKindFor(kind);
+    const snooze = await this.prisma.reminderLog.findUnique({
+      where: {
+        userId_date_kind: { userId, date: localDate, kind: snoozeKind },
+      },
+    });
+    return Boolean(
+      snooze?.status === 'ACTIVE' && snooze.sentAt.getTime() > Date.now(),
+    );
+  }
+
+  private async consumeExpiredSnoozeIfNeeded(
+    userId: string,
+    localDate: Date,
+    kind: ReminderKind,
+  ): Promise<void> {
+    const snoozeKind = snoozeKindFor(kind);
+    const snooze = await this.prisma.reminderLog.findUnique({
+      where: {
+        userId_date_kind: { userId, date: localDate, kind: snoozeKind },
+      },
+    });
+    if (snooze?.status === 'ACTIVE' && snooze.sentAt.getTime() <= Date.now()) {
+      await this.prisma.reminderLog.update({
+        where: {
+          userId_date_kind: { userId, date: localDate, kind: snoozeKind },
+        },
+        data: { status: 'CONSUMED' },
+      });
+    }
   }
 
   private async upsertReminderLog(

@@ -12,6 +12,7 @@ const strictConfig: AbuseRateLimitConfig = {
   auth: { max: 1, timeWindow: 60_000 },
   guidance: { max: 1, timeWindow: 60_000 },
   uploads: { max: 1, timeWindow: 60_000 },
+  webhook: { max: 1, timeWindow: 60_000 },
 };
 
 const authService = {
@@ -52,6 +53,7 @@ describe('getAbuseRateLimitConfig', () => {
       auth: { max: 20, timeWindow: 60_000 },
       guidance: { max: 20, timeWindow: 600_000 },
       uploads: { max: 30, timeWindow: 60_000 },
+      webhook: { max: 60, timeWindow: 60_000 },
     });
   });
 
@@ -69,6 +71,7 @@ describe('getAbuseRateLimitConfig', () => {
       auth: { max: 7, timeWindow: 30_000 },
       guidance: { max: 20, timeWindow: 600_000 },
       uploads: { max: 3, timeWindow: 45_000 },
+      webhook: { max: 60, timeWindow: 60_000 },
     });
   });
 });

@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ActivitiesModule } from '../modules/activities.module';
+import { PrismaModule } from '../prisma/prisma.module';
 import { EvolutionApiClient } from './evolution.client';
 import { OpenAiReminderService } from './openai-reminder.service';
 import { ReminderContextService } from './reminder-context.service';
@@ -8,9 +9,10 @@ import { MilestoneMessageService } from './milestone-message.service';
 import { WinbackMessageService } from './winback-message.service';
 import { WeeklyRecapMessageService } from './weekly-recap-message.service';
 import { CheckinAckMessageService } from './checkin-ack-message.service';
+import { InteractiveCheckinService } from './interactive-checkin.service';
 
 @Module({
-  imports: [forwardRef(() => ActivitiesModule)],
+  imports: [PrismaModule, forwardRef(() => ActivitiesModule)],
   providers: [
     EvolutionApiClient,
     ReminderContextService,
@@ -20,6 +22,7 @@ import { CheckinAckMessageService } from './checkin-ack-message.service';
     WinbackMessageService,
     WeeklyRecapMessageService,
     CheckinAckMessageService,
+    InteractiveCheckinService,
   ],
   exports: [
     EvolutionApiClient,
@@ -30,6 +33,7 @@ import { CheckinAckMessageService } from './checkin-ack-message.service';
     WinbackMessageService,
     WeeklyRecapMessageService,
     CheckinAckMessageService,
+    InteractiveCheckinService,
   ],
 })
 export class WhatsappModule {}

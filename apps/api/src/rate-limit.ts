@@ -15,6 +15,10 @@ export type AbuseRateLimitConfig = {
     max: number;
     timeWindow: number;
   };
+  webhook: {
+    max: number;
+    timeWindow: number;
+  };
 };
 
 type TrpcRateLimitTarget = 'auth' | 'guidance';
@@ -25,6 +29,8 @@ const DEFAULT_GUIDANCE_MAX = 20;
 const DEFAULT_GUIDANCE_WINDOW_MS = 10 * 60_000;
 const DEFAULT_UPLOAD_MAX = 30;
 const DEFAULT_UPLOAD_WINDOW_MS = 60_000;
+const DEFAULT_WEBHOOK_MAX = 60;
+const DEFAULT_WEBHOOK_WINDOW_MS = 60_000;
 
 const AUTH_PROCEDURES = new Set(['auth.login', 'auth.register']);
 const GUIDANCE_PROCEDURES = new Set(['guidance.ask']);
@@ -55,6 +61,16 @@ export function getAbuseRateLimitConfig(
       timeWindow: parsePositiveInteger(
         env.UPLOAD_RATE_LIMIT_WINDOW_MS,
         DEFAULT_UPLOAD_WINDOW_MS,
+      ),
+    },
+    webhook: {
+      max: parsePositiveInteger(
+        env.WEBHOOK_RATE_LIMIT_MAX,
+        DEFAULT_WEBHOOK_MAX,
+      ),
+      timeWindow: parsePositiveInteger(
+        env.WEBHOOK_RATE_LIMIT_WINDOW_MS,
+        DEFAULT_WEBHOOK_WINDOW_MS,
       ),
     },
   };
@@ -115,6 +131,27 @@ export function getUploadRateLimitConfig(
     keyGenerator: (request: FastifyRequest) =>
       `uploads:${getUserOrIpRateLimitKey(request, authService)}`,
   };
+}
+
+export function getWebhookRateLimitConfig(config: AbuseRateLimitConfig) {
+  return {
+    max: config.webhook.max,
+    timeWindow: config.webhook.timeWindow,
+    groupId: 'webhook',
+    keyGenerator: (request: FastifyRequest) =>
+      `webhook:${getWebhookSenderKey(request)}`,
+  };
+}
+
+function getWebhookSenderKey(request: FastifyRequest): string {
+  const body = request.body as
+    | { data?: { key?: { remoteJid?: string } } }
+    | undefined;
+  const remoteJid = body?.data?.key?.remoteJid;
+  if (remoteJid) {
+    return `phone:${remoteJid.split('@')[0] ?? remoteJid}`;
+  }
+  return `ip:${request.ip}`;
 }
 
 export function getTrpcRateLimitTargets(url: string): TrpcRateLimitTarget[] {

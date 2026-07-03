@@ -63,7 +63,7 @@ export type ReminderContext = {
   habitAnchorText: string | null;
 };
 
-function todayActivityToScored(activity: TodayActivity): ScoredActivity {
+export function todayActivityToScored(activity: TodayActivity): ScoredActivity {
   return {
     id: activity.id,
     kind: activity.kind,

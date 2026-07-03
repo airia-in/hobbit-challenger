@@ -6,3 +6,4 @@ export * from './companion';
 export * from './milestones';
 export * from './guidance';
 export * from './web-url';
+export * from './weekly-recap-focus';

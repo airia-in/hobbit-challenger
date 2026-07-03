@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { parseUserRecapFocus } from '@workspace-starter/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { challengeDisplayOrderBy } from '../utils/challenge-query';
 import { formatLocalDateKey, parseLocalDateKey } from '../utils/day-window';
@@ -19,6 +21,7 @@ import {
   WEEKLY_RECAP_KIND,
 } from '../utils/weekly-recap-eligibility';
 import { EvolutionApiClient } from '../whatsapp/evolution.client';
+import { isEvolutionInboundConfigured } from '../whatsapp/evolution-inbound-auth';
 import { WeeklyRecapMessageService } from '../whatsapp/weekly-recap-message.service';
 
 type ChallengeRow = {
@@ -40,6 +43,7 @@ type RecapCandidate = {
   whatsappOptIn: boolean;
   challengeTimezone: string;
   groupId: string | null;
+  recapFocus: ReturnType<typeof parseUserRecapFocus>;
   challenge: ChallengeRow;
 };
 
@@ -79,6 +83,7 @@ export class WeeklyRecapService {
     private readonly prisma: PrismaService,
     private readonly evolution: EvolutionApiClient,
     private readonly weeklyRecapMessage: WeeklyRecapMessageService,
+    private readonly config: ConfigService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -107,6 +112,7 @@ export class WeeklyRecapService {
         whatsappOptIn: true,
         groupId: true,
         timezone: true,
+        recapFocus: true,
         group: { select: { challengeTimezone: true } },
       },
     });
@@ -136,6 +142,7 @@ export class WeeklyRecapService {
           whatsappOptIn: user.whatsappOptIn,
           groupId: user.groupId,
           recapTimezone,
+          recapFocus: parseUserRecapFocus(user.recapFocus),
         },
       ];
     });
@@ -167,6 +174,7 @@ export class WeeklyRecapService {
             whatsappOptIn: candidate.whatsappOptIn,
             challengeTimezone: candidate.recapTimezone,
             groupId: candidate.groupId,
+            recapFocus: candidate.recapFocus,
             challenge,
           },
           batch,
@@ -324,7 +332,7 @@ export class WeeklyRecapService {
       groupIds.length > 0
         ? this.prisma.activity.findMany({
             where: { groupId: { in: groupIds }, isPersonal: false },
-            select: { id: true, name: true, groupId: true },
+            select: { id: true, title: true, groupId: true },
           })
         : Promise.resolve([]),
     ]);
@@ -356,7 +364,7 @@ export class WeeklyRecapService {
       if (!activity.groupId) continue;
       const names =
         activityNamesByGroup.get(activity.groupId) ?? new Map<string, string>();
-      names.set(activity.id, activity.name);
+      names.set(activity.id, activity.title);
       activityNamesByGroup.set(activity.groupId, names);
     }
 
@@ -471,6 +479,15 @@ export class WeeklyRecapService {
         ? batch.activityNamesByGroup.get(candidate.groupId)
         : null) ?? new Map<string, string>();
 
+    const inboundEnabled = isEvolutionInboundConfigured({
+      EVOLUTION_WEBHOOK_SECRET:
+        this.config.get<string>('EVOLUTION_WEBHOOK_SECRET') ??
+        process.env.EVOLUTION_WEBHOOK_SECRET,
+      EVOLUTION_WEBHOOK_ALLOW_UNAUTHENTICATED:
+        this.config.get<string>('EVOLUTION_WEBHOOK_ALLOW_UNAUTHENTICATED') ??
+        process.env.EVOLUTION_WEBHOOK_ALLOW_UNAUTHENTICATED,
+    });
+
     const rollup = computeWeeklyRecapRollup({
       challenge: candidate.challenge,
       timezone: candidate.challengeTimezone,
@@ -478,6 +495,8 @@ export class WeeklyRecapService {
       activityLogs:
         batch.activityLogsByChallenge.get(candidate.challenge.id) ?? [],
       activityNames,
+      priorFocus: candidate.recapFocus,
+      inboundEnabled,
     });
 
     await this.weeklyRecapMessage.trySendWeeklyRecap({
@@ -485,6 +504,7 @@ export class WeeklyRecapService {
       userId: candidate.id,
       phone: candidate.phone,
       logDate,
+      inboundEnabled,
       context: {
         name: candidate.name,
         rollup,

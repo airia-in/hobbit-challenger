@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ConfigService } from '@nestjs/config';
 import { WeeklyRecapService } from '../src/cron/weekly-recap.service';
 import { getUserLocalDate } from '../src/utils/day-window';
 import { WINBACK_KIND } from '../src/utils/winback-dormancy';
@@ -16,8 +17,18 @@ type UserRow = {
   whatsappOptIn: boolean;
   weeklyRecapOptIn: boolean;
   groupId: string | null;
+  recapFocus?: unknown;
   group: { challengeTimezone: string | null } | null;
 };
+
+function createConfig(
+  env: Record<string, string | undefined> = {},
+): ConfigService {
+  return new ConfigService({
+    EVOLUTION_WEBHOOK_SECRET: 'test-secret',
+    ...env,
+  });
+}
 
 type ChallengeRow = {
   id: string;
@@ -237,6 +248,7 @@ describe('WeeklyRecapService', () => {
       prisma as never,
       { isConfigured: () => false } as never,
       { trySendWeeklyRecap } as never,
+      createConfig(),
     );
 
     await service.processWeeklyRecaps();
@@ -271,6 +283,7 @@ describe('WeeklyRecapService', () => {
       prisma as never,
       { isConfigured: () => true } as never,
       { trySendWeeklyRecap } as never,
+      createConfig(),
     );
 
     await service.processWeeklyRecaps();
@@ -307,6 +320,7 @@ describe('WeeklyRecapService', () => {
       prisma as never,
       { isConfigured: () => true } as never,
       { trySendWeeklyRecap } as never,
+      createConfig(),
     );
 
     await service.processWeeklyRecaps();
@@ -333,6 +347,7 @@ describe('WeeklyRecapService', () => {
       prisma as never,
       { isConfigured: () => true } as never,
       { trySendWeeklyRecap } as never,
+      createConfig(),
     );
 
     await service.processWeeklyRecaps();
@@ -358,6 +373,7 @@ describe('WeeklyRecapService', () => {
       prisma as never,
       { isConfigured: () => true } as never,
       { trySendWeeklyRecap } as never,
+      createConfig(),
     );
 
     await service.processWeeklyRecaps();
@@ -391,6 +407,7 @@ describe('WeeklyRecapService', () => {
       prisma as never,
       { isConfigured: () => true } as never,
       { trySendWeeklyRecap } as never,
+      createConfig(),
     );
 
     await service.processWeeklyRecaps();
@@ -424,6 +441,7 @@ describe('WeeklyRecapService', () => {
       prisma as never,
       { isConfigured: () => true } as never,
       { trySendWeeklyRecap } as never,
+      createConfig(),
     );
 
     await service.processWeeklyRecaps();
@@ -458,6 +476,7 @@ describe('WeeklyRecapService', () => {
       prisma as never,
       { isConfigured: () => true } as never,
       { trySendWeeklyRecap } as never,
+      createConfig(),
     );
 
     await service.processWeeklyRecaps();

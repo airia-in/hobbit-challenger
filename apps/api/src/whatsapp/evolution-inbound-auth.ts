@@ -73,6 +73,15 @@ export function verifyEvolutionWebhook(
   return { ok: true };
 }
 
+export function isEvolutionInboundConfigured(
+  env: Record<string, string | undefined>,
+): boolean {
+  return (
+    Boolean(env.EVOLUTION_WEBHOOK_SECRET?.trim()) ||
+    env.EVOLUTION_WEBHOOK_ALLOW_UNAUTHENTICATED === 'true'
+  );
+}
+
 export function logWebhookAuthStartupWarning(
   env: Record<string, string | undefined>,
 ): void {

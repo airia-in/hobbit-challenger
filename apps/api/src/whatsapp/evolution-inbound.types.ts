@@ -49,6 +49,7 @@ export type ParsedEvolutionInbound = {
   senderPhoneE164: string | null;
   messageTimestamp: number;
   replyKind: import('./interactive-checkin.constants').CheckinReplyKind | null;
+  recapFocusIndex: 1 | 2 | 3 | null;
   rawText: string | null;
   buttonId: string | null;
 };

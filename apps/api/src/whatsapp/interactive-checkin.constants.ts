@@ -51,6 +51,16 @@ export function replyKindFromButtonId(
   return BUTTON_ID_TO_REPLY[buttonId] ?? null;
 }
 
+const RECAP_FOCUS_INDEX_PATTERN = /^[1-3]$/;
+
+export function recapFocusIndexFromText(text: string): 1 | 2 | 3 | null {
+  const trimmed = text.trim();
+  if (!RECAP_FOCUS_INDEX_PATTERN.test(trimmed)) {
+    return null;
+  }
+  return Number(trimmed) as 1 | 2 | 3;
+}
+
 export function replyKindFromText(text: string): CheckinReplyKind | null {
   const trimmed = text.trim();
   if (!trimmed) {

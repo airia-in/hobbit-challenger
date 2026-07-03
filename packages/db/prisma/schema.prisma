@@ -31,6 +31,7 @@ model User {
   whatsappOptIn     Boolean       @default(true)
   weeklyRecapOptIn  Boolean       @default(true)
   reminderAdaptive  Boolean       @default(true)
+  recapFocus        Json?
   createdAt      DateTime      @default(now())
   challenges     Challenge[]
   activityLogs   ActivityLog[]
@@ -46,9 +47,10 @@ model ReminderLog {
   userId String
   user   User     @relation(fields: [userId], references: [id])
   date   DateTime
-  kind   String
-  sentAt DateTime @default(now())
-  status String
+  kind     String
+  sentAt   DateTime @default(now())
+  status   String
+  metadata Json?
 
   @@unique([userId, date, kind])
   @@index([userId, date])

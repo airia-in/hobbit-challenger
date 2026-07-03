@@ -3,7 +3,9 @@ import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
 import { getToken, setToken } from '../../lib/auth';
 import { BRAND_NAME, BRAND_SUBTITLE, BRAND_TAGLINE } from '../../lib/brand';
+import { awaitNativeDeepLinkBootstrap } from '../../lib/native-deep-link-pending';
 import { formatRegisterPhonePreview } from '../../lib/phone-preview';
+import { isSafeRelativeReturnTo } from '../../lib/safe-return-to';
 
 type Tab = 'signin' | 'register';
 
@@ -12,9 +14,11 @@ function getReturnTo(): string | null {
   return new URLSearchParams(window.location.search).get('returnTo');
 }
 
-function routeAfterAuth(_groupId: string | null | undefined) {
+async function routeAfterAuth(_groupId: string | null | undefined) {
+  await awaitNativeDeepLinkBootstrap();
+
   const returnTo = getReturnTo();
-  if (returnTo) {
+  if (returnTo && isSafeRelativeReturnTo(returnTo)) {
     window.location.href = returnTo;
     return;
   }
@@ -35,15 +39,14 @@ function LoginFormInner() {
   });
 
   useEffect(() => {
-    if (me.data) {
-      routeAfterAuth(me.data.user.groupId);
-    }
+    if (!me.data) return;
+    void routeAfterAuth(me.data.user.groupId);
   }, [me.data]);
 
   const login = trpc.auth.login.useMutation({
     onSuccess: (data) => {
       setToken(data.token);
-      routeAfterAuth(data.user.groupId);
+      void routeAfterAuth(data.user.groupId);
     },
     onError: (err) => setError(err.message),
   });
@@ -51,7 +54,7 @@ function LoginFormInner() {
   const register = trpc.auth.register.useMutation({
     onSuccess: (data) => {
       setToken(data.token);
-      routeAfterAuth(data.user.groupId);
+      void routeAfterAuth(data.user.groupId);
     },
     onError: (err) => setError(err.message),
   });

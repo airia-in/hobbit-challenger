@@ -27,9 +27,33 @@ test('buildDashboardUrl derives the dashboard path from WEB_DOMAIN', async () =>
 test('shared web-url constants default to production HOBBIT domains', async () => {
   const webUrl = await readText('packages/types/src/web-url.ts');
 
-  assert.match(webUrl, /const DEFAULT_WEB_DOMAIN = 'hobbit\.drcode\.ai'/);
+  assert.match(
+    webUrl,
+    /export const DEFAULT_WEB_DOMAIN = 'hobbit\.drcode\.ai'/,
+  );
   assert.match(webUrl, /const DEFAULT_API_DOMAIN = 'hobbit-api\.drcode\.ai'/);
   assert.match(webUrl, /export const DEFAULT_PUBLIC_API_URL = buildApiUrl\(\)/);
+});
+
+test('Android manifest App Link host matches DEFAULT_WEB_DOMAIN', async () => {
+  const manifest = await readText(
+    'apps/mobile/android/app/src/main/AndroidManifest.xml',
+  );
+  const webUrl = await readText('packages/types/src/web-url.ts');
+
+  const domainMatch = webUrl.match(
+    /export const DEFAULT_WEB_DOMAIN = '([^']+)'/,
+  );
+  assert.ok(domainMatch, 'DEFAULT_WEB_DOMAIN must be defined in web-url.ts');
+  const domain = domainMatch[1];
+
+  assert.match(
+    manifest,
+    new RegExp(`android:host="${domain.replaceAll('.', '\\.')}"`),
+  );
+  assert.match(manifest, /android:autoVerify="true"/);
+  assert.match(manifest, /android:scheme="https"/);
+  assert.match(manifest, /android:pathPrefix="\/join"/);
 });
 
 test('mobile prepare-web defaults to production HOBBIT API URL', async () => {

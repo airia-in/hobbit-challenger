@@ -1,4 +1,4 @@
-const DEFAULT_WEB_DOMAIN = 'hobbit.drcode.ai';
+export const DEFAULT_WEB_DOMAIN = 'hobbit.drcode.ai';
 const DEFAULT_API_DOMAIN = 'hobbit-api.drcode.ai';
 
 /** Strip an optional scheme and trailing slash from a hostname or URL fragment. */

@@ -103,6 +103,39 @@ Verify (substitute your domains):
 
 `web-host` and `api` are not published on the host; only nginx exposes 80/443.
 
+## Android App Links (Digital Asset Links)
+
+The HOBBIT Android APK (`com.drcode.hobbit`) declares verified App Links for
+`https://<WEB_DOMAIN>/join…` in
+`apps/mobile/android/app/src/main/AndroidManifest.xml` (`android:autoVerify="true"`).
+
+Android only skips the browser/app chooser when the production site serves a
+matching Digital Asset Links file at:
+
+```text
+https://<WEB_DOMAIN>/.well-known/assetlinks.json
+```
+
+Example payload (replace `SHA256_CERT_FINGERPRINT` with the release keystore
+SHA-256 fingerprint from `keytool -list -v -keystore <keystore>`):
+
+```json
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.drcode.hobbit",
+      "sha256_cert_fingerprints": ["SHA256_CERT_FINGERPRINT"]
+    }
+  }
+]
+```
+
+Host this file on the same origin as `WEB_DOMAIN` (via `web-host` static
+assets or nginx). Until it is deployed, invite taps may show a disambiguation
+chooser (browser vs app) instead of opening the APK silently — that is expected.
+
 ## Config layout
 
 ```

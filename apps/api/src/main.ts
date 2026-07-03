@@ -18,9 +18,17 @@ import {
   createUploadHandler,
 } from './uploads/upload-handler';
 import {
+  createWebhookRateLimitPreHandlers,
   getUploadRateLimitConfig,
   registerAbuseRateLimits,
 } from './rate-limit';
+import {
+  buildEvolutionWebhookAuthConfig,
+  createEvolutionWebhookHandler,
+  logWebhookAuthStartupWarning,
+} from './whatsapp/evolution-webhook.handler';
+import { MAX_WEBHOOK_BODY_BYTES } from './whatsapp/evolution-inbound.parser';
+import { InteractiveCheckinService } from './whatsapp/interactive-checkin.service';
 
 async function bootstrap() {
   const allowedOrigins = (
@@ -66,6 +74,7 @@ async function bootstrap() {
   const authService = app.get(AuthService);
   const activitiesService = app.get(ActivitiesService);
   const guidanceService = app.get(GuidanceService);
+  const interactiveCheckin = app.get(InteractiveCheckinService);
   const createContext = createContextFactory({
     prisma,
     authService,
@@ -79,6 +88,12 @@ async function bootstrap() {
   const rateLimitConfig = await registerAbuseRateLimits(fastify, {
     authService,
   });
+  const webhookRateLimitPreHandlers = createWebhookRateLimitPreHandlers(
+    fastify,
+    rateLimitConfig,
+  );
+
+  logWebhookAuthStartupWarning(process.env);
 
   await fastify.register(multipart, {
     limits: {
@@ -94,6 +109,17 @@ async function bootstrap() {
       },
     },
     createUploadHandler({ uploadDir, authService, prisma }),
+  );
+  fastify.post(
+    '/api/webhooks/evolution',
+    {
+      bodyLimit: MAX_WEBHOOK_BODY_BYTES,
+      preHandler: webhookRateLimitPreHandlers,
+    },
+    createEvolutionWebhookHandler({
+      interactiveCheckin,
+      authConfig: buildEvolutionWebhookAuthConfig(process.env),
+    }),
   );
   fastify.get<{ Params: { filename?: string } }>(
     '/uploads/:filename',

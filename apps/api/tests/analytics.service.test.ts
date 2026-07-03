@@ -261,6 +261,9 @@ describe('analytics emission touchpoints', () => {
       activityLog: {
         findMany: vi.fn().mockResolvedValue([]),
       },
+      reminderLog: {
+        findUnique: vi.fn().mockResolvedValue(null),
+      },
       challenge: {
         update: vi.fn(),
       },
@@ -384,6 +387,10 @@ describe('analytics emission touchpoints', () => {
     };
     const evolution = {
       isConfigured: vi.fn().mockReturnValue(true),
+      sendButtons: vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false })
+        .mockResolvedValueOnce({ ok: true }),
       sendText: vi
         .fn()
         .mockResolvedValueOnce({ ok: false })
@@ -473,6 +480,7 @@ describe('analytics emission touchpoints', () => {
     };
     const evolution = {
       isConfigured: vi.fn().mockReturnValue(true),
+      sendButtons: vi.fn().mockResolvedValue({ ok: true }),
       sendText: vi.fn().mockResolvedValue({ ok: true }),
     };
     const contextService = {

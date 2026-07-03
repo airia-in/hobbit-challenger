@@ -21,6 +21,7 @@ import {
 import { buildUserActivityOrConditions } from '../utils/user-activities-query';
 import { MilestoneMessageService } from '../whatsapp/milestone-message.service';
 import { StreakFreezeMessageService } from '../whatsapp/streak-freeze-message.service';
+import { REST_DAY_KIND } from '../whatsapp/interactive-checkin.constants';
 import {
   PRODUCT_EVENT_KEYS,
   trackProductEventFireAndForget,
@@ -233,6 +234,18 @@ export class DayEvaluatorService {
       },
     });
 
+    const restDayLog = await this.prisma.reminderLog.findUnique({
+      where: {
+        userId_date_kind: {
+          userId,
+          date: evaluationDay,
+          kind: REST_DAY_KIND,
+        },
+      },
+      select: { status: true },
+    });
+    const isRestDay = restDayLog?.status === 'SENT';
+
     const result = evaluateDayRollover({
       challenge: {
         currentDay: challenge.currentDay,
@@ -248,6 +261,7 @@ export class DayEvaluatorService {
       previousDay: evaluationDay,
       timezone: challengeTimezone,
       previousDayScore,
+      isRestDay,
       scoredActivities: scoredActivities.map(mapActivityToScored),
       personalActivities: personalActivities.map(mapActivityToScored),
       previousDayLogs: activityLogs.map(mapLogToInput),

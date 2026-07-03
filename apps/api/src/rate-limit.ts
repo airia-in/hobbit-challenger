@@ -15,6 +15,10 @@ export type AbuseRateLimitConfig = {
     max: number;
     timeWindow: number;
   };
+  webhook: {
+    max: number;
+    timeWindow: number;
+  };
 };
 
 type TrpcRateLimitTarget = 'auth' | 'guidance';
@@ -25,6 +29,8 @@ const DEFAULT_GUIDANCE_MAX = 20;
 const DEFAULT_GUIDANCE_WINDOW_MS = 10 * 60_000;
 const DEFAULT_UPLOAD_MAX = 30;
 const DEFAULT_UPLOAD_WINDOW_MS = 60_000;
+const DEFAULT_WEBHOOK_MAX = 60;
+const DEFAULT_WEBHOOK_WINDOW_MS = 60_000;
 
 const AUTH_PROCEDURES = new Set(['auth.login', 'auth.register']);
 const GUIDANCE_PROCEDURES = new Set(['guidance.ask']);
@@ -55,6 +61,16 @@ export function getAbuseRateLimitConfig(
       timeWindow: parsePositiveInteger(
         env.UPLOAD_RATE_LIMIT_WINDOW_MS,
         DEFAULT_UPLOAD_WINDOW_MS,
+      ),
+    },
+    webhook: {
+      max: parsePositiveInteger(
+        env.WEBHOOK_RATE_LIMIT_MAX,
+        DEFAULT_WEBHOOK_MAX,
+      ),
+      timeWindow: parsePositiveInteger(
+        env.WEBHOOK_RATE_LIMIT_WINDOW_MS,
+        DEFAULT_WEBHOOK_WINDOW_MS,
       ),
     },
   };
@@ -115,6 +131,48 @@ export function getUploadRateLimitConfig(
     keyGenerator: (request: FastifyRequest) =>
       `uploads:${getUserOrIpRateLimitKey(request, authService)}`,
   };
+}
+
+export function createWebhookRateLimitPreHandlers(
+  fastify: FastifyInstance,
+  config: AbuseRateLimitConfig,
+) {
+  const shared = {
+    max: config.webhook.max,
+    timeWindow: config.webhook.timeWindow,
+    errorResponseBuilder: (
+      _request: FastifyRequest,
+      context: { ttl: number },
+    ) => buildRateLimitError(context.ttl),
+  };
+
+  const ipLimiter = fastify.rateLimit({
+    ...shared,
+    groupId: 'webhook-ip',
+    keyGenerator: (request) => `webhook:ip:${request.ip}`,
+  });
+
+  const phoneLimiter = fastify.rateLimit({
+    ...shared,
+    groupId: 'webhook-phone',
+    keyGenerator: (request) => {
+      const phone = extractWebhookBodyPhone(request.body);
+      return phone ? `webhook:phone:${phone}` : `webhook:ip:${request.ip}`;
+    },
+  });
+
+  return [ipLimiter, phoneLimiter];
+}
+
+function extractWebhookBodyPhone(body: unknown): string | null {
+  const remoteJid = (body as { data?: { key?: { remoteJid?: string } } })?.data
+    ?.key?.remoteJid;
+  if (!remoteJid) {
+    return null;
+  }
+  const bare = remoteJid.split('@')[0]?.split(':')[0];
+  const digits = bare?.replace(/\D/g, '');
+  return digits || null;
 }
 
 export function getTrpcRateLimitTargets(url: string): TrpcRateLimitTarget[] {

@@ -216,3 +216,12 @@ model DayLabel {
 
   @@unique([groupId, dayNumber])
 }
+
+/// Replay protection for Evolution inbound WhatsApp webhooks (#171).
+model InboundMessageDedupe {
+  id        String   @id @default(cuid())
+  messageId String   @unique
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

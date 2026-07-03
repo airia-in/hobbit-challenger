@@ -1409,9 +1409,11 @@ export class ActivitiesService {
     dateKey?: string,
   ): Promise<MutationResult> {
     const ctx = await this.loadMutationContext(prisma, userId, activityId);
+    const mutationTimezone =
+      ctx.user.group?.challengeTimezone ?? ctx.user.timezone;
     const { viewedDate, viewedKey, todayKey } = resolveViewedDateKey(
       dateKey,
-      ctx.user.timezone,
+      mutationTimezone,
     );
     const wasScoredDayComplete = await this.isScoredDayComplete(prisma, {
       userId,
@@ -1422,7 +1424,7 @@ export class ActivitiesService {
     await assertCanMutateForDate(
       prisma,
       ctx.challenge.id,
-      ctx.user.timezone,
+      mutationTimezone,
       viewedDate,
       activityId,
     );

@@ -98,4 +98,56 @@ describe('EvolutionApiClient', () => {
     const result = await client.sendText('+15551234567', 'Hello');
     expect(result.ok).toBe(false);
   });
+
+  it('sendButtons posts to sendButtons endpoint', async () => {
+    const client = createClient({
+      EVOLUTION_API_URL: 'https://evo.example.com',
+      EVOLUTION_API_KEY: 'key',
+      EVOLUTION_INSTANCE: 'inst',
+    });
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+    } as Response);
+
+    const result = await client.sendButtons('+15551234567', {
+      description: 'Check in',
+      footer: 'Reply DONE',
+      buttons: [{ id: 'checkin:done', displayText: 'Done ✓' }],
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledWith(
+      'https://evo.example.com/message/sendButtons/inst',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    const body = JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string);
+    expect(body.buttons[0].id).toBe('checkin:done');
+  });
+
+  it('sendButtons retries once on 5xx', async () => {
+    const client = createClient({
+      EVOLUTION_API_URL: 'https://evo.example.com',
+      EVOLUTION_API_KEY: 'key',
+      EVOLUTION_INSTANCE: 'inst',
+    });
+
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        statusText: 'Bad Gateway',
+        text: async () => 'bad',
+      } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200 } as Response);
+
+    const result = await client.sendButtons('+15551234567', {
+      description: 'Hi',
+      buttons: [{ id: 'checkin:done', displayText: 'Done' }],
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
 });

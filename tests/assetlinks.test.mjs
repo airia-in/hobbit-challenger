@@ -94,6 +94,57 @@ test('buildAssetLinksPayload includes required Digital Asset Links keys', async 
   assert.deepEqual(entry.target.sha256_cert_fingerprints, [SAMPLE_FINGERPRINT]);
 });
 
+test('web-host Dockerfile defaults REQUIRE_ASSETLINKS_FINGERPRINTS to 0 for local builds', async () => {
+  const dockerfile = await readText('apps/web-host/Dockerfile');
+
+  assert.match(dockerfile, /ARG REQUIRE_ASSETLINKS_FINGERPRINTS=0/);
+});
+
+test('validateAssetLinksPayload honors custom packageName override', async () => {
+  const {
+    ANDROID_PACKAGE_NAME,
+    buildAssetLinksPayload,
+    validateAssetLinksPayload,
+  } = await loadAndroidAppLinksLib();
+  const customPackage = 'com.example.custom';
+
+  const payload = buildAssetLinksPayload({
+    packageName: customPackage,
+    sha256CertFingerprints: [SAMPLE_FINGERPRINT],
+  });
+
+  assert.throws(
+    () => validateAssetLinksPayload(payload),
+    new RegExp(
+      `package_name must be ${ANDROID_PACKAGE_NAME.replaceAll('.', '\\.')}`,
+    ),
+  );
+  validateAssetLinksPayload(payload, { packageName: customPackage });
+});
+
+test('writeAssetLinksFile with custom packageName validates with matching packageName', async (t) => {
+  const workspace = await mkdtemp(
+    path.join(tmpdir(), 'assetlinks-custom-pkg-'),
+  );
+  t.after(() => rm(workspace, { recursive: true, force: true }));
+
+  const outputPath = path.join(workspace, '.well-known/assetlinks.json');
+  const customPackage = 'com.example.custom';
+  const { writeAssetLinksFile } = await loadGenerateAssetlinks();
+  const { validateAssetLinksPayload } = await loadAndroidAppLinksLib();
+
+  const payload = await writeAssetLinksFile({
+    outputPath,
+    packageName: customPackage,
+    sha256CertFingerprints: [SAMPLE_FINGERPRINT],
+  });
+
+  assert.ok(payload);
+  const written = JSON.parse(await readFile(outputPath, 'utf8'));
+  validateAssetLinksPayload(written, { packageName: customPackage });
+  assert.equal(written[0].target.package_name, customPackage);
+});
+
 test('validateAssetLinksPayload rejects empty fingerprint arrays', async () => {
   const { buildAssetLinksPayload, validateAssetLinksPayload } =
     await loadAndroidAppLinksLib();

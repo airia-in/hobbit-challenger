@@ -1,3 +1,5 @@
+import process from 'node:process';
+
 export const ANDROID_PACKAGE_NAME = 'com.drcode.hobbit';
 
 export const ASSETLINKS_RELATION = [
@@ -52,7 +54,10 @@ export function buildAssetLinksPayload({
   ];
 }
 
-export function validateAssetLinksPayload(payload) {
+export function validateAssetLinksPayload(
+  payload,
+  { packageName = ANDROID_PACKAGE_NAME } = {},
+) {
   if (!Array.isArray(payload) || payload.length !== 1) {
     throw new Error('assetlinks.json must be a one-element array.');
   }
@@ -81,9 +86,9 @@ export function validateAssetLinksPayload(payload) {
     throw new Error('assetlinks.json target.namespace must be android_app.');
   }
 
-  if (target.package_name !== ANDROID_PACKAGE_NAME) {
+  if (target.package_name !== packageName) {
     throw new Error(
-      `assetlinks.json target.package_name must be ${ANDROID_PACKAGE_NAME}.`,
+      `assetlinks.json target.package_name must be ${packageName}.`,
     );
   }
 

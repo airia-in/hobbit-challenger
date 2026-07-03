@@ -20,7 +20,7 @@
     "format": "prettier --write . --ignore-unknown",
     "format:check": "prettier --check . --ignore-unknown",
     "typecheck": "turbo typecheck",
-    "test": "node --test tests/root-start-scripts.test.mjs tests/remove-template-web-apps.test.mjs tests/repository-guardrails.test.mjs tests/build-frontends.test.mjs tests/deploy-dispatcher.test.mjs tests/nginx-compose.test.mjs tests/brand-messaging.test.mjs tests/assetlinks.test.mjs tests/invite-url-env.test.mjs tests/d7-cohort.test.mjs && turbo test",
+    "test": "node --test tests/root-start-scripts.test.mjs tests/remove-template-web-apps.test.mjs tests/repository-guardrails.test.mjs tests/build-frontends.test.mjs tests/deploy-dispatcher.test.mjs tests/nginx-compose.test.mjs tests/brand-messaging.test.mjs tests/assetlinks.test.mjs tests/invite-url-env.test.mjs tests/d7-cohort.test.mjs tests/web-domain-env.test.mjs && turbo test",
     "verify:fast": "pnpm lint && pnpm format:check && pnpm typecheck && git diff --check && git diff --cached --check",
     "verify": "pnpm verify:fast && pnpm build && pnpm smoke:api && pnpm test",
     "hooks:install": "git config core.hooksPath .githooks",

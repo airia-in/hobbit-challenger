@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Theme-neutral cold-start splash; matches capacitor.config.ts / theme.ts light --bg-base (#179). -->
+    <color name="splash_background">#f7f5f2</color>
+</resources>

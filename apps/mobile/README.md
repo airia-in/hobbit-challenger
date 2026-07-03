@@ -36,6 +36,19 @@ Open the native project in Android Studio:
 pnpm --filter @workspace-starter/mobile cap:open:android
 ```
 
+## Theme-aware splash (manual smoke)
+
+Cold-start splash uses a **theme-neutral** warm off-white (`#f7f5f2`, aligned with the web light `--bg-base`) because the native shell cannot read `hobbit-theme-mode` from `localStorage` before the WebView runs JS. After the web bundle boots, `sync-native-status-bar.ts` applies the resolved light/dark status bar and hides the splash (fade respects `prefers-reduced-motion`).
+
+On a device or emulator:
+
+1. Build and run (`cap:run:android` above).
+2. Set theme to **Light** in app settings — cold start should not flash stark black; handoff should match light chrome.
+3. Set theme to **Dark** — splash may briefly show the neutral background, then status bar and page should match dark.
+4. Toggle **Reduce motion** in Android accessibility — splash should hide without a visible fade.
+
+Config: `apps/mobile/capacitor.config.ts` (`launchAutoHide: false`); Android 12+ window background in `android/app/src/main/res/values/colors.xml` and `styles.xml`.
+
 ## Android App Links (invite deep links)
 
 The APK (`com.drcode.hobbit`) declares verified App Links for `https://<WEB_DOMAIN>/join…` in `android/app/src/main/AndroidManifest.xml` (`android:autoVerify="true"`).

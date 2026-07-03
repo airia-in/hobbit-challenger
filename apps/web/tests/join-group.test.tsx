@@ -1,9 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { JoinGroupPage } from '../src/components/groups/JoinGroupPage';
 
 const mockGetToken = vi.fn<() => string | null>(() => null);
+const mockClearToken = vi.fn();
 const mockPreviewUseQuery = vi.fn();
 const mockMeUseQuery = vi.fn();
 const mockJoinUseMutation = vi.fn();
@@ -13,6 +14,7 @@ vi.mock('../src/lib/auth', async (importOriginal) => {
   return {
     ...actual,
     getToken: () => mockGetToken(),
+    clearToken: () => mockClearToken(),
   };
 });
 
@@ -44,10 +46,31 @@ const previewData = {
 };
 
 describe('JoinGroupPage', () => {
+  let locationHref = '';
+
   beforeEach(() => {
+    locationHref = '';
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        origin: 'http://localhost',
+        search: '',
+        get href() {
+          return locationHref;
+        },
+        set href(value: string) {
+          locationHref = value;
+        },
+      },
+    });
     mockGetToken.mockReturnValue('existing-token');
     mockPreviewUseQuery.mockReturnValue({
       data: previewData,
+      isLoading: false,
+      isError: false,
+    });
+    mockMeUseQuery.mockReturnValue({
+      data: undefined,
       isLoading: false,
       isError: false,
     });
@@ -61,6 +84,7 @@ describe('JoinGroupPage', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     mockGetToken.mockReset();
+    mockClearToken.mockReset();
     mockPreviewUseQuery.mockReset();
     mockMeUseQuery.mockReset();
     mockJoinUseMutation.mockReset();
@@ -84,6 +108,7 @@ describe('JoinGroupPage', () => {
     ).not.toBeInTheDocument();
     expect(mockMeUseQuery).toHaveBeenCalledWith(undefined, {
       enabled: true,
+      retry: false,
     });
   });
 
@@ -104,6 +129,7 @@ describe('JoinGroupPage', () => {
     ).not.toBeInTheDocument();
     expect(mockMeUseQuery).toHaveBeenCalledWith(undefined, {
       enabled: true,
+      retry: false,
     });
   });
 
@@ -121,5 +147,45 @@ describe('JoinGroupPage', () => {
     expect(
       screen.queryByRole('button', { name: 'Join Group' }),
     ).not.toBeInTheDocument();
+  });
+
+  it('clears a stale session and redirects to the Register tab on auth error', async () => {
+    mockGetToken.mockReturnValue('stale-token');
+    mockMeUseQuery.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    });
+
+    render(<JoinGroupPage token="invite-token" />);
+
+    // No failing Join button — the card stays in the checking state.
+    expect(
+      screen.queryByRole('button', { name: 'Join Group' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Checking...' })).toBeDisabled();
+
+    await waitFor(() => {
+      expect(mockClearToken).toHaveBeenCalled();
+      expect(locationHref).toBe(
+        '/?returnTo=%2Fjoin%3Ftoken%3Dinvite-token&mode=register',
+      );
+    });
+  });
+
+  it('redirects to sign-in when there is no session token', async () => {
+    mockGetToken.mockReturnValue(null);
+    mockMeUseQuery.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<JoinGroupPage token="invite-token" />);
+
+    await waitFor(() => {
+      expect(locationHref).toBe('/?returnTo=%2Fjoin%3Ftoken%3Dinvite-token');
+    });
+    expect(mockClearToken).not.toHaveBeenCalled();
   });
 });

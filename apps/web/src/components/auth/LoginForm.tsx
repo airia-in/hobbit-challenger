@@ -29,6 +29,16 @@ async function routeAfterAuth(_groupId: string | null | undefined) {
 function LoginFormInner() {
   const [tab, setTab] = useState<Tab>('signin');
   const [name, setName] = useState('');
+
+  // Open the Register tab when redirected with `?mode=register` (e.g. from an
+  // invite link whose session was stale, meaning the account no longer exists).
+  // Set in an effect rather than the initial state to avoid an SSR/client
+  // hydration mismatch on the tab styling.
+  useEffect(() => {
+    const mode = new URLSearchParams(window.location.search).get('mode');
+    if (mode === 'register') setTab('register');
+  }, []);
+
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);

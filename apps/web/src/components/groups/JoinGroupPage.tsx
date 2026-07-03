@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { BRAND_NAME, BRAND_SUBTITLE, BRAND_TAGLINE } from '../../lib/brand';
-import { getToken } from '../../lib/auth';
+import { clearToken, getToken } from '../../lib/auth';
 import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
 
@@ -34,6 +34,9 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
 
   const me = trpc.auth.me.useQuery(undefined, {
     enabled: Boolean(token) && Boolean(getToken()),
+    // A stale token can't be validated — one failure is definitive, so don't
+    // retry (which would delay the redirect below and hammer the API).
+    retry: false,
   });
 
   const join = trpc.groups.join.useMutation({
@@ -42,13 +45,30 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
     },
   });
 
+  // Whether we're on our way to the login page rather than staying on the
+  // invite. Both the no-token and stale-token cases redirect, so keep the card
+  // in a "checking" state instead of flashing a Join button that would fail.
+  const hasToken = Boolean(getToken());
+  const isRedirecting = !hasToken || me.isError;
+
   useEffect(() => {
     if (!token) return;
+    const returnTo = `/join?token=${encodeURIComponent(token)}`;
+
+    // No session at all: send the user to sign in, then back to the invite.
     if (!getToken()) {
-      const returnTo = `/join?token=${encodeURIComponent(token)}`;
       window.location.href = `/?returnTo=${encodeURIComponent(returnTo)}`;
+      return;
     }
-  }, [token]);
+
+    // Stale/invalid session (e.g. the account data was reset): the token can't
+    // be validated, so clear it and open the Register tab to make a fresh
+    // account rather than showing a Join button the API rejects as UNAUTHORIZED.
+    if (me.isError) {
+      clearToken();
+      window.location.href = `/?returnTo=${encodeURIComponent(returnTo)}&mode=register`;
+    }
+  }, [token, me.isError]);
 
   if (!token) {
     return (
@@ -118,9 +138,10 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
           </p>
         )}
 
-        {me.isLoading ? (
-          // Signed-in members hit this while membership loads; avoid flashing a
-          // Join button (which the API would reject) before we know their group.
+        {isRedirecting || me.isLoading ? (
+          // Signed-in members hit this while membership loads, and stale/no-token
+          // visitors hit it while the redirect effect runs; either way avoid
+          // flashing a Join button (which the API would reject) prematurely.
           <button
             type="button"
             disabled

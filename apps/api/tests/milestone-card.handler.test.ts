@@ -13,9 +13,11 @@ function createHandler(overrides?: {
   userId?: string | null;
   userName?: string;
   earned?: boolean;
+  authUserId?: string;
 }) {
   const userId = overrides?.userId ?? 'user-1';
   const earned = overrides?.earned ?? true;
+  const authUserId = overrides?.authUserId ?? userId;
 
   const cardService = {
     getCardDirectory: () => '/tmp/milestone-cards',
@@ -24,12 +26,12 @@ function createHandler(overrides?: {
       width: 900,
       height: 1200,
       mimeType: 'image/png' as const,
-      cachePath: `/tmp/milestone-cards/user-1_streak_7.png`,
+      cachePath: `/tmp/milestone-cards/user-1_streak_7_a1b2c3d4e5f6.png`,
     })),
   };
 
   const authService = {
-    verifyToken: vi.fn(() => (userId ? { userId } : null)),
+    verifyToken: vi.fn(() => (authUserId ? { userId: authUserId } : null)),
   };
 
   const prisma = {
@@ -59,7 +61,7 @@ function createHandler(overrides?: {
 
 describe('milestone card download handler', () => {
   it('rejects unauthenticated requests', async () => {
-    const { handler } = createHandler({ userId: null });
+    const { handler } = createHandler({ authUserId: null });
     const reply = {
       status: vi.fn(() => ({ send: vi.fn() })),
       header: vi.fn().mockReturnThis(),
@@ -75,7 +77,7 @@ describe('milestone card download handler', () => {
   });
 
   it('rejects cards for milestones the user has not earned', async () => {
-    const { handler } = createHandler({ earned: false });
+    const { handler, cardService } = createHandler({ earned: false });
     const send = vi.fn();
     const reply = {
       status: vi.fn(() => ({ send })),
@@ -92,6 +94,31 @@ describe('milestone card download handler', () => {
     );
 
     expect(reply.status).toHaveBeenCalledWith(404);
+    expect(cardService.getOrCreateCard).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 for cross-user milestone without generating a card', async () => {
+    const { handler, cardService } = createHandler({
+      authUserId: 'user-a',
+      earned: false,
+    });
+    const send = vi.fn();
+    const reply = {
+      status: vi.fn(() => ({ send })),
+      header: vi.fn().mockReturnThis(),
+      send: vi.fn(),
+    };
+
+    await handler(
+      {
+        headers: { authorization: 'Bearer token' },
+        params: { milestoneKey: 'streak_7' },
+      },
+      reply as never,
+    );
+
+    expect(reply.status).toHaveBeenCalledWith(404);
+    expect(cardService.getOrCreateCard).not.toHaveBeenCalled();
   });
 
   it('generates card for owner and tracks share analytics', async () => {

@@ -18,7 +18,7 @@ import {
   trackReminderSentFireAndForget,
 } from '../services/analytics.service';
 import {
-  extractFirstName,
+  sanitizeFirstNameForCard,
   MilestoneCardService,
 } from '../services/milestone-card.service';
 import {
@@ -197,12 +197,13 @@ export class MilestoneMessageService {
     const text = await this.compose(context);
     let status: MilestoneMessageStatus = 'FAILED';
     let mediaSent = false;
+    let useTextFallback = !isShareCardMilestone(input.primaryMilestoneKey);
 
     if (isShareCardMilestone(input.primaryMilestoneKey)) {
       try {
         const card = await this.milestoneCard.getOrCreateCard({
           userId: input.userId,
-          firstName: extractFirstName(input.userName),
+          firstName: sanitizeFirstNameForCard(input.userName),
           milestoneKey: input.primaryMilestoneKey,
         });
         const mediaResult = await this.evolution.sendMedia(input.phone, {
@@ -224,13 +225,16 @@ export class MilestoneMessageService {
               channel: 'whatsapp',
             },
           );
+        } else if (mediaResult.failureKind === 'client') {
+          useTextFallback = true;
         }
       } catch (error) {
         this.logger.error('Milestone share card media failed:', error);
+        useTextFallback = true;
       }
     }
 
-    if (!mediaSent) {
+    if (!mediaSent && useTextFallback) {
       const result = await this.evolution.sendText(input.phone, text);
       status = result.ok ? 'SENT' : 'FAILED';
     }

@@ -19,6 +19,7 @@ import {
 } from './uploads/upload-handler';
 import {
   createWebhookRateLimitPreHandlers,
+  getMilestoneCardRateLimitConfig,
   getUploadRateLimitConfig,
   registerAbuseRateLimits,
 } from './rate-limit';
@@ -130,6 +131,14 @@ async function bootstrap() {
   );
   fastify.get<{ Params: { milestoneKey?: string } }>(
     '/api/milestones/:milestoneKey/card',
+    {
+      config: {
+        rateLimit: getMilestoneCardRateLimitConfig(
+          rateLimitConfig,
+          authService,
+        ),
+      },
+    },
     createMilestoneCardHandler({
       cardService: milestoneCardService,
       authService,

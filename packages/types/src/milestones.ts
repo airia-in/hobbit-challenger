@@ -152,6 +152,11 @@ export function milestoneBatchSummaryLine(additionalCount: number): string {
 /** One WhatsApp per user per local evaluation day (batched unlocks). */
 export const MILESTONE_DAY_REMINDER_KIND = 'MILESTONE:DAY';
 
+/**
+ * Bump when postcard title/copy/stats change to invalidate cached PNGs (#174).
+ */
+export const MILESTONE_CARD_TEMPLATE_VERSION = 1;
+
 /** Major streak milestones that receive a share-card image on WhatsApp (#174). */
 export const SHARE_CARD_MILESTONE_KEYS = [
   'streak_7',

@@ -3,10 +3,9 @@ import { access } from 'node:fs/promises';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { AuthService } from '../services/auth.service';
 import {
-  extractFirstName,
   isMilestoneKey,
   isValidMilestoneCardFilename,
-  resolveMilestoneCardPath,
+  sanitizeFirstNameForCard,
   type MilestoneCardService,
 } from '../services/milestone-card.service';
 import {
@@ -73,16 +72,9 @@ export function createMilestoneCardHandler(deps: {
 
     const card = await cardService.getOrCreateCard({
       userId: auth.userId,
-      firstName: extractFirstName(user.name),
+      firstName: sanitizeFirstNameForCard(user.name),
       milestoneKey,
     });
-
-    trackProductEventFireAndForget(
-      prisma,
-      auth.userId,
-      PRODUCT_EVENT_KEYS.MILESTONE_SHARED,
-      { milestoneKey, channel: 'web' },
-    );
 
     const filename = card.cachePath.split('/').pop() ?? 'milestone-card.png';
     if (!isValidMilestoneCardFilename(filename)) {
@@ -95,6 +87,13 @@ export function createMilestoneCardHandler(deps: {
       return reply.status(404).send({ error: 'Card not found' });
     }
 
+    trackProductEventFireAndForget(
+      prisma,
+      auth.userId,
+      PRODUCT_EVENT_KEYS.MILESTONE_SHARED,
+      { milestoneKey, channel: 'web' },
+    );
+
     return reply
       .header('Content-Type', 'image/png')
       .header(
@@ -104,24 +103,4 @@ export function createMilestoneCardHandler(deps: {
       .header('Cache-Control', 'private, max-age=3600')
       .send(createReadStream(card.cachePath));
   };
-}
-
-export function resolveCachedMilestoneCardPath(
-  cardDir: string,
-  userId: string,
-  milestoneKey: string,
-): string | null {
-  if (!isMilestoneKey(milestoneKey)) {
-    return null;
-  }
-  try {
-    const filePath = resolveMilestoneCardPath(cardDir, userId, milestoneKey);
-    const filename = filePath.split('/').pop() ?? '';
-    if (!isValidMilestoneCardFilename(filename)) {
-      return null;
-    }
-    return filePath;
-  } catch {
-    return null;
-  }
 }

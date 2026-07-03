@@ -83,7 +83,10 @@ function createReminderLogStore() {
   };
 }
 
-function createService(sendOk = true, options?: { mediaOk?: boolean }) {
+function createService(
+  sendOk = true,
+  options?: { mediaOk?: boolean; mediaFailureKind?: 'client' | 'transport' },
+) {
   const config = {
     get: (key: string) => {
       if (key === 'WEB_DOMAIN') return 'staging.hobbit.example';
@@ -93,7 +96,15 @@ function createService(sendOk = true, options?: { mediaOk?: boolean }) {
   const evolution = {
     isConfigured: () => true,
     sendText: vi.fn(async () => ({ ok: sendOk })),
-    sendMedia: vi.fn(async () => ({ ok: options?.mediaOk ?? false })),
+    sendMedia: vi.fn(async () =>
+      options?.mediaOk
+        ? { ok: true }
+        : {
+            ok: false,
+            error: 'send failed',
+            failureKind: options?.mediaFailureKind ?? 'client',
+          },
+    ),
   };
   const milestoneCard = {
     getOrCreateCard: vi.fn(async () => ({
@@ -207,9 +218,12 @@ describe('MilestoneMessageService', () => {
     expect(evolution.sendText).not.toHaveBeenCalled();
   });
 
-  it('falls back to text when media send fails', async () => {
+  it('falls back to text when media send fails with client error', async () => {
     const store = createReminderLogStore();
-    const { service, evolution } = createService(true, { mediaOk: false });
+    const { service, evolution } = createService(true, {
+      mediaOk: false,
+      mediaFailureKind: 'client',
+    });
 
     await service.trySendBatchUnlockMessage({
       prisma: store.prisma as never,
@@ -223,6 +237,58 @@ describe('MilestoneMessageService', () => {
     });
 
     expect(evolution.sendMedia).toHaveBeenCalledTimes(1);
+    expect(evolution.sendText).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not send text when media transport fails ambiguously', async () => {
+    const store = createReminderLogStore();
+    const { service, evolution } = createService(true, {
+      mediaOk: false,
+      mediaFailureKind: 'transport',
+    });
+
+    await service.trySendBatchUnlockMessage({
+      prisma: store.prisma as never,
+      userId: 'user-1',
+      userName: 'Sam',
+      phone: '+911234567890',
+      evaluationDay,
+      primaryMilestoneKey: 'streak_30',
+      additionalUnlockCount: 0,
+      timezone,
+    });
+
+    expect(evolution.sendMedia).toHaveBeenCalledTimes(1);
+    expect(evolution.sendText).not.toHaveBeenCalled();
+    const key = reminderLogKey(
+      'user-1',
+      evaluationDay,
+      MILESTONE_DAY_REMINDER_KIND,
+    );
+    expect(store.logs.get(key)?.status).toBe('FAILED');
+  });
+
+  it('falls back to text when card generation throws', async () => {
+    const store = createReminderLogStore();
+    const { service, evolution, milestoneCard } = createService(true, {
+      mediaOk: true,
+    });
+    milestoneCard.getOrCreateCard.mockRejectedValueOnce(
+      new Error('render fail'),
+    );
+
+    await service.trySendBatchUnlockMessage({
+      prisma: store.prisma as never,
+      userId: 'user-1',
+      userName: 'Sam',
+      phone: '+911234567890',
+      evaluationDay,
+      primaryMilestoneKey: 'streak_66',
+      additionalUnlockCount: 0,
+      timezone,
+    });
+
+    expect(evolution.sendMedia).not.toHaveBeenCalled();
     expect(evolution.sendText).toHaveBeenCalledTimes(1);
   });
 

@@ -120,6 +120,19 @@ export async function registerAbuseRateLimits(
   return config;
 }
 
+export function getMilestoneCardRateLimitConfig(
+  config: AbuseRateLimitConfig,
+  authService: Pick<AuthService, 'verifyToken'>,
+) {
+  return {
+    max: config.uploads.max,
+    timeWindow: config.uploads.timeWindow,
+    groupId: 'milestone-cards',
+    keyGenerator: (request: FastifyRequest) =>
+      `milestone-cards:${getUserOrIpRateLimitKey(request, authService)}`,
+  };
+}
+
 export function getUploadRateLimitConfig(
   config: AbuseRateLimitConfig,
   authService: Pick<AuthService, 'verifyToken'>,

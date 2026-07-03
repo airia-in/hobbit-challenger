@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import {
   type AbuseRateLimitConfig,
   getAbuseRateLimitConfig,
+  getMilestoneCardRateLimitConfig,
   getTrpcRateLimitTargets,
   getUploadRateLimitConfig,
   registerAbuseRateLimits,
@@ -159,6 +160,44 @@ describe('registerAbuseRateLimits', () => {
         await app.inject({
           method: 'POST',
           url: '/api/uploads',
+          headers: { authorization: 'Bearer token' },
+        }),
+      ).toMatchObject({ statusCode: 429 });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rate-limits milestone card download routes with route config', async () => {
+    const app = Fastify();
+    const config = await registerAbuseRateLimits(app, {
+      authService,
+      config: strictConfig,
+    });
+    app.get(
+      '/api/milestones/:milestoneKey/card',
+      {
+        config: {
+          rateLimit: getMilestoneCardRateLimitConfig(config, authService),
+        },
+      },
+      async () => ({ ok: true }),
+    );
+
+    try {
+      await app.ready();
+
+      expect(
+        await app.inject({
+          method: 'GET',
+          url: '/api/milestones/streak_7/card',
+          headers: { authorization: 'Bearer token' },
+        }),
+      ).toMatchObject({ statusCode: 200 });
+      expect(
+        await app.inject({
+          method: 'GET',
+          url: '/api/milestones/streak_7/card',
           headers: { authorization: 'Bearer token' },
         }),
       ).toMatchObject({ statusCode: 429 });

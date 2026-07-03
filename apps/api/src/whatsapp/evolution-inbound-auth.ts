@@ -5,7 +5,7 @@ export type EvolutionWebhookAuthConfig = {
   webhookSecret?: string;
   evolutionApiKey?: string;
   evolutionInstance?: string;
-  nodeEnv?: string;
+  allowUnauthenticated?: boolean;
 };
 
 export type EvolutionWebhookRequest = {
@@ -38,13 +38,12 @@ export function verifyEvolutionWebhook(
   config: EvolutionWebhookAuthConfig,
 ): { ok: true } | { ok: false; reason: string } {
   const secret = config.webhookSecret?.trim();
-  const isProduction = config.nodeEnv === 'production';
 
   if (!secret) {
-    if (isProduction) {
-      return { ok: false, reason: 'Webhook secret not configured' };
+    if (config.allowUnauthenticated) {
+      return { ok: true };
     }
-    return { ok: true };
+    return { ok: false, reason: 'Webhook secret not configured' };
   }
 
   const bearer = extractBearerToken(request.headers.authorization);
@@ -56,21 +55,42 @@ export function verifyEvolutionWebhook(
   }
 
   const envelope = request.body as EvolutionWebhookEnvelope | undefined;
-  if (
-    config.evolutionApiKey &&
-    envelope?.apikey &&
-    !safeEqualStrings(envelope.apikey, config.evolutionApiKey)
-  ) {
-    return { ok: false, reason: 'Invalid Evolution apikey' };
+
+  if (config.evolutionApiKey) {
+    const apikey = envelope?.apikey?.trim();
+    if (!apikey || !safeEqualStrings(apikey, config.evolutionApiKey)) {
+      return { ok: false, reason: 'Invalid Evolution apikey' };
+    }
   }
 
-  if (
-    config.evolutionInstance &&
-    envelope?.instance &&
-    envelope.instance !== config.evolutionInstance
-  ) {
-    return { ok: false, reason: 'Unexpected Evolution instance' };
+  if (config.evolutionInstance) {
+    const instance = envelope?.instance?.trim();
+    if (!instance || instance !== config.evolutionInstance) {
+      return { ok: false, reason: 'Unexpected Evolution instance' };
+    }
   }
 
   return { ok: true };
+}
+
+export function logWebhookAuthStartupWarning(
+  env: Record<string, string | undefined>,
+): void {
+  const secret = env.EVOLUTION_WEBHOOK_SECRET?.trim();
+  const allowUnauthenticated =
+    env.EVOLUTION_WEBHOOK_ALLOW_UNAUTHENTICATED === 'true';
+
+  if (!secret && !allowUnauthenticated) {
+    console.warn(
+      '[security] EVOLUTION_WEBHOOK_SECRET is unset — inbound Evolution webhooks will be rejected. ' +
+        'Set EVOLUTION_WEBHOOK_SECRET or EVOLUTION_WEBHOOK_ALLOW_UNAUTHENTICATED=true for local dev only.',
+    );
+    return;
+  }
+
+  if (!secret && allowUnauthenticated) {
+    console.warn(
+      '[security] EVOLUTION_WEBHOOK_ALLOW_UNAUTHENTICATED=true — inbound webhooks accept unauthenticated requests.',
+    );
+  }
 }

@@ -32,6 +32,7 @@ export type EvaluateDayRolloverInput = {
   previousDay?: Date;
   timezone?: string;
   previousDayScore?: DayScoreCompletionInput | null;
+  isRestDay?: boolean;
   scoredActivities: ScoredActivity[];
   personalActivities?: ScoredActivity[];
   previousDayLogs: ActivityLogInput[];
@@ -47,6 +48,7 @@ export type EvaluateDayRolloverResult = {
     breakdown: {
       allScoredLogged: boolean;
       freezeConsumed?: boolean;
+      restDay?: boolean;
       entries: DayScoreBreakdownEntry[];
     };
   };
@@ -151,6 +153,9 @@ export function evaluateDayRollover(
       nextLastGrantedAt = evaluationDay;
       freezeGranted = true;
     }
+  } else if (input.isRestDay && scoredActivities.length > 0) {
+    newStreak = challenge.currentStreak;
+    newLongestStreak = challenge.longestStreak;
   } else if (
     scoredActivities.length > 0 &&
     canConsumeStreakFreeze(
@@ -211,6 +216,7 @@ export function evaluateDayRollover(
         // users, personal for personal-only) so completion metadata matches streak.
         allScoredLogged: dayCounted,
         ...(freezeConsumed ? { freezeConsumed: true } : {}),
+        ...(input.isRestDay ? { restDay: true } : {}),
         entries: score.breakdown,
       },
     },

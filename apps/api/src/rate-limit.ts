@@ -133,25 +133,46 @@ export function getUploadRateLimitConfig(
   };
 }
 
-export function getWebhookRateLimitConfig(config: AbuseRateLimitConfig) {
-  return {
+export function createWebhookRateLimitPreHandlers(
+  fastify: FastifyInstance,
+  config: AbuseRateLimitConfig,
+) {
+  const shared = {
     max: config.webhook.max,
     timeWindow: config.webhook.timeWindow,
-    groupId: 'webhook',
-    keyGenerator: (request: FastifyRequest) =>
-      `webhook:${getWebhookSenderKey(request)}`,
+    errorResponseBuilder: (
+      _request: FastifyRequest,
+      context: { ttl: number },
+    ) => buildRateLimitError(context.ttl),
   };
+
+  const ipLimiter = fastify.rateLimit({
+    ...shared,
+    groupId: 'webhook-ip',
+    keyGenerator: (request) => `webhook:ip:${request.ip}`,
+  });
+
+  const phoneLimiter = fastify.rateLimit({
+    ...shared,
+    groupId: 'webhook-phone',
+    keyGenerator: (request) => {
+      const phone = extractWebhookBodyPhone(request.body);
+      return phone ? `webhook:phone:${phone}` : `webhook:ip:${request.ip}`;
+    },
+  });
+
+  return [ipLimiter, phoneLimiter];
 }
 
-function getWebhookSenderKey(request: FastifyRequest): string {
-  const body = request.body as
-    | { data?: { key?: { remoteJid?: string } } }
-    | undefined;
-  const remoteJid = body?.data?.key?.remoteJid;
-  if (remoteJid) {
-    return `phone:${remoteJid.split('@')[0] ?? remoteJid}`;
+function extractWebhookBodyPhone(body: unknown): string | null {
+  const remoteJid = (body as { data?: { key?: { remoteJid?: string } } })?.data
+    ?.key?.remoteJid;
+  if (!remoteJid) {
+    return null;
   }
-  return `ip:${request.ip}`;
+  const bare = remoteJid.split('@')[0]?.split(':')[0];
+  const digits = bare?.replace(/\D/g, '');
+  return digits || null;
 }
 
 export function getTrpcRateLimitTargets(url: string): TrpcRateLimitTarget[] {

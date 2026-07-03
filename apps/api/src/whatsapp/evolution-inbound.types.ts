@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 const evolutionMessageKeySchema = z.object({
   remoteJid: z.string().optional(),
+  remoteJidAlt: z.string().optional(),
+  senderPn: z.string().optional(),
   fromMe: z.boolean().optional(),
   id: z.string().optional(),
 });
@@ -44,6 +46,8 @@ export type EvolutionWebhookEnvelope = z.infer<
 export type ParsedEvolutionInbound = {
   messageId: string;
   phoneE164: string;
+  senderPhoneE164: string | null;
+  messageTimestamp: number;
   replyKind: import('./interactive-checkin.constants').CheckinReplyKind | null;
   rawText: string | null;
   buttonId: string | null;

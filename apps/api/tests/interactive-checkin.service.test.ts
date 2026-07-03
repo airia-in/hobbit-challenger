@@ -10,9 +10,15 @@ import {
   CHECKIN_BUTTON_SNOOZE,
   REST_DAY_KIND,
 } from '../src/whatsapp/interactive-checkin.constants';
+import {
+  resetWebhookAbuseGuardsForTests,
+  WEBHOOK_OUTBOUND_CONFIRM_MAX,
+} from '../src/whatsapp/webhook-abuse-guards';
 
 const PHONE = '+919876543210';
+const OTHER_PHONE = '+15551234567';
 const USER_ID = 'user-1';
+const NOW_SEC = Math.floor(Date.now() / 1000);
 
 function focusHabitActivity(id = 'habit-1'): TodayActivity {
   return {
@@ -55,6 +61,27 @@ function createDedupeStore() {
   };
 }
 
+function inboundPayload(
+  overrides: Partial<{
+    messageId: string;
+    phoneE164: string;
+    senderPhoneE164: string | null;
+    replyKind: 'done' | 'snooze' | 'rest' | null;
+    buttonId: string | null;
+  }> = {},
+) {
+  return {
+    messageId: 'm1',
+    phoneE164: PHONE,
+    senderPhoneE164: null,
+    messageTimestamp: NOW_SEC,
+    replyKind: 'done' as const,
+    rawText: null,
+    buttonId: CHECKIN_BUTTON_DONE,
+    ...overrides,
+  };
+}
+
 describe('InteractiveCheckinService', () => {
   const markActivity = vi.fn();
   const getToday = vi.fn();
@@ -68,6 +95,7 @@ describe('InteractiveCheckinService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     inboundDedupe.seen.clear();
+    resetWebhookAbuseGuardsForTests();
 
     const prisma = {
       user: {
@@ -98,29 +126,29 @@ describe('InteractiveCheckinService', () => {
       scoredActivities: [focusHabitActivity()],
     });
 
-    await service.handleInbound({
-      messageId: 'm1',
-      phoneE164: PHONE,
-      replyKind: 'done',
-      rawText: null,
-      buttonId: CHECKIN_BUTTON_DONE,
-    });
+    await service.handleInbound(inboundPayload());
 
     expect(markActivity).toHaveBeenCalledWith(
       expect.anything(),
       USER_ID,
       'habit-1',
     );
+    expect(getToday).toHaveBeenCalledWith(
+      expect.anything(),
+      USER_ID,
+      undefined,
+      { timezone: 'UTC' },
+    );
   });
 
-  it('records snooze ReminderLog', async () => {
-    await service.handleInbound({
-      messageId: 'm2',
-      phoneE164: PHONE,
-      replyKind: 'snooze',
-      rawText: null,
-      buttonId: CHECKIN_BUTTON_SNOOZE,
-    });
+  it('records snooze ReminderLog without outbound confirmation', async () => {
+    await service.handleInbound(
+      inboundPayload({
+        messageId: 'm2',
+        replyKind: 'snooze',
+        buttonId: CHECKIN_BUTTON_SNOOZE,
+      }),
+    );
 
     expect(reminderLogUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -130,19 +158,19 @@ describe('InteractiveCheckinService', () => {
         }),
       }),
     );
-    expect(sendText).toHaveBeenCalled();
+    expect(sendText).not.toHaveBeenCalled();
   });
 
-  it('records rest day', async () => {
+  it('records rest day without outbound confirmation', async () => {
     const localDate = getUserLocalDate('UTC');
 
-    await service.handleInbound({
-      messageId: 'm3',
-      phoneE164: PHONE,
-      replyKind: 'rest',
-      rawText: null,
-      buttonId: CHECKIN_BUTTON_REST,
-    });
+    await service.handleInbound(
+      inboundPayload({
+        messageId: 'm3',
+        replyKind: 'rest',
+        buttonId: CHECKIN_BUTTON_REST,
+      }),
+    );
 
     expect(reminderLogUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -156,6 +184,7 @@ describe('InteractiveCheckinService', () => {
         create: expect.objectContaining({ status: 'SENT' }),
       }),
     );
+    expect(sendText).not.toHaveBeenCalled();
   });
 
   it('no-ops for unknown phone', async () => {
@@ -169,13 +198,9 @@ describe('InteractiveCheckinService', () => {
       { sendText } as never,
     );
 
-    await svc.handleInbound({
-      messageId: 'm4',
-      phoneE164: '+10000000000',
-      replyKind: 'done',
-      rawText: null,
-      buttonId: CHECKIN_BUTTON_DONE,
-    });
+    await svc.handleInbound(
+      inboundPayload({ phoneE164: '+10000000000', messageId: 'm4' }),
+    );
 
     expect(markActivity).not.toHaveBeenCalled();
     expect(inboundDedupe.create).not.toHaveBeenCalled();
@@ -200,13 +225,7 @@ describe('InteractiveCheckinService', () => {
       { sendText } as never,
     );
 
-    await svc.handleInbound({
-      messageId: 'm5',
-      phoneE164: PHONE,
-      replyKind: 'done',
-      rawText: null,
-      buttonId: CHECKIN_BUTTON_DONE,
-    });
+    await svc.handleInbound(inboundPayload({ messageId: 'm5' }));
 
     expect(markActivity).not.toHaveBeenCalled();
     expect(inboundDedupe.create).not.toHaveBeenCalled();
@@ -215,17 +234,36 @@ describe('InteractiveCheckinService', () => {
   it('dedupes duplicate message ids', async () => {
     getToday.mockResolvedValue({ scoredActivities: [focusHabitActivity()] });
 
-    const payload = {
-      messageId: 'dup',
-      phoneE164: PHONE,
-      replyKind: 'done' as const,
-      rawText: null,
-      buttonId: CHECKIN_BUTTON_DONE,
-    };
+    const payload = inboundPayload({ messageId: 'dup' });
 
     await service.handleInbound(payload);
     await service.handleInbound(payload);
 
     expect(markActivity).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects cross-user sender binding mismatch', async () => {
+    await service.handleInbound(
+      inboundPayload({
+        messageId: 'm-cross',
+        phoneE164: PHONE,
+        senderPhoneE164: OTHER_PHONE,
+      }),
+    );
+
+    expect(markActivity).not.toHaveBeenCalled();
+    expect(inboundDedupe.create).not.toHaveBeenCalled();
+  });
+
+  it('caps outbound confirmation texts per user per hour', async () => {
+    getToday.mockResolvedValue({ scoredActivities: [] });
+
+    for (let i = 0; i < WEBHOOK_OUTBOUND_CONFIRM_MAX + 2; i += 1) {
+      await service.handleInbound(
+        inboundPayload({ messageId: `m-out-${i}`, replyKind: 'done' }),
+      );
+    }
+
+    expect(sendText).toHaveBeenCalledTimes(WEBHOOK_OUTBOUND_CONFIRM_MAX);
   });
 });

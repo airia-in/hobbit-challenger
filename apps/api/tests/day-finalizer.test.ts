@@ -427,6 +427,26 @@ describe('evaluateDayRollover — streak freeze', () => {
     breakdown: { allScoredLogged: false },
   };
 
+  it('preserves streak on declared rest day without consuming freeze inventory', () => {
+    const result = evaluateDayRollover({
+      challenge: baseChallenge({
+        currentStreak: 4,
+        longestStreak: 4,
+        streakFreezesAvailable: 1,
+        streakFreezesUsed: 0,
+      }),
+      scoredActivities: scoredSet,
+      previousDayLogs: [],
+      previousDayScore: priorSuccess,
+      isRestDay: true,
+    });
+
+    expect(result.challengeUpdate.currentStreak).toBe(4);
+    expect(result.challengeUpdate.streakFreezesAvailable).toBe(1);
+    expect(result.dayScore.breakdown.restDay).toBe(true);
+    expect(result.flags.freezeConsumed).toBe(false);
+  });
+
   it('consumes freeze on single miss with prior success', () => {
     const result = evaluateDayRollover({
       challenge: baseChallenge({
@@ -789,6 +809,9 @@ function createCronFakePrisma(
             log.userId === where.userId &&
             log.date.getTime() === where.date.getTime(),
         ),
+    },
+    reminderLog: {
+      findUnique: async () => null,
     },
     $transaction: async (fn: (tx: typeof prisma) => Promise<void>) => {
       const tx = {

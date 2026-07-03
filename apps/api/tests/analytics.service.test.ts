@@ -261,6 +261,9 @@ describe('analytics emission touchpoints', () => {
       activityLog: {
         findMany: vi.fn().mockResolvedValue([]),
       },
+      reminderLog: {
+        findUnique: vi.fn().mockResolvedValue(null),
+      },
       challenge: {
         update: vi.fn(),
       },

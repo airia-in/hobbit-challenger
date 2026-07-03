@@ -2,9 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@workspace-starter/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivitiesService } from '../services/activities.service';
+import { normalizePhone } from '../auth/phone';
 import { getUserLocalDate } from '../utils/day-window';
 import { EvolutionApiClient } from './evolution.client';
 import type { ParsedEvolutionInbound } from './evolution-inbound.types';
+import {
+  inferDefaultRegionFromE164,
+  jidToE164,
+} from './evolution-inbound.parser';
 import { pickFocusHabit } from './interactive-checkin-focus';
 import {
   INTERACTIVE_CHECKIN_REMINDER_KINDS,
@@ -13,6 +18,11 @@ import {
   snoozeKindFor,
 } from './interactive-checkin.constants';
 import type { ReminderKind } from './openai-reminder.service';
+import {
+  checkOutboundConfirmationAllowed,
+  checkWebhookUserRateLimit,
+  recordOutboundConfirmation,
+} from './webhook-abuse-guards';
 
 @Injectable()
 export class InteractiveCheckinService {
@@ -48,11 +58,25 @@ export class InteractiveCheckinService {
       return;
     }
 
-    if (!(await this.claimMessageId(parsed.messageId))) {
+    if (!this.bindSenderToRegisteredUser(user.phone, parsed)) {
+      this.logger.warn(
+        `Inbound WhatsApp rejected for user ${user.id}: sender identity mismatch`,
+      );
+      return;
+    }
+
+    if (!checkWebhookUserRateLimit(user.id)) {
+      this.logger.warn(
+        `Inbound WhatsApp rate limit exceeded for user ${user.id}`,
+      );
       return;
     }
 
     if (!parsed.replyKind) {
+      return;
+    }
+
+    if (!(await this.claimMessageId(parsed.messageId))) {
       return;
     }
 
@@ -61,22 +85,51 @@ export class InteractiveCheckinService {
 
     switch (parsed.replyKind) {
       case 'done':
-        await this.handleDone(user.id, user.phone!);
+        await this.handleDone(user.id, user.phone!, timezone);
         break;
       case 'snooze':
         await this.handleSnooze(user.id, localDate);
-        await this.evolution.sendText(
-          user.phone!,
-          "I'll check back in about an hour.",
-        );
         break;
       case 'rest':
         await this.handleRestDay(user.id, localDate);
-        await this.evolution.sendText(
-          user.phone!,
-          'Rest day noted — see you tomorrow.',
-        );
         break;
+    }
+  }
+
+  private bindSenderToRegisteredUser(
+    registeredPhone: string | null,
+    parsed: ParsedEvolutionInbound,
+  ): boolean {
+    if (!registeredPhone) {
+      return false;
+    }
+
+    try {
+      const canonicalRegistered = normalizePhone(registeredPhone);
+      const canonicalInbound = normalizePhone(parsed.phoneE164);
+      if (canonicalRegistered !== canonicalInbound) {
+        return false;
+      }
+
+      if (parsed.senderPhoneE164) {
+        const canonicalSender = normalizePhone(parsed.senderPhoneE164);
+        if (canonicalSender !== canonicalInbound) {
+          return false;
+        }
+      }
+
+      const defaultRegion = inferDefaultRegionFromE164(canonicalRegistered);
+      const rebound = jidToE164(
+        `${canonicalInbound.replace(/\D/g, '')}@s.whatsapp.net`,
+        { defaultRegion },
+      );
+      if (rebound && rebound !== canonicalInbound) {
+        return false;
+      }
+
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -97,15 +150,27 @@ export class InteractiveCheckinService {
     }
   }
 
-  private async handleDone(userId: string, phone: string): Promise<void> {
-    const today = await this.activitiesService.getToday(this.prisma, userId);
+  private async handleDone(
+    userId: string,
+    phone: string,
+    timezone: string,
+  ): Promise<void> {
+    const today = await this.activitiesService.getToday(
+      this.prisma,
+      userId,
+      undefined,
+      { timezone },
+    );
     const habit = pickFocusHabit(today.scoredActivities);
 
     if (!habit) {
-      await this.evolution.sendText(
-        phone,
-        'Nothing left to quick-log today — open your dashboard to finish up.',
-      );
+      if (checkOutboundConfirmationAllowed(userId)) {
+        await this.evolution.sendText(
+          phone,
+          'Nothing left to quick-log today — open your dashboard to finish up.',
+        );
+        recordOutboundConfirmation(userId);
+      }
       return;
     }
 

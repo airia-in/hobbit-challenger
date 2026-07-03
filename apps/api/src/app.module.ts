@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import path from 'node:path';
 import { DayEvaluatorService } from './cron/day-evaluator.service';
+import { InboundDedupeCleanupService } from './cron/inbound-dedupe-cleanup.service';
 import { ReminderService } from './cron/reminder.service';
 import { WinbackService } from './cron/winback.service';
 import { WeeklyRecapService } from './cron/weekly-recap.service';
@@ -27,6 +28,7 @@ const repoRoot = path.resolve(__dirname, '../../..');
   ],
   providers: [
     DayEvaluatorService,
+    InboundDedupeCleanupService,
     ReminderService,
     WinbackService,
     WeeklyRecapService,

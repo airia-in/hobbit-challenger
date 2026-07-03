@@ -176,6 +176,9 @@ describe('DayEvaluatorService — milestone policy', () => {
           },
         ],
       },
+      reminderLog: {
+        findUnique: async () => null,
+      },
       $transaction: async (fn: (tx: unknown) => Promise<void>) => {
         const tx = {
           dayScore: {

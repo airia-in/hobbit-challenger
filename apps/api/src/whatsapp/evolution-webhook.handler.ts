@@ -1,9 +1,7 @@
 import type { InteractiveCheckinService } from './interactive-checkin.service';
+import { parseEvolutionInbound } from './evolution-inbound.parser';
 import {
-  MAX_WEBHOOK_BODY_BYTES,
-  parseEvolutionInbound,
-} from './evolution-inbound.parser';
-import {
+  logWebhookAuthStartupWarning,
   verifyEvolutionWebhook,
   type EvolutionWebhookAuthConfig,
 } from './evolution-inbound-auth';
@@ -25,11 +23,6 @@ export function createEvolutionWebhookHandler(deps: {
   authConfig: EvolutionWebhookAuthConfig;
 }) {
   return async (request: WebhookRequest, reply: WebhookReply) => {
-    const bodySize = estimateBodyBytes(request.body);
-    if (bodySize > MAX_WEBHOOK_BODY_BYTES) {
-      return reply.status(200).send({ ok: true });
-    }
-
     const auth = verifyEvolutionWebhook(request, deps.authConfig);
     if (!auth.ok) {
       return reply.status(401).send({ error: 'Unauthorized' });
@@ -51,17 +44,6 @@ export function createEvolutionWebhookHandler(deps: {
   };
 }
 
-function estimateBodyBytes(body: unknown): number {
-  if (body == null) {
-    return 0;
-  }
-  try {
-    return Buffer.byteLength(JSON.stringify(body), 'utf8');
-  } catch {
-    return MAX_WEBHOOK_BODY_BYTES + 1;
-  }
-}
-
 export function buildEvolutionWebhookAuthConfig(
   env: Record<string, string | undefined>,
 ): EvolutionWebhookAuthConfig {
@@ -69,6 +51,9 @@ export function buildEvolutionWebhookAuthConfig(
     webhookSecret: env.EVOLUTION_WEBHOOK_SECRET,
     evolutionApiKey: env.EVOLUTION_API_KEY,
     evolutionInstance: env.EVOLUTION_INSTANCE,
-    nodeEnv: env.NODE_ENV,
+    allowUnauthenticated:
+      env.EVOLUTION_WEBHOOK_ALLOW_UNAUTHENTICATED === 'true',
   };
 }
+
+export { logWebhookAuthStartupWarning };

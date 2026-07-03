@@ -3,12 +3,15 @@ import { syncNativeStatusBar } from './sync-native-status-bar';
 
 export const THEME_STORAGE_KEY = 'hobbit-theme-mode';
 
+/** Warm off-white for native cold-start splash when JS is unavailable (#179). */
+export const NATIVE_SPLASH_BACKGROUND = '#f7f5f2';
+
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
 
 const THEME_COLORS: Record<ResolvedTheme, string> = {
   dark: '#0a0a0a',
-  light: '#f7f5f2',
+  light: NATIVE_SPLASH_BACKGROUND,
 };
 
 let systemMediaQuery: MediaQueryList | null = null;

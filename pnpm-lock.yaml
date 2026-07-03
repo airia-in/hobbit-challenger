@@ -248,6 +248,9 @@ importers:
       '@capacitor/haptics':
         specifier: ^7.0.2
         version: 7.0.5(@capacitor/core@7.6.7)
+      '@capacitor/splash-screen':
+        specifier: ^7.0.2
+        version: 7.0.5(@capacitor/core@7.6.7)
       '@capacitor/status-bar':
         specifier: ^7.0.2
         version: 7.0.6(@capacitor/core@7.6.7)

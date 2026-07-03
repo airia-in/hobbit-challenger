@@ -65,6 +65,7 @@ export function ProfileContent() {
   const [timezone, setTimezone] = useState('UTC');
   const [whatsappOptIn, setWhatsappOptIn] = useState(true);
   const [weeklyRecapOptIn, setWeeklyRecapOptIn] = useState(true);
+  const [reminderAdaptive, setReminderAdaptive] = useState(true);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -116,6 +117,7 @@ export function ProfileContent() {
       setTimezone(profile.data.timezone);
       setWhatsappOptIn(profile.data.whatsappOptIn);
       setWeeklyRecapOptIn(profile.data.weeklyRecapOptIn);
+      setReminderAdaptive(profile.data.reminderAdaptive);
     }
   }, [profile.data]);
 
@@ -191,6 +193,19 @@ export function ProfileContent() {
       {
         onError: () => {
           setWeeklyRecapOptIn(!enabled);
+        },
+      },
+    );
+  }
+
+  function handleReminderAdaptiveChange(enabled: boolean) {
+    setReminderAdaptive(enabled);
+    setMessage(null);
+    updateProfile.mutate(
+      { reminderAdaptive: enabled },
+      {
+        onError: () => {
+          setReminderAdaptive(!enabled);
         },
       },
     );
@@ -491,6 +506,57 @@ export function ProfileContent() {
               </button>
             </p>
           )}
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-sm text-[var(--text-primary)]">
+              Adaptive morning reminder
+            </span>
+            <p className="text-xs text-[var(--text-muted)]">
+              Shift reminders within ±30 min of when you usually check in
+            </p>
+            {!canUseWhatsappRecaps && (
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                Add your phone and enable WhatsApp reminders to use adaptive
+                timing.{' '}
+                {!hasStoredPhone ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      phoneInputRef.current?.focus();
+                      phoneInputRef.current?.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center',
+                      });
+                    }}
+                    className="text-[var(--accent-red)] hover:underline"
+                  >
+                    Add phone
+                  </button>
+                ) : null}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={reminderAdaptive}
+            aria-disabled={!canUseWhatsappRecaps}
+            onClick={() => handleReminderAdaptiveChange(!reminderAdaptive)}
+            disabled={!canUseWhatsappRecaps || updateProfile.isPending}
+            className={`relative h-7 w-12 shrink-0 rounded-full border transition disabled:cursor-not-allowed disabled:opacity-50 ${
+              reminderAdaptive
+                ? 'border-[var(--accent-red)] bg-[var(--accent-red)]'
+                : 'border-[var(--border)] bg-[var(--surface-raised)]'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${
+                reminderAdaptive ? 'left-6' : 'left-0.5'
+              }`}
+            />
+          </button>
         </div>
 
         <div id="habit-anchor">

@@ -67,8 +67,11 @@ type ProfileFixture = {
   avatarUrl: string | null;
   timezone: string;
   reminderTime: string | null;
+  habitAnchorText?: string | null;
+  habitAnchorTime?: string | null;
   whatsappOptIn: boolean;
   weeklyRecapOptIn: boolean;
+  reminderAdaptive: boolean;
   needsPhoneMigration: boolean;
   groupId: string | null;
   groupName: string | null;
@@ -87,6 +90,7 @@ const legacyProfile: ProfileFixture = {
   reminderTime: null,
   whatsappOptIn: true,
   weeklyRecapOptIn: true,
+  reminderAdaptive: true,
   needsPhoneMigration: true,
   groupId: null,
   groupName: null,
@@ -102,6 +106,15 @@ function mockProfileQuery(data: ProfileFixture) {
     isError: false,
     refetch: vi.fn(),
   });
+}
+
+function switchByLabel(label: RegExp | string): HTMLElement {
+  const labelNode = screen.getByText(label);
+  const row = labelNode.closest('.flex.items-center.justify-between');
+  if (!row) {
+    throw new Error(`Switch row not found for label: ${String(label)}`);
+  }
+  return row.querySelector('[role="switch"]') as HTMLElement;
 }
 
 describe('ProfileContent WhatsApp opt-in gating', () => {
@@ -154,8 +167,7 @@ describe('ProfileContent WhatsApp opt-in gating', () => {
   it('disables WhatsApp opt-in when no phone is stored', () => {
     render(<ProfileContent />);
 
-    const toggles = screen.getAllByRole('switch');
-    const whatsappToggle = toggles[0];
+    const whatsappToggle = switchByLabel('WhatsApp reminders');
     expect(whatsappToggle).toHaveAttribute('aria-disabled', 'true');
     expect(whatsappToggle).toBeDisabled();
     expect(
@@ -169,7 +181,7 @@ describe('ProfileContent WhatsApp opt-in gating', () => {
     const user = userEvent.setup();
     const { rerender } = render(<ProfileContent />);
 
-    expect(screen.getAllByRole('switch')[0]).toBeDisabled();
+    expect(switchByLabel('WhatsApp reminders')).toBeDisabled();
 
     mockProfileQuery({
       ...legacyProfile,
@@ -178,7 +190,7 @@ describe('ProfileContent WhatsApp opt-in gating', () => {
     });
     rerender(<ProfileContent />);
 
-    const whatsappToggle = screen.getAllByRole('switch')[0];
+    const whatsappToggle = switchByLabel('WhatsApp reminders');
     expect(whatsappToggle).not.toBeDisabled();
     expect(whatsappToggle).toHaveAttribute('aria-disabled', 'false');
 
@@ -235,8 +247,7 @@ describe('ProfileContent weekly recap opt-in gating', () => {
     });
     render(<ProfileContent />);
 
-    const toggles = screen.getAllByRole('switch');
-    const recapToggle = toggles[1];
+    const recapToggle = switchByLabel('Weekly Story So Far recap');
     expect(recapToggle).toBeDisabled();
   });
 
@@ -244,8 +255,7 @@ describe('ProfileContent weekly recap opt-in gating', () => {
     const user = userEvent.setup();
     render(<ProfileContent />);
 
-    const toggles = screen.getAllByRole('switch');
-    const recapToggle = toggles[1];
+    const recapToggle = switchByLabel('Weekly Story So Far recap');
     expect(recapToggle).not.toBeDisabled();
 
     await user.click(recapToggle!);

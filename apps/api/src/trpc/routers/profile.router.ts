@@ -21,6 +21,7 @@ export const profileRouter = router({
         habitAnchorTime: z.string().nullable().optional(),
         whatsappOptIn: z.boolean().optional(),
         weeklyRecapOptIn: z.boolean().optional(),
+        reminderAdaptive: z.boolean().optional(),
         phone: z.string().min(1).optional(),
         email: z.string().email().optional(),
         timezone: z.string().optional(),

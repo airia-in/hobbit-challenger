@@ -41,8 +41,13 @@ import {
   REST_DAY_KIND,
   snoozeKindFor,
 } from '../whatsapp/interactive-checkin.constants';
+import {
+  buildAdaptiveTimingMap,
+  computeAdaptiveWindowStart,
+  DEFAULT_MORNING_TIME,
+  type ActivityLogTimingRow,
+} from '../utils/reminder-timing';
 
-const DEFAULT_MORNING_TIME = '08:00';
 const STREAK_AT_RISK_TIME = '18:00';
 const EVENING_TIME = '21:00';
 const FAILED_RETRY_WINDOW_MINUTES = 15;
@@ -89,10 +94,13 @@ export class ReminderService {
         phone: true,
         timezone: true,
         reminderTime: true,
+        reminderAdaptive: true,
         whatsappOptIn: true,
         group: { select: { challengeTimezone: true } },
       },
     });
+
+    const morningTimeByUser = await this.loadAdaptiveMorningTimes(users);
 
     const deferUsers = users.map((user) => ({
       id: user.id,
@@ -104,11 +112,66 @@ export class ReminderService {
 
     for (const user of users) {
       try {
-        await this.processUserReminders(user, deferBatch);
+        await this.processUserReminders(
+          user,
+          deferBatch,
+          morningTimeByUser.get(user.id) ??
+            user.reminderTime ??
+            DEFAULT_MORNING_TIME,
+        );
       } catch (error) {
         this.logger.error(`Reminder failed for user ${user.id}:`, error);
       }
     }
+  }
+
+  /**
+   * Batches ActivityLog history for adaptive morning timing (one query per cron tick).
+   * Winback defer still uses fixed user.reminderTime — not this map.
+   */
+  private async loadAdaptiveMorningTimes(
+    users: Array<{
+      id: string;
+      reminderTime: string | null;
+      reminderAdaptive: boolean;
+      timezone: string;
+      group: { challengeTimezone: string | null } | null;
+    }>,
+  ): Promise<Map<string, string>> {
+    const timingUsers = users.map((user) => ({
+      id: user.id,
+      reminderTime: user.reminderTime,
+      reminderAdaptive: user.reminderAdaptive,
+      challengeTimezone: user.group?.challengeTimezone ?? user.timezone,
+    }));
+
+    const adaptiveUsers = timingUsers.filter((user) => user.reminderAdaptive);
+    if (adaptiveUsers.length === 0) {
+      return buildAdaptiveTimingMap(timingUsers, []);
+    }
+
+    const timezones = [
+      ...new Set(adaptiveUsers.map((user) => user.challengeTimezone)),
+    ];
+    const windowStart = computeAdaptiveWindowStart(new Date(), timezones);
+
+    const logs = await this.prisma.activityLog.findMany({
+      where: {
+        userId: { in: adaptiveUsers.map((user) => user.id) },
+        date: { gte: windowStart },
+      },
+      select: {
+        userId: true,
+        date: true,
+        createdAt: true,
+        state: true,
+        tier: true,
+        value: true,
+        subPoints: true,
+      },
+    });
+
+    return buildAdaptiveTimingMap(timingUsers, logs as ActivityLogTimingRow[]);
   }
 
   private async processUserReminders(
@@ -118,10 +181,12 @@ export class ReminderService {
       phone: string | null;
       timezone: string;
       reminderTime: string | null;
+      reminderAdaptive: boolean;
       whatsappOptIn: boolean;
       group: { challengeTimezone: string | null } | null;
     },
     deferBatch: WinbackDeferBatchContext,
+    effectiveMorningTime: string,
   ): Promise<void> {
     const reminderTimezone = user.group?.challengeTimezone ?? user.timezone;
 
@@ -144,7 +209,7 @@ export class ReminderService {
     if (this.shouldDeferToWinback(user, reminderTimezone, deferBatch)) {
       return;
     }
-    const morningTime = user.reminderTime ?? DEFAULT_MORNING_TIME;
+    const morningTime = effectiveMorningTime;
     const morningWindowActive =
       isLocalTimeMatch(reminderTimezone, morningTime) ||
       isWithinLocalCatchUpWindow(

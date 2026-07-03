@@ -77,6 +77,7 @@ const baseProfile = {
   habitAnchorTime: '07:30',
   whatsappOptIn: true,
   weeklyRecapOptIn: true,
+  reminderAdaptive: true,
   needsPhoneMigration: false,
   groupId: null,
   groupName: null,

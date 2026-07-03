@@ -22,6 +22,7 @@ type StoredUser = {
   habitAnchorTime: string | null;
   whatsappOptIn: boolean;
   weeklyRecapOptIn: boolean;
+  reminderAdaptive: boolean;
 };
 
 function createProfileContext(stores: {
@@ -135,6 +136,7 @@ function legacyUserStore(): {
     habitAnchorTime: null,
     whatsappOptIn: true,
     weeklyRecapOptIn: true,
+    reminderAdaptive: true,
   };
 
   return {
@@ -179,8 +181,11 @@ describe('profileRouter update phone', () => {
       avatarUrl: null,
       groupId: null,
       reminderTime: null,
+      habitAnchorText: null,
+      habitAnchorTime: null,
       whatsappOptIn: true,
       weeklyRecapOptIn: true,
+      reminderAdaptive: true,
     };
     stores.users.set(OTHER_ID, other);
     stores.usersByPhone.set(OTHER_PHONE, other);
@@ -306,6 +311,27 @@ describe('profileRouter weeklyRecapOptIn', () => {
 
     const afterUpdate = await caller.get();
     expect(afterUpdate.weeklyRecapOptIn).toBe(false);
+  });
+});
+
+describe('profileRouter reminderAdaptive', () => {
+  it('defaults reminderAdaptive to true on get', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const profile = await caller.get();
+    expect(profile.reminderAdaptive).toBe(true);
+  });
+
+  it('round-trips reminderAdaptive off through get and update', async () => {
+    const stores = legacyUserStore();
+    const caller = profileRouter.createCaller(createProfileContext(stores));
+
+    const updated = await caller.update({ reminderAdaptive: false });
+    expect(updated.reminderAdaptive).toBe(false);
+
+    const afterUpdate = await caller.get();
+    expect(afterUpdate.reminderAdaptive).toBe(false);
   });
 });
 
@@ -758,6 +784,7 @@ function memberLeaveStores(): {
     habitAnchorTime: null,
     whatsappOptIn: true,
     weeklyRecapOptIn: true,
+    reminderAdaptive: true,
   };
 
   const groups = new Map<string, StoredGroup>([
@@ -857,8 +884,11 @@ describe('profileRouter leaveGroup', () => {
       avatarUrl: null,
       groupId: GROUP_ID,
       reminderTime: null,
+      habitAnchorText: null,
+      habitAnchorTime: null,
       whatsappOptIn: true,
       weeklyRecapOptIn: true,
+      reminderAdaptive: true,
     };
     stores.users.set(OTHER_ID, otherMember);
     stores.usersByEmail.set('other-member@example.com', otherMember);

@@ -30,6 +30,7 @@ model User {
   habitAnchorTime   String?
   whatsappOptIn     Boolean       @default(true)
   weeklyRecapOptIn  Boolean       @default(true)
+  reminderAdaptive  Boolean       @default(true)
   createdAt      DateTime      @default(now())
   challenges     Challenge[]
   activityLogs   ActivityLog[]
@@ -154,9 +155,11 @@ model ActivityLog {
   xpAwarded   Int       @default(0)
   proofUrl    String?
   aiVerdict   String?
+  createdAt   DateTime      @default(now())
 
   @@unique([challengeId, activityId, date])
   @@index([userId, activityId, date])
+  @@index([userId, date])
 }
 
 model DayScore {

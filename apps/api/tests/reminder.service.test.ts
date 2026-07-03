@@ -27,11 +27,27 @@ function createReminderFakePrisma(seed: {
     phone: string | null;
     timezone: string;
     reminderTime: string | null;
+    reminderAdaptive?: boolean;
     whatsappOptIn: boolean;
+    group?: { challengeTimezone: string | null } | null;
   }>;
   reminderLogs?: ReminderLogRow[];
+  activityLogs?: Array<{
+    userId: string;
+    date: Date;
+    createdAt: Date;
+    state: string | null;
+    tier: string | null;
+    value: number | null;
+    subPoints: unknown;
+  }>;
 }) {
-  const users = [...seed.users];
+  const users = seed.users.map((user) => ({
+    ...user,
+    reminderAdaptive: user.reminderAdaptive ?? true,
+    group: user.group ?? null,
+  }));
+  const activityLogs = seed.activityLogs ?? [];
   const reminderLogs = new Map(
     (seed.reminderLogs ?? []).map((log) => [
       reminderLogKey(log.userId, log.date, log.kind),
@@ -130,6 +146,26 @@ function createReminderFakePrisma(seed: {
     },
     activityLog: {
       aggregate: async () => ({ _max: { date: null } }),
+      findMany: async ({
+        where,
+      }: {
+        where?: {
+          userId?: { in?: string[] };
+          date?: { gte?: Date };
+        };
+      }) => {
+        const userIds = where?.userId?.in;
+        const minDate = where?.date?.gte?.getTime();
+        return activityLogs.filter((log) => {
+          if (userIds && !userIds.includes(log.userId)) {
+            return false;
+          }
+          if (minDate !== undefined && log.date.getTime() < minDate) {
+            return false;
+          }
+          return true;
+        });
+      },
     },
   };
 
@@ -1133,6 +1169,340 @@ describe('ReminderService', () => {
 
     expect(sendText).not.toHaveBeenCalled();
     expect(sendButtons).not.toHaveBeenCalled();
+  });
+
+  function buildAdaptiveActivityLogs(
+    userId: string,
+    days: number,
+    minuteOfDay: number,
+    startDay = 10,
+  ) {
+    const hour = Math.floor(minuteOfDay / 60);
+    const minute = minuteOfDay % 60;
+    const logs = [];
+    for (let index = 0; index < days; index += 1) {
+      const day = startDay + index;
+      const dateKey = `2026-06-${String(day).padStart(2, '0')}`;
+      logs.push({
+        userId,
+        date: new Date(`${dateKey}T00:00:00.000Z`),
+        createdAt: new Date(
+          `${dateKey}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00.000Z`,
+        ),
+        state: 'DONE',
+        tier: null,
+        value: null,
+        subPoints: null,
+      });
+    }
+    return logs;
+  }
+
+  it('sends adaptive morning reminder at shifted time, not base time', async () => {
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Good morning!');
+    const buildContext = vi.fn().mockResolvedValue(defaultContext);
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          reminderAdaptive: true,
+          whatsappOptIn: true,
+        },
+      ],
+      activityLogs: buildAdaptiveActivityLogs('u1', 5, 8 * 60 + 25),
+    });
+
+    const evolution = { isConfigured: () => true, sendText };
+    const service = createReminderService(
+      prisma,
+      evolution,
+      { buildContext },
+      { compose },
+    );
+
+    await service.processReminders();
+    expect(countReminderOutboundSends(evolution)).toBe(0);
+
+    vi.setSystemTime(new Date('2026-06-15T08:25:00.000Z'));
+    await service.processReminders();
+
+    expect(countReminderOutboundSends(evolution)).toBe(1);
+    expect(compose).toHaveBeenCalledWith('MORNING', expect.any(Object));
+  });
+
+  it('uses base reminder time when reminderAdaptive is false', async () => {
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Good morning!');
+    const buildContext = vi.fn().mockResolvedValue(defaultContext);
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          reminderAdaptive: false,
+          whatsappOptIn: true,
+        },
+      ],
+      activityLogs: buildAdaptiveActivityLogs('u1', 5, 8 * 60 + 25),
+    });
+
+    const evolution = { isConfigured: () => true, sendText };
+    const service = createReminderService(
+      prisma,
+      evolution,
+      { buildContext },
+      { compose },
+    );
+
+    vi.setSystemTime(new Date('2026-06-15T08:25:00.000Z'));
+    await service.processReminders();
+    expect(countReminderOutboundSends(evolution)).toBe(0);
+
+    vi.setSystemTime(new Date('2026-06-15T08:00:00.000Z'));
+    await service.processReminders();
+    expect(countReminderOutboundSends(evolution)).toBe(1);
+  });
+
+  it('falls back to base time when adaptive history is sparse', async () => {
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Good morning!');
+    const buildContext = vi.fn().mockResolvedValue(defaultContext);
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          reminderAdaptive: true,
+          whatsappOptIn: true,
+        },
+      ],
+      activityLogs: buildAdaptiveActivityLogs('u1', 4, 8 * 60 + 25),
+    });
+
+    const evolution = { isConfigured: () => true, sendText };
+    const service = createReminderService(
+      prisma,
+      evolution,
+      { buildContext },
+      { compose },
+    );
+
+    vi.setSystemTime(new Date('2026-06-15T08:25:00.000Z'));
+    await service.processReminders();
+    expect(countReminderOutboundSends(evolution)).toBe(0);
+
+    vi.setSystemTime(new Date('2026-06-15T08:00:00.000Z'));
+    await service.processReminders();
+    expect(countReminderOutboundSends(evolution)).toBe(1);
+  });
+
+  it('falls back to base time when check-in times vary wildly', async () => {
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Good morning!');
+    const buildContext = vi.fn().mockResolvedValue(defaultContext);
+
+    const erraticLogs = [
+      ...buildAdaptiveActivityLogs('u1', 1, 6 * 60),
+      ...buildAdaptiveActivityLogs('u1', 1, 7 * 60, 11),
+      ...buildAdaptiveActivityLogs('u1', 1, 9 * 60, 12),
+      ...buildAdaptiveActivityLogs('u1', 1, 10 * 60, 13),
+      ...buildAdaptiveActivityLogs('u1', 1, 11 * 60, 14),
+    ];
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          reminderAdaptive: true,
+          whatsappOptIn: true,
+        },
+      ],
+      activityLogs: erraticLogs,
+    });
+
+    const evolution = { isConfigured: () => true, sendText };
+    const service = createReminderService(
+      prisma,
+      evolution,
+      { buildContext },
+      { compose },
+    );
+
+    vi.setSystemTime(new Date('2026-06-15T08:45:00.000Z'));
+    await service.processReminders();
+    expect(countReminderOutboundSends(evolution)).toBe(0);
+
+    vi.setSystemTime(new Date('2026-06-15T08:00:00.000Z'));
+    await service.processReminders();
+    expect(countReminderOutboundSends(evolution)).toBe(1);
+  });
+
+  it('clamps adaptive shift to +30 minutes from base', async () => {
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Good morning!');
+    const buildContext = vi.fn().mockResolvedValue(defaultContext);
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          reminderAdaptive: true,
+          whatsappOptIn: true,
+        },
+      ],
+      activityLogs: buildAdaptiveActivityLogs('u1', 5, 8 * 60 + 45),
+    });
+
+    const evolution = { isConfigured: () => true, sendText };
+    const service = createReminderService(
+      prisma,
+      evolution,
+      { buildContext },
+      { compose },
+    );
+
+    vi.setSystemTime(new Date('2026-06-15T08:29:00.000Z'));
+    await service.processReminders();
+    expect(countReminderOutboundSends(evolution)).toBe(0);
+
+    vi.setSystemTime(new Date('2026-06-15T08:30:00.000Z'));
+    await service.processReminders();
+    expect(countReminderOutboundSends(evolution)).toBe(1);
+  });
+
+  it('dedupes adaptive morning reminder to one send per local day', async () => {
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Good morning!');
+    const buildContext = vi.fn().mockResolvedValue(defaultContext);
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          reminderAdaptive: true,
+          whatsappOptIn: true,
+        },
+      ],
+      activityLogs: buildAdaptiveActivityLogs('u1', 5, 8 * 60 + 20),
+    });
+
+    const evolution = { isConfigured: () => true, sendText };
+    const service = createReminderService(
+      prisma,
+      evolution,
+      { buildContext },
+      { compose },
+    );
+
+    vi.setSystemTime(new Date('2026-06-15T08:20:00.000Z'));
+    await service.processReminders();
+    await service.processReminders();
+
+    expect(countReminderOutboundSends(evolution)).toBe(1);
+    expect(compose).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses shifted morning window for RECOVERY eligibility', async () => {
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Recovery');
+    const buildContext = vi.fn().mockResolvedValue({
+      ...defaultContext,
+      recoveryEligible: true,
+      recoveryBreakDate: '2026-06-14',
+    });
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          reminderAdaptive: true,
+          whatsappOptIn: true,
+        },
+      ],
+      activityLogs: buildAdaptiveActivityLogs('u1', 5, 8 * 60 + 22),
+    });
+
+    const service = createReminderService(
+      prisma,
+      { isConfigured: () => true, sendText },
+      { buildContext },
+      { compose },
+    );
+
+    vi.setSystemTime(new Date('2026-06-15T08:00:00.000Z'));
+    await service.processReminders();
+    expect(compose).not.toHaveBeenCalled();
+
+    vi.setSystemTime(new Date('2026-06-15T08:22:00.000Z'));
+    await service.processReminders();
+    expect(compose).toHaveBeenCalledWith('RECOVERY', expect.any(Object));
+  });
+
+  it('does not double-send when winback defers at fixed morning time only', async () => {
+    const sendText = vi.fn().mockResolvedValue({ ok: true });
+    const compose = vi.fn().mockResolvedValue('Good morning!');
+    const buildContext = vi.fn().mockResolvedValue(defaultContext);
+    const winbackService = createWinbackServiceMock(true);
+
+    const { prisma } = createReminderFakePrisma({
+      users: [
+        {
+          id: 'u1',
+          name: 'Alex',
+          phone: '+15551234567',
+          timezone,
+          reminderTime: '08:00',
+          reminderAdaptive: true,
+          whatsappOptIn: true,
+        },
+      ],
+      activityLogs: buildAdaptiveActivityLogs('u1', 5, 8 * 60 + 25),
+    });
+
+    const evolution = { isConfigured: () => true, sendText };
+    const service = createReminderService(
+      prisma,
+      evolution,
+      { buildContext },
+      { compose },
+      winbackService,
+    );
+
+    vi.setSystemTime(new Date('2026-06-15T08:25:00.000Z'));
+    await service.processReminders();
+
+    expect(winbackService.shouldDeferRemindersForUser).toHaveBeenCalled();
+    expect(countReminderOutboundSends(evolution)).toBe(0);
   });
 });
 

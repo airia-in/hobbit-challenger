@@ -45,11 +45,17 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
     },
   });
 
+  // A stale/invalid session is signalled specifically by an UNAUTHORIZED
+  // response — the token verified but no matching user exists. Gate on the code
+  // (not any error) so a transient network/500 failure on a *valid* session
+  // — e.g. a refetch on window refocus — never clears a good token.
+  const isStaleSession = me.isError && me.error?.data?.code === 'UNAUTHORIZED';
+
   // Whether we're on our way to the login page rather than staying on the
-  // invite. Both the no-token and stale-token cases redirect, so keep the card
-  // in a "checking" state instead of flashing a Join button that would fail.
+  // invite. Both the no-token and stale-session cases redirect, so keep the
+  // card in a "checking" state instead of flashing a Join button that fails.
   const hasToken = Boolean(getToken());
-  const isRedirecting = !hasToken || me.isError;
+  const isRedirecting = !hasToken || isStaleSession;
 
   useEffect(() => {
     if (!token) return;
@@ -64,11 +70,11 @@ function JoinGroupPageInner({ token: propToken }: JoinGroupPageProps) {
     // Stale/invalid session (e.g. the account data was reset): the token can't
     // be validated, so clear it and open the Register tab to make a fresh
     // account rather than showing a Join button the API rejects as UNAUTHORIZED.
-    if (me.isError) {
+    if (isStaleSession) {
       clearToken();
       window.location.href = `/?returnTo=${encodeURIComponent(returnTo)}&mode=register`;
     }
-  }, [token, me.isError]);
+  }, [token, isStaleSession]);
 
   if (!token) {
     return (

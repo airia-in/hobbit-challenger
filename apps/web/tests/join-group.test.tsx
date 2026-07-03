@@ -155,6 +155,7 @@ describe('JoinGroupPage', () => {
       data: undefined,
       isLoading: false,
       isError: true,
+      error: { data: { code: 'UNAUTHORIZED' } },
     });
 
     render(<JoinGroupPage token="invite-token" />);
@@ -171,6 +172,25 @@ describe('JoinGroupPage', () => {
         '/?returnTo=%2Fjoin%3Ftoken%3Dinvite-token&mode=register',
       );
     });
+  });
+
+  it('does not clear the session on a transient (non-UNAUTHORIZED) error', async () => {
+    // A network/500 blip on a valid session (e.g. a refetch on window refocus)
+    // must not discard a good token or bounce the user to Register.
+    mockGetToken.mockReturnValue('valid-token');
+    mockMeUseQuery.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: { data: { code: 'INTERNAL_SERVER_ERROR' } },
+    });
+
+    render(<JoinGroupPage token="invite-token" />);
+
+    // Give the redirect effect a chance to (not) run.
+    await Promise.resolve();
+    expect(mockClearToken).not.toHaveBeenCalled();
+    expect(locationHref).toBe('');
   });
 
   it('redirects to sign-in when there is no session token', async () => {

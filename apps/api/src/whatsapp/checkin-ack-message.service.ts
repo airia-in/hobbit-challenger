@@ -48,9 +48,10 @@ const CHECKIN_ACK_FIRST_FALLBACK_VARIANTS: readonly string[] = [
 ];
 
 /**
- * At most one ack per user per local day. Any existing ReminderLog row blocks a
- * second send (including undo/redo), mirroring dashboard confetti dedupe.
- * FAILED rows are not retried — one-shot ack moment per #140 anti-spam design.
+ * At most one send per (user, local day, ReminderLog kind). Multi-habit days may
+ * emit both `CHECKIN_ACK_FIRST` (first scored log) and `CHECKIN_ACK` (day
+ * complete); each kind dedupes independently. Any existing row for that kind
+ * blocks a second send (including undo/redo). FAILED rows are not retried.
  */
 export function shouldAttemptCheckinAck(
   existing: { status: string } | null | undefined,
@@ -93,6 +94,41 @@ export function buildCheckinAckStreakLine(
   return 'Fresh path tomorrow.';
 }
 
+/** First-log streak line — never "Fresh path tomorrow." on a celebratory opener. */
+export function buildCheckinAckFirstStreakLine(
+  currentStreak: number,
+  todayNetXp: number,
+  tasksDone: number,
+): string {
+  if (currentStreak >= 7) {
+    return `${currentStreak} days on the trail — keep that campfire warm.`;
+  }
+  if (currentStreak >= 1) {
+    return `${currentStreak}-day streak rolling.`;
+  }
+  if (todayNetXp > 0) {
+    return `+${todayNetXp} XP in the pack today.`;
+  }
+  if (tasksDone >= 1) {
+    return 'That first step counts today.';
+  }
+  return '';
+}
+
+export function stripCheckinAckDashboardUrl(
+  text: string,
+  messaging: ReminderMessaging,
+): string {
+  if (!text.includes(messaging.dashboardUrl)) {
+    return text;
+  }
+  return text
+    .split(messaging.dashboardUrl)
+    .join('')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function hashCheckinAckSeed(context: CheckinAckContext, kind: string): number {
   const input = `${context.name}:${context.currentStreak}:${context.tasksDone}:${kind}`;
   let hash = 0;
@@ -116,21 +152,27 @@ function pickVariant<T>(variants: readonly T[], seed: number): T {
   return variants[seed % variants.length]!;
 }
 
+function applyCheckinAckTemplate(
+  template: string,
+  context: CheckinAckContext,
+  messaging: ReminderMessaging,
+  streakLine: string,
+): string {
+  return template
+    .replaceAll('{{name}}', context.name)
+    .replaceAll('{{streakLine}}', streakLine)
+    .replaceAll('{{brandName}}', messaging.brandName);
+}
+
 function buildCheckinAckFallbackFromVariants(
   variants: readonly string[],
   context: CheckinAckContext,
   messaging: ReminderMessaging,
   seed: number,
+  streakLine: string,
 ): string {
   const template = pickVariant(variants, seed);
-  const streakLine = buildCheckinAckStreakLine(
-    context.currentStreak,
-    context.todayNetXp,
-  );
-  return template
-    .replaceAll('{{name}}', context.name)
-    .replaceAll('{{streakLine}}', streakLine)
-    .replaceAll('{{brandName}}', messaging.brandName);
+  return applyCheckinAckTemplate(template, context, messaging, streakLine);
 }
 
 export function buildCheckinAckFallback(
@@ -143,6 +185,7 @@ export function buildCheckinAckFallback(
     context,
     messaging,
     seed,
+    buildCheckinAckStreakLine(context.currentStreak, context.todayNetXp),
   );
 }
 
@@ -156,6 +199,11 @@ export function buildCheckinAckFirstFallback(
     context,
     messaging,
     seed,
+    buildCheckinAckFirstStreakLine(
+      context.currentStreak,
+      context.todayNetXp,
+      context.tasksDone,
+    ),
   );
 }
 
@@ -264,7 +312,7 @@ export class CheckinAckMessageService {
       if (!content) {
         throw new Error('Empty OpenAI response');
       }
-      return content;
+      return stripCheckinAckDashboardUrl(content, this.messaging);
     } catch (error) {
       this.logger.error('Check-in ack compose failed:', error);
       return fallback(context, this.messaging);

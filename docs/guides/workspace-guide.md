@@ -27,6 +27,10 @@ the first `CORS_ORIGIN` entry (for example a LAN IP or mobile emulator). See
 [group invite links](./production-hosting.md#group-invite-links) for precedence
 details.
 
+## Internationalization
+
+The web app keeps Astro i18n scaffolding (`apps/web/src/i18n/config.ts`, `astro.config.ts`) for English-only routing today. A stub German (`/de`) locale was removed in issue #142 because it advertised localization without HOBBIT product strings. Do not re-add locale folders or config entries until a real localization effort is planned; see `.agents/skills/astro-i18n` when that work starts.
+
 ## Database Changes
 
 Schema and migrations live in `packages/db`. After editing the Prisma schema:

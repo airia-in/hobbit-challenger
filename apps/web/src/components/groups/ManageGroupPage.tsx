@@ -220,7 +220,7 @@ export function ManageGroupContent() {
                       {member.name}
                     </p>
                     {member.isAdmin && (
-                      <span className="rounded border border-[var(--gold)]/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[var(--gold)]">
+                      <span className="rounded border border-[var(--gold-fill)]/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[var(--gold)]">
                         Admin
                       </span>
                     )}

@@ -14,6 +14,7 @@ describe('BaseLayout theme bootstrap', () => {
     expect(layout).toContain('is:inline');
     expect(layout).toContain('set:html={themeInitScript}');
     expect(layout).toContain("from '../lib/theme'");
+    expect(layout).toContain('theme-color');
   });
 
   it('includes dynamic theme-color meta tag', () => {

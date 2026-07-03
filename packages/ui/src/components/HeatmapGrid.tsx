@@ -26,7 +26,7 @@ const STATE_COLORS: Record<HeatmapCellState, string> = {
   failed: 'bg-[var(--accent-red)]',
   future: 'bg-[var(--border)]',
   today:
-    'bg-[var(--gold)] ring-2 ring-[var(--gold)] ring-offset-1 ring-offset-[var(--ring-offset)]',
+    'bg-[var(--gold-fill)] ring-2 ring-[var(--gold-fill)] ring-offset-1 ring-offset-[var(--ring-offset)]',
   not_started: 'bg-[var(--surface-raised)]',
 };
 

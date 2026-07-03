@@ -32,7 +32,9 @@ export function GroupInviteCard({
 }: GroupInviteCardProps) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('dark');
+  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(
+    readResolvedTheme,
+  );
 
   useEffect(() => {
     const root = document.documentElement;

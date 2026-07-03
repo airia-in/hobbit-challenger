@@ -22,7 +22,7 @@ export type LineChartProps = {
 
 const DEFAULT_COLORS = [
   'var(--accent-red)',
-  'var(--gold)',
+  'var(--gold-fill)',
   'var(--success)',
   'var(--text-muted)',
 ];

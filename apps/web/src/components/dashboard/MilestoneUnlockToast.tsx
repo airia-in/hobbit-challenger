@@ -25,7 +25,7 @@ export function MilestoneUnlockToast({
 
   return (
     <div
-      className="fixed inset-x-4 bottom-6 z-50 mx-auto max-w-md rounded-lg border border-[var(--gold)]/40 bg-[var(--surface)] px-4 py-3 shadow-lg"
+      className="fixed inset-x-4 bottom-6 z-50 mx-auto max-w-md rounded-lg border border-[var(--gold-fill)]/40 bg-[var(--surface)] px-4 py-3 shadow-lg"
       data-testid="milestone-unlock-toast"
       role="status"
       aria-live="polite"

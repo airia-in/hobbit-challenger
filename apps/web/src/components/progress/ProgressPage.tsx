@@ -328,7 +328,7 @@ export function ProgressContent() {
               onClick={() => setLeaderboardMetric(option.value)}
               className={`rounded-full px-3 py-1 text-xs uppercase tracking-wider ${
                 leaderboardMetric === option.value
-                  ? 'bg-[var(--gold)]/20 text-[var(--gold)]'
+                  ? 'bg-[var(--gold-fill)]/20 text-[var(--gold)]'
                   : 'border border-[var(--border)] text-[var(--text-muted)]'
               }`}
             >

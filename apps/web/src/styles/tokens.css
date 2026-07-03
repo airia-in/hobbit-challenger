@@ -7,6 +7,7 @@
   --accent-red-hover: #c42a22;
   --accent-orange: #f97316;
   --gold: #f5c842;
+  --gold-fill: var(--gold);
   --silver: #a8b2b8;
   --bronze: #cd7f32;
   --text-primary: #f0f0f0;
@@ -30,8 +31,13 @@
   --bg-black: var(--bg-base);
   --surface: #ffffff;
   --surface-raised: #f0eeeb;
+  --accent-red: #d42b22;
+  --accent-red-hover: #b8241d;
+  --gold: #92400e;
+  --gold-fill: #f5c842;
+  --success: #166534;
   --text-primary: #1c1917;
-  --text-muted: #78716c;
+  --text-muted: #57534e;
   --border: #e7e5e4;
   --overlay: rgb(0 0 0 / 0.45);
   --overlay-heavy: rgb(0 0 0 / 0.55);

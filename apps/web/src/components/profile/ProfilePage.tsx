@@ -5,14 +5,9 @@ import { AuthenticatedImage } from '../common/AuthenticatedImage';
 import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
+import { ThemeModeControl } from '../ThemeModeControl';
 import { PersonalActivitiesSection } from '../activities/PersonalActivitiesSection';
 import { getToken, performClientLogout } from '../../lib/auth';
-import {
-  getStoredThemeMode,
-  initTheme,
-  setThemeMode,
-  type ThemeMode,
-} from '../../lib/theme';
 import { trpc } from '../../lib/trpc';
 
 const apiUrl = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -70,7 +65,6 @@ export function ProfileContent() {
   const [timezone, setTimezone] = useState('UTC');
   const [whatsappOptIn, setWhatsappOptIn] = useState(true);
   const [weeklyRecapOptIn, setWeeklyRecapOptIn] = useState(true);
-  const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -110,11 +104,6 @@ export function ProfileContent() {
   const exportCsv = trpc.history.exportCsv.useQuery(undefined, {
     enabled: false,
   });
-
-  useEffect(() => {
-    initTheme();
-    setThemeModeState(getStoredThemeMode());
-  }, []);
 
   useEffect(() => {
     if (profile.data) {
@@ -192,11 +181,6 @@ export function ProfileContent() {
         },
       },
     );
-  }
-
-  function handleThemeModeChange(mode: ThemeMode) {
-    setThemeModeState(mode);
-    setThemeMode(mode);
   }
 
   function handleWeeklyRecapOptInChange(enabled: boolean) {
@@ -681,32 +665,7 @@ export function ProfileContent() {
         <h2 className="text-sm uppercase tracking-wider text-[var(--text-muted)]">
           Appearance
         </h2>
-        <div>
-          <span className="text-sm text-[var(--text-primary)]">Theme</span>
-          <p className="text-xs text-[var(--text-muted)]">
-            Choose light, dark, or match your system settings
-          </p>
-        </div>
-        <div className="flex gap-2" role="radiogroup" aria-label="Theme">
-          {(['light', 'dark', 'system'] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              role="radio"
-              aria-checked={themeMode === mode}
-              onClick={() => handleThemeModeChange(mode)}
-              className={`flex-1 rounded border py-2 text-xs font-semibold uppercase tracking-wider transition ${
-                themeMode === mode
-                  ? 'border-[var(--accent-red)] bg-[var(--accent-red)] text-[var(--text-on-accent)]'
-                  : 'border-[var(--border)] bg-[var(--surface-raised)] text-[var(--text-primary)] hover:border-[var(--text-muted)]'
-              }`}
-            >
-              {mode === 'system'
-                ? 'System'
-                : mode.charAt(0).toUpperCase() + mode.slice(1)}
-            </button>
-          ))}
-        </div>
+        <ThemeModeControl />
       </div>
 
       <PersonalActivitiesSection />

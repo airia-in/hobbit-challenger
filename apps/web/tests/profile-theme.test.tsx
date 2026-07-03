@@ -148,4 +148,26 @@ describe('Profile appearance theme control', () => {
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark');
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
   });
+
+  it('selects system theme and applies color-scheme from OS preference', async () => {
+    vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    const user = userEvent.setup();
+    render(<ProfileContent />);
+
+    await user.click(screen.getByRole('radio', { name: 'System' }));
+
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('system');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    expect(document.documentElement.style.colorScheme).toBe('light');
+  });
 });

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   THEME_STORAGE_KEY,
   applyThemeMode,
+  clearSystemListener,
   getStoredThemeMode,
   getThemeColor,
   initTheme,
@@ -10,6 +11,10 @@ import {
   themeInitScript,
 } from '../src/lib/theme';
 import { readStorageItem, writeStorageItem } from '../src/lib/browser-storage';
+
+function runThemeInitScript(): void {
+  new Function(themeInitScript)();
+}
 
 describe('theme', () => {
   beforeEach(() => {
@@ -126,5 +131,81 @@ describe('theme', () => {
   it('exports FOUC prevention script with storage key', () => {
     expect(themeInitScript).toContain(THEME_STORAGE_KEY);
     expect(themeInitScript).toContain("setAttribute('data-theme'");
+    expect(themeInitScript).toContain('meta[name="theme-color"]');
+  });
+
+  it('FOUC script applies stored light theme and theme-color meta', () => {
+    const meta = document.createElement('meta');
+    meta.setAttribute('name', 'theme-color');
+    meta.setAttribute('content', '#0a0a0a');
+    document.head.appendChild(meta);
+
+    localStorage.setItem(THEME_STORAGE_KEY, 'light');
+    runThemeInitScript();
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    expect(document.documentElement.style.colorScheme).toBe('light');
+    expect(meta.getAttribute('content')).toBe(getThemeColor('light'));
+
+    meta.remove();
+  });
+
+  it('FOUC script falls back to system preference when storage throws', () => {
+    vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('storage blocked');
+    });
+
+    runThemeInitScript();
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    expect(document.documentElement.style.colorScheme).toBe('light');
+  });
+
+  it('FOUC script treats invalid stored values as system', () => {
+    localStorage.setItem(THEME_STORAGE_KEY, 'sepia');
+    vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    runThemeInitScript();
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+
+  it('removes system listener when switching to explicit light mode', () => {
+    const removeListener = vi.fn();
+    vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: removeListener,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    setThemeMode('system');
+    setThemeMode('light');
+
+    expect(removeListener).toHaveBeenCalled();
+    clearSystemListener();
   });
 });

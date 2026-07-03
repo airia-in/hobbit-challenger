@@ -1,4 +1,5 @@
 import { readStorageItem, writeStorageItem } from './browser-storage';
+import { syncNativeStatusBar } from './sync-native-status-bar';
 
 export const THEME_STORAGE_KEY = 'hobbit-theme-mode';
 
@@ -46,9 +47,11 @@ function applyResolvedTheme(resolved: ResolvedTheme): void {
   if (meta) {
     meta.setAttribute('content', THEME_COLORS[resolved]);
   }
+
+  void syncNativeStatusBar(resolved);
 }
 
-function clearSystemListener(): void {
+export function clearSystemListener(): void {
   if (systemMediaQuery && systemListener) {
     systemMediaQuery.removeEventListener('change', systemListener);
   }
@@ -82,4 +85,4 @@ export function initTheme(): void {
 }
 
 /** Self-contained script for BaseLayout `<head>` — prevents theme FOUC. */
-export const themeInitScript = `(function(){try{var k='${THEME_STORAGE_KEY}';var s=localStorage.getItem(k);var m=s==='light'||s==='dark'||s==='system'?s:'system';var e=m==='system'?(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):m;document.documentElement.setAttribute('data-theme',e);document.documentElement.style.colorScheme=e;}catch(x){}})();`;
+export const themeInitScript = `(function(){var k='${THEME_STORAGE_KEY}';var m='system';try{var s=localStorage.getItem(k);m=s==='light'||s==='dark'||s==='system'?s:'system';}catch(x){}var e=m==='system'?(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):m;document.documentElement.setAttribute('data-theme',e);document.documentElement.style.colorScheme=e;var c=e==='light'?'#f7f5f2':'#0a0a0a';var meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content',c);})();`;

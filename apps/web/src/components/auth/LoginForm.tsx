@@ -5,6 +5,7 @@ import { getToken, setToken } from '../../lib/auth';
 import { BRAND_NAME, BRAND_SUBTITLE, BRAND_TAGLINE } from '../../lib/brand';
 import { awaitNativeDeepLinkBootstrap } from '../../lib/native-deep-link-pending';
 import { formatRegisterPhonePreview } from '../../lib/phone-preview';
+import { ThemeModeControl } from '../ThemeModeControl';
 import { isSafeRelativeReturnTo } from '../../lib/safe-return-to';
 
 type Tab = 'signin' | 'register';
@@ -218,6 +219,9 @@ function LoginFormInner() {
       <p className="mt-10 text-center text-sm text-[var(--text-muted)]">
         {BRAND_TAGLINE}
       </p>
+      <div className="mt-4 flex justify-center">
+        <ThemeModeControl compact />
+      </div>
     </div>
   );
 }

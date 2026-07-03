@@ -26,7 +26,7 @@ export function AuthGateInner({ children }: AuthGateProps) {
 
   if (me.isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-black)]">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-base)]">
         <p
           className="text-sm uppercase tracking-[0.3em] text-[var(--text-muted)]"
           style={{ fontFamily: 'var(--font-mono)' }}

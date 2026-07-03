@@ -310,7 +310,7 @@ export function ProgressContent() {
                 onClick={() => setLeaderboardWindow(option.value)}
                 className={`rounded-full px-3 py-1 text-xs uppercase tracking-wider ${
                   leaderboardWindow === option.value
-                    ? 'bg-[var(--accent-red)] text-white'
+                    ? 'bg-[var(--accent-red)] text-[var(--text-on-accent)]'
                     : 'border border-[var(--border)] text-[var(--text-muted)]'
                 }`}
               >

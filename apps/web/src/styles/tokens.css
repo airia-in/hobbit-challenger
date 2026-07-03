@@ -1,18 +1,39 @@
 :root {
-  --bg-black: #0a0a0a;
+  --bg-base: #0a0a0a;
+  --bg-black: var(--bg-base);
   --surface: #111111;
   --surface-raised: #1a1a1a;
   --accent-red: #e63329;
+  --accent-red-hover: #c42a22;
   --accent-orange: #f97316;
   --gold: #f5c842;
   --silver: #a8b2b8;
   --bronze: #cd7f32;
   --text-primary: #f0f0f0;
   --text-muted: #6b7280;
+  --text-on-accent: #ffffff;
   --success: #22c55e;
   --border: #2a2a2a;
+  --overlay: rgb(0 0 0 / 0.7);
+  --overlay-heavy: rgb(0 0 0 / 0.85);
+  --ring-offset: var(--bg-base);
+  --confetti-warm-1: #f4d58d;
+  --confetti-warm-2: #e8c4a0;
 
   --font-display: 'Bebas Neue', sans-serif;
   --font-body: 'Inter', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+}
+
+[data-theme='light'] {
+  --bg-base: #f7f5f2;
+  --bg-black: var(--bg-base);
+  --surface: #ffffff;
+  --surface-raised: #f0eeeb;
+  --text-primary: #1c1917;
+  --text-muted: #78716c;
+  --border: #e7e5e4;
+  --overlay: rgb(0 0 0 / 0.45);
+  --overlay-heavy: rgb(0 0 0 / 0.55);
+  --ring-offset: var(--bg-base);
 }

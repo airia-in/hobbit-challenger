@@ -76,7 +76,7 @@ export function ActivityListItem({
             className={`rounded px-3 py-1 text-xs uppercase tracking-wider disabled:opacity-50 ${
               activity.active
                 ? 'border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--accent-red)]'
-                : 'bg-[var(--accent-red)] text-white'
+                : 'bg-[var(--accent-red)] text-[var(--text-on-accent)]'
             }`}
           >
             {isToggling ? '…' : activity.active ? 'Disable' : 'Enable'}

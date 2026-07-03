@@ -314,8 +314,8 @@ function ActivityCard({
       className={
         highlighted
           ? variant === 'personal'
-            ? 'border-dashed ring-2 ring-[var(--accent-red)]/60 ring-offset-2 ring-offset-[var(--bg-black)]'
-            : 'ring-2 ring-[var(--accent-red)]/60 ring-offset-2 ring-offset-[var(--bg-black)]'
+            ? 'border-dashed ring-2 ring-[var(--accent-red)]/60 ring-offset-2 ring-offset-[var(--ring-offset)]'
+            : 'ring-2 ring-[var(--accent-red)]/60 ring-offset-2 ring-offset-[var(--ring-offset)]'
           : variant === 'personal'
             ? 'border-dashed'
             : undefined
@@ -490,7 +490,7 @@ export function DashboardContent() {
 
   if (activitiesQuery.isLoading || statsQuery.isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-black)]">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-base)]">
         <p
           className="text-sm uppercase tracking-[0.3em] text-[var(--text-muted)]"
           style={{ fontFamily: 'var(--font-mono)' }}
@@ -504,7 +504,7 @@ export function DashboardContent() {
   if (activitiesQuery.isError || statsQuery.isError) {
     const errorQuery = activitiesQuery.isError ? activitiesQuery : statsQuery;
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-black)] px-4">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-base)] px-4">
         <QueryErrorState
           message={errorQuery.error?.message}
           onRetry={() => {
@@ -523,7 +523,7 @@ export function DashboardContent() {
     : [];
 
   return (
-    <div className="min-h-screen bg-[var(--bg-black)] px-4 py-8">
+    <div className="min-h-screen bg-[var(--bg-base)] px-4 py-8">
       <div className="mx-auto max-w-2xl space-y-8">
         <header className="flex items-center justify-between">
           <div>
@@ -639,7 +639,7 @@ export function DashboardContent() {
                   <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
                     <a
                       href="/join"
-                      className="inline-block rounded bg-[var(--accent-red)] px-6 py-3 text-sm font-bold uppercase tracking-widest text-white hover:bg-[#c42a22]"
+                      className="inline-block rounded bg-[var(--accent-red)] px-6 py-3 text-sm font-bold uppercase tracking-widest text-[var(--text-on-accent)] hover:bg-[var(--accent-red-hover)]"
                     >
                       Choose your path
                     </a>

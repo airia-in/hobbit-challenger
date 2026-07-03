@@ -71,7 +71,7 @@ export function LeaderboardContent() {
         <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
           <a
             href="/join"
-            className="inline-block rounded bg-[var(--accent-red)] px-6 py-3 text-sm font-bold uppercase tracking-widest text-white hover:bg-[#c42a22]"
+            className="inline-block rounded bg-[var(--accent-red)] px-6 py-3 text-sm font-bold uppercase tracking-widest text-[var(--text-on-accent)] hover:bg-[var(--accent-red-hover)]"
           >
             Start or join a fellowship
           </a>

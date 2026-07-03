@@ -82,7 +82,7 @@ function LoginFormInner() {
   // so the login form never flashes before the redirect effect navigates away.
   if (hasToken && (me.isLoading || me.data)) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-black)]">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-base)]">
         <p
           className="text-sm uppercase tracking-[0.3em] text-[var(--text-muted)]"
           style={{ fontFamily: 'var(--font-mono)' }}
@@ -204,7 +204,7 @@ function LoginFormInner() {
           <button
             type="submit"
             disabled={isPending}
-            className="mt-2 w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-white transition hover:bg-[#c42a22] disabled:opacity-50"
+            className="mt-2 w-full rounded bg-[var(--accent-red)] py-3 text-sm font-bold uppercase tracking-widest text-[var(--text-on-accent)] transition hover:bg-[var(--accent-red-hover)] disabled:opacity-50"
           >
             {isPending
               ? 'Loading...'

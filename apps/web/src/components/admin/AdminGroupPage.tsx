@@ -298,7 +298,7 @@ export function AdminGroupContent() {
           <button
             type="submit"
             disabled={rangeMutationPending}
-            className="self-end rounded bg-[var(--accent-red)] px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="self-end rounded bg-[var(--accent-red)] px-4 py-2 text-sm font-medium text-[var(--text-on-accent)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             Save range
           </button>
@@ -352,7 +352,7 @@ export function AdminGroupContent() {
             onClick={() => setAdminMode((m) => !m)}
             className={`rounded px-3 py-1 text-xs uppercase tracking-wider ${
               adminMode
-                ? 'bg-[var(--accent-red)] text-white'
+                ? 'bg-[var(--accent-red)] text-[var(--text-on-accent)]'
                 : 'border border-[var(--border)] text-[var(--text-muted)]'
             }`}
           >

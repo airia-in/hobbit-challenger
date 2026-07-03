@@ -5,8 +5,8 @@ const COLORS = [
   'var(--accent-red)',
   'var(--gold)',
   'var(--success)',
-  '#f4d58d',
-  '#e8c4a0',
+  'var(--confetti-warm-1)',
+  'var(--confetti-warm-2)',
 ];
 
 function prefersReducedMotion(): boolean {

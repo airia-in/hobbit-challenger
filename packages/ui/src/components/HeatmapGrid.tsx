@@ -26,7 +26,7 @@ const STATE_COLORS: Record<HeatmapCellState, string> = {
   failed: 'bg-[var(--accent-red)]',
   future: 'bg-[var(--border)]',
   today:
-    'bg-[var(--gold)] ring-2 ring-[var(--gold)] ring-offset-1 ring-offset-[var(--bg-black)]',
+    'bg-[var(--gold)] ring-2 ring-[var(--gold)] ring-offset-1 ring-offset-[var(--ring-offset)]',
   not_started: 'bg-[var(--surface-raised)]',
 };
 
@@ -72,7 +72,7 @@ function CellTooltip({
         <div className="flex gap-1">
           <button
             type="submit"
-            className="flex-1 rounded bg-[var(--accent-red)] px-2 py-1 text-xs text-white"
+            className="flex-1 rounded bg-[var(--accent-red)] px-2 py-1 text-xs text-[var(--text-on-accent)]"
           >
             Save
           </button>

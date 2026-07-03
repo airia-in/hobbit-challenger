@@ -65,3 +65,6 @@ data/*.db
 data/*.db-journal
 data/uploads/*
 !data/uploads/.gitkeep
+
+# Agent CLI per-run worktrees (concurrent sessions)
+.agents/worktrees/

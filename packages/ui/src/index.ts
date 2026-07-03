@@ -1,6 +1,9 @@
 export { Button } from './components/Button/Button';
 export type { ButtonProps } from './components/Button/Button';
 
+export { CompanionSvg } from './components/CompanionSvg';
+export type { CompanionSvgProps } from './components/CompanionSvg';
+
 export { DayCounter } from './components/DayCounter';
 export type { DayCounterProps } from './components/DayCounter';
 

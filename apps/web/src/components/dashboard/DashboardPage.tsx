@@ -54,6 +54,7 @@ import {
 } from '../../lib/today-optimistic';
 import { PerfectDayBanner } from './PerfectDayBanner';
 import { PerfectDayCelebration } from './PerfectDayCelebration';
+import { CompanionPanel } from './CompanionPanel';
 import { useCompletionHaptics } from '../../lib/use-completion-haptics';
 import { StreakRecoveryBanner } from './StreakRecoveryBanner';
 import { MilestoneUnlockToast } from './MilestoneUnlockToast';
@@ -717,6 +718,18 @@ export function DashboardContent() {
             />
           </section>
         )}
+
+        {stats &&
+          !heatmapQuery.isLoading &&
+          !heatmapQuery.isError &&
+          heatmapQuery.data && (
+            <CompanionPanel
+              cells={heatmapQuery.data.cells}
+              currentDay={stats.currentDay}
+              todayComplete={allScoredComplete}
+              dateKey={today?.dateKey ?? new Date().toISOString().slice(0, 10)}
+            />
+          )}
 
         {stats &&
           (heatmapQuery.isLoading ||

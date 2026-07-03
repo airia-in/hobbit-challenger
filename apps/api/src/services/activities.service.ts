@@ -1,4 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  Optional,
+  forwardRef,
+} from '@nestjs/common';
 import { TRPCError } from '@trpc/server';
 import {
   Prisma,
@@ -48,6 +54,8 @@ import {
   canAttachProofToActivity,
   shouldAutoCompleteOnProof,
 } from '../utils/proof-completion';
+import { getLiveStreak } from '../utils/live-streak';
+import { CheckinAckMessageService } from '../whatsapp/checkin-ack-message.service';
 
 export const LEGACY_TASK_TYPES = [
   'DIET',
@@ -861,6 +869,14 @@ function computeXpAwarded(
 
 @Injectable()
 export class ActivitiesService {
+  private readonly logger = new Logger(ActivitiesService.name);
+
+  constructor(
+    @Optional()
+    @Inject(forwardRef(() => CheckinAckMessageService))
+    private readonly checkinAck?: CheckinAckMessageService,
+  ) {}
+
   async getToday(
     prisma: PrismaService,
     userId: string,
@@ -1207,7 +1223,16 @@ export class ActivitiesService {
       });
     }
 
-    const { viewedDate } = resolveViewedDateKey(dateKey, ctx.user.timezone);
+    const { viewedDate, viewedKey, todayKey } = resolveViewedDateKey(
+      dateKey,
+      ctx.user.timezone,
+    );
+    const wasScoredDayComplete = await this.isScoredDayComplete(prisma, {
+      userId,
+      groupId: ctx.user.groupId,
+      challengeId: ctx.challenge.id,
+      date: viewedDate,
+    });
     await assertCanMutateForDate(
       prisma,
       ctx.challenge.id,
@@ -1222,84 +1247,97 @@ export class ActivitiesService {
       ? buildMarkActivityPayload(scored)
       : null;
 
-    return prisma.$transaction(async (tx) => {
-      const existing = await tx.activityLog.findFirst({
-        where: {
-          challengeId: ctx.challenge.id,
-          activityId,
-          date: viewedDate,
-        },
-      });
-
-      const state = autoComplete
-        ? (completionPayload?.state ?? null)
-        : (existing?.state ?? null);
-      const value = autoComplete
-        ? (completionPayload?.value ?? null)
-        : (existing?.value ?? null);
-      const tier = autoComplete
-        ? (completionPayload?.tier ?? null)
-        : (existing?.tier ?? null);
-      const subPoints = autoComplete
-        ? (completionPayload?.subPoints ?? null)
-        : ((existing?.subPoints as Record<string, ActivityLogState> | null) ??
-          null);
-
-      const logInput: ActivityLogInput = {
-        activityId,
-        state: state as ActivityLogState | null | undefined,
-        value,
-        tier,
-        subPoints: subPoints ?? undefined,
-      };
-      const xpAwarded = autoComplete
-        ? computeXpAwarded(scored, logInput)
-        : (existing?.xpAwarded ?? 0);
-
-      const log = await tx.activityLog.upsert({
-        where: {
-          challengeId_activityId_date: {
+    return prisma
+      .$transaction(async (tx) => {
+        const existing = await tx.activityLog.findFirst({
+          where: {
             challengeId: ctx.challenge.id,
             activityId,
             date: viewedDate,
           },
-        },
-        create: {
-          challengeId: ctx.challenge.id,
-          userId,
+        });
+
+        const state = autoComplete
+          ? (completionPayload?.state ?? null)
+          : (existing?.state ?? null);
+        const value = autoComplete
+          ? (completionPayload?.value ?? null)
+          : (existing?.value ?? null);
+        const tier = autoComplete
+          ? (completionPayload?.tier ?? null)
+          : (existing?.tier ?? null);
+        const subPoints = autoComplete
+          ? (completionPayload?.subPoints ?? null)
+          : ((existing?.subPoints as Record<string, ActivityLogState> | null) ??
+            null);
+
+        const logInput: ActivityLogInput = {
           activityId,
-          date: viewedDate,
-          proofUrl,
-          state,
+          state: state as ActivityLogState | null | undefined,
           value,
           tier,
           subPoints: subPoints ?? undefined,
-          xpAwarded,
-        },
-        update: {
-          proofUrl,
-          ...(autoComplete
-            ? {
-                state,
-                value,
-                tier,
-                subPoints: subPoints ?? undefined,
-                xpAwarded,
-              }
-            : {}),
-        },
-      });
+        };
+        const xpAwarded = autoComplete
+          ? computeXpAwarded(scored, logInput)
+          : (existing?.xpAwarded ?? 0);
 
-      const dayTotals = await recomputeLiveDayScore(tx, {
-        challenge: ctx.challenge,
-        userId,
-        timezone: ctx.user.timezone,
-        groupId: ctx.user.groupId,
-        date: viewedDate,
-      });
+        const log = await tx.activityLog.upsert({
+          where: {
+            challengeId_activityId_date: {
+              challengeId: ctx.challenge.id,
+              activityId,
+              date: viewedDate,
+            },
+          },
+          create: {
+            challengeId: ctx.challenge.id,
+            userId,
+            activityId,
+            date: viewedDate,
+            proofUrl,
+            state,
+            value,
+            tier,
+            subPoints: subPoints ?? undefined,
+            xpAwarded,
+          },
+          update: {
+            proofUrl,
+            ...(autoComplete
+              ? {
+                  state,
+                  value,
+                  tier,
+                  subPoints: subPoints ?? undefined,
+                  xpAwarded,
+                }
+              : {}),
+          },
+        });
 
-      return { log, dayTotals };
-    });
+        const dayTotals = await recomputeLiveDayScore(tx, {
+          challenge: ctx.challenge,
+          userId,
+          timezone: ctx.user.timezone,
+          groupId: ctx.user.groupId,
+          date: viewedDate,
+        });
+
+        return { log, dayTotals };
+      })
+      .then((result) => {
+        this.scheduleCheckinAckIfDayJustCompleted(prisma, {
+          user: ctx.user,
+          challenge: ctx.challenge,
+          viewedDate,
+          viewedKey,
+          todayKey,
+          wasScoredDayComplete,
+          dayTotals: result.dayTotals,
+        });
+        return result;
+      });
   }
 
   private async loadMutationContext(
@@ -1363,7 +1401,16 @@ export class ActivitiesService {
     dateKey?: string,
   ): Promise<MutationResult> {
     const ctx = await this.loadMutationContext(prisma, userId, activityId);
-    const { viewedDate } = resolveViewedDateKey(dateKey, ctx.user.timezone);
+    const { viewedDate, viewedKey, todayKey } = resolveViewedDateKey(
+      dateKey,
+      ctx.user.timezone,
+    );
+    const wasScoredDayComplete = await this.isScoredDayComplete(prisma, {
+      userId,
+      groupId: ctx.user.groupId,
+      challengeId: ctx.challenge.id,
+      date: viewedDate,
+    });
     await assertCanMutateForDate(
       prisma,
       ctx.challenge.id,
@@ -1426,44 +1473,186 @@ export class ActivitiesService {
 
     const xpAwarded = computeXpAwarded(scored, logInput);
 
-    return prisma.$transaction(async (tx) => {
-      const log = await tx.activityLog.upsert({
-        where: {
-          challengeId_activityId_date: {
+    return prisma
+      .$transaction(async (tx) => {
+        const log = await tx.activityLog.upsert({
+          where: {
+            challengeId_activityId_date: {
+              challengeId: ctx.challenge.id,
+              activityId,
+              date: viewedDate,
+            },
+          },
+          create: {
             challengeId: ctx.challenge.id,
+            userId,
             activityId,
             date: viewedDate,
+            state,
+            value,
+            tier,
+            subPoints: subPoints ?? undefined,
+            xpAwarded,
           },
-        },
-        create: {
-          challengeId: ctx.challenge.id,
+          update: {
+            state,
+            value,
+            tier,
+            subPoints: subPoints ?? undefined,
+            xpAwarded,
+          },
+        });
+
+        const dayTotals = await recomputeLiveDayScore(tx, {
+          challenge: ctx.challenge,
           userId,
-          activityId,
+          timezone: ctx.user.timezone,
+          groupId: ctx.user.groupId,
           date: viewedDate,
-          state,
-          value,
-          tier,
-          subPoints: subPoints ?? undefined,
-          xpAwarded,
-        },
-        update: {
-          state,
-          value,
-          tier,
-          subPoints: subPoints ?? undefined,
-          xpAwarded,
-        },
-      });
+        });
 
-      const dayTotals = await recomputeLiveDayScore(tx, {
-        challenge: ctx.challenge,
-        userId,
-        timezone: ctx.user.timezone,
-        groupId: ctx.user.groupId,
-        date: viewedDate,
+        return { log, dayTotals };
+      })
+      .then((result) => {
+        this.scheduleCheckinAckIfDayJustCompleted(prisma, {
+          user: ctx.user,
+          challenge: ctx.challenge,
+          viewedDate,
+          viewedKey,
+          todayKey,
+          wasScoredDayComplete,
+          dayTotals: result.dayTotals,
+        });
+        return result;
       });
+  }
 
-      return { log, dayTotals };
+  private async isScoredDayComplete(
+    prisma: PrismaClientLike,
+    params: {
+      userId: string;
+      groupId: string | null;
+      challengeId: string;
+      date: Date;
+    },
+  ): Promise<boolean> {
+    const activities = await loadUserActivities(prisma, {
+      userId: params.userId,
+      groupId: params.groupId,
+    });
+    const scoredIds = activities
+      .filter((activity) => activity.scored && !activity.isPersonal)
+      .map((activity) => activity.id);
+    if (scoredIds.length === 0) {
+      return false;
+    }
+
+    const logs = await prisma.activityLog.findMany({
+      where: {
+        challengeId: params.challengeId,
+        userId: params.userId,
+        date: params.date,
+      },
+    });
+
+    return computeDayLoggingStatus(scoredIds, logs).allScoredLogged;
+  }
+
+  private scheduleCheckinAckIfDayJustCompleted(
+    prisma: PrismaService,
+    params: {
+      user: {
+        id: string;
+        name: string;
+        phone: string | null;
+        whatsappOptIn: boolean;
+        timezone: string;
+        groupId: string | null;
+      };
+      challenge: { id: string; currentStreak: number };
+      viewedDate: Date;
+      viewedKey: string;
+      todayKey: string;
+      wasScoredDayComplete: boolean;
+      dayTotals: DayTotals;
+    },
+  ): void {
+    if (!this.checkinAck) {
+      return;
+    }
+    if (params.viewedKey !== params.todayKey) {
+      return;
+    }
+    if (params.wasScoredDayComplete) {
+      return;
+    }
+
+    void this.notifyCheckinAckIfDayComplete(prisma, params).catch((error) => {
+      this.logger.error('Check-in ack notify failed:', error);
+    });
+  }
+
+  private async notifyCheckinAckIfDayComplete(
+    prisma: PrismaService,
+    params: {
+      user: {
+        id: string;
+        name: string;
+        phone: string | null;
+        whatsappOptIn: boolean;
+        timezone: string;
+        groupId: string | null;
+      };
+      challenge: { id: string; currentStreak: number };
+      viewedDate: Date;
+      dayTotals: DayTotals;
+    },
+  ): Promise<void> {
+    const isCompleteNow = await this.isScoredDayComplete(prisma, {
+      userId: params.user.id,
+      groupId: params.user.groupId,
+      challengeId: params.challenge.id,
+      date: params.viewedDate,
+    });
+    if (!isCompleteNow) {
+      return;
+    }
+
+    const activities = await loadUserActivities(prisma, {
+      userId: params.user.id,
+      groupId: params.user.groupId,
+    });
+    const scoredIds = activities
+      .filter((activity) => activity.scored && !activity.isPersonal)
+      .map((activity) => activity.id);
+    const logs = await prisma.activityLog.findMany({
+      where: {
+        challengeId: params.challenge.id,
+        userId: params.user.id,
+        date: params.viewedDate,
+      },
+    });
+    const { loggedActivityIds } = computeDayLoggingStatus(scoredIds, logs);
+
+    const currentStreak = await getLiveStreak(prisma, {
+      challengeId: params.challenge.id,
+      userId: params.user.id,
+      groupId: params.user.groupId,
+      timezone: params.user.timezone,
+      storedStreak: params.challenge.currentStreak,
+    });
+
+    await this.checkinAck!.trySendDayCompleteAck({
+      prisma,
+      userId: params.user.id,
+      userName: params.user.name,
+      phone: params.user.phone,
+      whatsappOptIn: params.user.whatsappOptIn,
+      localDay: params.viewedDate,
+      timezone: params.user.timezone,
+      currentStreak,
+      todayNetXp: params.dayTotals.netXp,
+      tasksDone: loggedActivityIds.length,
     });
   }
 

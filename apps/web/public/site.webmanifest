@@ -1,0 +1,29 @@
+{
+  "name": "HOBBIT",
+  "short_name": "HOBBIT",
+  "description": "Your cozy habit companion.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#f7f5f2",
+  "theme_color": "#c9743b",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

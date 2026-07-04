@@ -3,6 +3,8 @@ export type { ButtonProps } from './components/Button/Button';
 
 export { CompanionSvg } from './components/CompanionSvg';
 export type { CompanionSvgProps } from './components/CompanionSvg';
+export { MascotSvg } from './components/MascotSvg';
+export type { MascotSvgProps, MascotExpression } from './components/MascotSvg';
 
 export { DayCounter } from './components/DayCounter';
 export type { DayCounterProps } from './components/DayCounter';

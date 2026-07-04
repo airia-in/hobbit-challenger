@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-label="HOBBIT">
+  <rect width="240" height="240" fill="#FBEFE0"/>
+  <!-- creature scaled to ~70% and centered so it stays within the maskable safe zone -->
+  <g transform="translate(36 40) scale(0.7)">
+    <ellipse cx="120" cy="206" rx="58" ry="11" fill="#00000015"/>
+    <g transform="rotate(-12 120 60)">
+      <path d="M120 66 C120 40 138 24 160 22 C160 46 144 64 120 66 Z" fill="#6FA84B"/>
+      <path d="M120 66 C120 46 133 33 152 30" fill="none" stroke="#4F8233" stroke-width="3" stroke-linecap="round"/>
+      <rect x="117" y="60" width="6" height="20" rx="3" fill="#7A5A3A"/>
+    </g>
+    <path d="M120 74 C176 74 202 116 202 154 C202 196 166 218 120 218 C74 218 38 196 38 154 C38 116 64 74 120 74 Z" fill="#C9743B"/>
+    <ellipse cx="120" cy="164" rx="52" ry="44" fill="#E8A86A"/>
+    <path d="M120 74 C80 74 52 92 48 112 C70 100 96 96 120 96 C144 96 170 100 192 112 C188 92 160 74 120 74 Z" fill="#8A5230"/>
+    <path d="M120 96 C96 96 70 100 48 112 L192 112 C170 100 144 96 120 96 Z" fill="#6E3F24" opacity="0.5"/>
+    <ellipse cx="82" cy="158" rx="12" ry="8" fill="#E9836B" opacity="0.6"/>
+    <ellipse cx="158" cy="158" rx="12" ry="8" fill="#E9836B" opacity="0.6"/>
+    <circle cx="94" cy="146" r="9" fill="#2A2320"/>
+    <circle cx="146" cy="146" r="9" fill="#2A2320"/>
+    <circle cx="97" cy="143" r="3" fill="#FFFFFF"/>
+    <circle cx="149" cy="143" r="3" fill="#FFFFFF"/>
+    <path d="M108 168 q12 12 24 0" fill="none" stroke="#6E3F24" stroke-width="4" stroke-linecap="round"/>
+    <ellipse cx="96" cy="214" rx="12" ry="7" fill="#8A5230"/>
+    <ellipse cx="144" cy="214" rx="12" ry="7" fill="#8A5230"/>
+  </g>
+</svg>

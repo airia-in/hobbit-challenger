@@ -1,19 +1,7 @@
-import { lazy, Suspense } from 'react';
-import {
-  HeatmapGridSkeleton,
-  type HeatmapGridProps,
-} from '@workspace-starter/ui';
+import { HeatmapGrid, type HeatmapGridProps } from '@workspace-starter/ui';
 
-const HeatmapGrid = lazy(() =>
-  import('@workspace-starter/ui').then((module) => ({
-    default: module.HeatmapGrid,
-  })),
-);
-
+// Renders eagerly; loading is shown via data-driven skeletons, not chunk-load
+// Suspense. See LazyCompanionPanel for the rationale.
 export function LazyHeatmapGrid(props: HeatmapGridProps) {
-  return (
-    <Suspense fallback={<HeatmapGridSkeleton cellCount={props.cells.length} />}>
-      <HeatmapGrid {...props} />
-    </Suspense>
-  );
+  return <HeatmapGrid {...props} />;
 }

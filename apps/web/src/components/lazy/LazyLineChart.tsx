@@ -1,16 +1,7 @@
-import { lazy, Suspense } from 'react';
-import { LineChartSkeleton, type LineChartProps } from '@workspace-starter/ui';
+import { LineChart, type LineChartProps } from '@workspace-starter/ui';
 
-const LineChart = lazy(() =>
-  import('@workspace-starter/ui').then((module) => ({
-    default: module.LineChart,
-  })),
-);
-
+// Renders eagerly; loading is shown via data-driven skeletons, not chunk-load
+// Suspense. See LazyCompanionPanel for the rationale.
 export function LazyLineChart(props: LineChartProps) {
-  return (
-    <Suspense fallback={<LineChartSkeleton />}>
-      <LineChart {...props} />
-    </Suspense>
-  );
+  return <LineChart {...props} />;
 }

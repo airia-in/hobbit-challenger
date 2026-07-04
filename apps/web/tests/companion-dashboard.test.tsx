@@ -200,8 +200,13 @@ describe('DashboardContent companion panel', () => {
 
   it('renders companion between consistency and journey path when heatmap is loaded', async () => {
     render(<DashboardContent />);
+    // Companion and journey path are lazy-loaded behind Suspense, so wait until
+    // both their headings have resolved before asserting their relative order.
     await waitFor(() => {
       expect(screen.getByTestId('companion-panel')).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 2, name: /your trail/i }),
+      ).toBeInTheDocument();
     });
     expect(screen.getByTestId('companion-svg')).toHaveAttribute(
       'data-mood',

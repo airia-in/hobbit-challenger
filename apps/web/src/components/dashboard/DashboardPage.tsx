@@ -1,5 +1,6 @@
 import { getGuidance } from '@workspace-starter/types';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createReconcileGate } from '../../lib/reconcile-gate';
 import {
   DayCounter,
   ProofUploader,
@@ -92,10 +93,25 @@ function useTodayMutations(viewedDateKey?: string) {
   const mutationDate =
     viewedDateKey !== undefined ? { date: viewedDateKey } : {};
 
+  // Reconcile with the server only after the last in-flight activity mutation
+  // settles, so rapid back-to-back logging never waits and optimistic edits are
+  // not reverted by a mid-burst refetch. See createReconcileGate.
+  const gateRef = useRef<ReturnType<typeof createReconcileGate> | null>(null);
+  if (!gateRef.current) {
+    gateRef.current = createReconcileGate(() => {
+      void utils.activities.getToday.invalidate();
+      void utils.stats.getDashboard.invalidate();
+      void utils.heatmap.get.invalidate();
+    });
+  }
+  const gate = gateRef.current;
+
+  function beginMutation() {
+    gate.begin();
+  }
+
   function settle() {
-    void utils.activities.getToday.invalidate();
-    void utils.stats.getDashboard.invalidate();
-    void utils.heatmap.get.invalidate();
+    gate.settle();
   }
 
   function createHandlers<TInput extends { activityId: string; date?: string }>(
@@ -103,6 +119,7 @@ function useTodayMutations(viewedDateKey?: string) {
   ) {
     return {
       async onMutate(input: TInput) {
+        beginMutation();
         await utils.activities.getToday.cancel(queryInput);
         const previous = utils.activities.getToday.getData(queryInput);
         utils.activities.getToday.setData(queryInput, (old) =>
@@ -165,6 +182,7 @@ function useTodayMutations(viewedDateKey?: string) {
 
   const attachProof = trpc.activities.attachProof.useMutation({
     async onMutate(input) {
+      beginMutation();
       await utils.activities.getToday.cancel(queryInput);
       const previous = utils.activities.getToday.getData(queryInput);
       utils.activities.getToday.setData(queryInput, (old) =>
@@ -190,14 +208,6 @@ function useTodayMutations(viewedDateKey?: string) {
     ...input,
     ...mutationDate,
   });
-
-  const isPending =
-    markActivity.isPending ||
-    undoActivity.isPending ||
-    logNumber.isPending ||
-    setTier.isPending ||
-    setSubPoints.isPending ||
-    attachProof.isPending;
 
   return {
     markActivity: {
@@ -232,7 +242,6 @@ function useTodayMutations(viewedDateKey?: string) {
       mutate: (input: { activityId: string; proofUrl: string }) =>
         attachProof.mutate(withDate(input)),
     },
-    isPending,
   };
 }
 
@@ -293,7 +302,6 @@ function ActivityCard({
     setTier,
     setSubPoints,
     attachProof,
-    isPending,
   } = mutations;
 
   const askGuidance = trpc.guidance.ask.useMutation();
@@ -316,7 +324,6 @@ function ActivityCard({
       subPoints={activity.subPoints}
       tiers={activity.tiers}
       defaultExpanded
-      disabled={isPending}
       onCompleted={onCompleted}
       className={
         highlighted

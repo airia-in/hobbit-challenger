@@ -45,6 +45,24 @@ function createFakePrisma(seed: { users: StoredUser[]; pairs?: StoredPair[] }) {
         } else if (p.status !== val) {
           return false;
         }
+      } else if (typeof val === 'object' && val !== null) {
+        if ('not' in val) {
+          if (
+            (p as Record<string, unknown>)[key] === (val as { not: string }).not
+          ) {
+            return false;
+          }
+        } else if ('in' in val) {
+          if (
+            !(val as { in: string[] }).in.includes(
+              (p as Record<string, unknown>)[key] as string,
+            )
+          ) {
+            return false;
+          }
+        } else if ((p as Record<string, unknown>)[key] !== val) {
+          return false;
+        }
       } else if ((p as Record<string, unknown>)[key] !== val) {
         return false;
       }
@@ -330,6 +348,42 @@ describe('buddy.service pairing', () => {
     });
     const result = await respondToBuddy(prisma as never, 'u2', 'p1', true);
     expect(result.status).toBe('ACTIVE');
+  });
+
+  it('cancels other pending requests when a pair becomes active', async () => {
+    const cat: StoredUser = { ...bo, id: 'u3', name: 'Cat' };
+    const prisma = createFakePrisma({
+      users: [alex, bo, cat],
+      pairs: [
+        {
+          id: 'p1',
+          groupId: 'g1',
+          requesterId: 'u1',
+          addresseeId: 'u2',
+          status: 'PENDING',
+        },
+        {
+          id: 'p2',
+          groupId: 'g1',
+          requesterId: 'u1',
+          addresseeId: 'u3',
+          status: 'PENDING',
+        },
+        {
+          id: 'p3',
+          groupId: 'g1',
+          requesterId: 'u3',
+          addresseeId: 'u2',
+          status: 'PENDING',
+        },
+      ],
+    });
+
+    await respondToBuddy(prisma as never, 'u2', 'p1', true);
+
+    expect(prisma._pairs.get('p1')!.status).toBe('ACTIVE');
+    expect(prisma._pairs.get('p2')!.status).toBe('CANCELLED');
+    expect(prisma._pairs.get('p3')!.status).toBe('CANCELLED');
   });
 
   it('requires WhatsApp opt-in when accepting a request', async () => {

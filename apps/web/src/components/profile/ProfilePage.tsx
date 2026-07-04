@@ -901,6 +901,14 @@ function AccountabilityBuddySection({
         <p className="text-xs text-[var(--text-muted)]">Loading…</p>
       )}
 
+      {canUseWhatsapp && state.isError && (
+        <QueryErrorState
+          message={state.error?.message}
+          onRetry={() => void state.refetch()}
+          className="text-left"
+        />
+      )}
+
       {canUseWhatsapp && data && data.members.length === 0 && (
         <p className="text-xs text-[var(--text-muted)]">
           Join a group with other members to find a buddy.

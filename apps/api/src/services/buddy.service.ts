@@ -140,6 +140,19 @@ async function activatePairAtomically(
         });
       }
 
+      // Drop other pending requests so neither participant keeps dangling invites.
+      await tx.accountabilityPair.updateMany({
+        where: {
+          id: { not: pairId },
+          status: 'PENDING',
+          OR: [
+            { requesterId: { in: participantIds } },
+            { addresseeId: { in: participantIds } },
+          ],
+        },
+        data: { status: 'CANCELLED' },
+      });
+
       return { status: 'ACTIVE' as const };
     });
   } catch (error) {

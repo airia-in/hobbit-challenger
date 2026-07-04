@@ -23,6 +23,7 @@ import {
 } from './openai-reminder.service';
 
 const PROMPT_FILE = 'buddy-summary.jinja';
+const OPENAI_COMPOSE_TIMEOUT_MS = 15_000;
 
 export type BuddySummaryStatus = 'SENT' | 'FAILED' | 'SKIPPED_OPTOUT';
 
@@ -109,10 +110,13 @@ export function buildBuddySummaryCopyLines(
   const sanitizedBestHabit = rollup.bestHabitName
     ? sanitizeUserPromptText(rollup.bestHabitName)
     : '';
-  const displayPartner = sanitizeBuddyDisplayName(context.partnerName);
+  const habitLabel =
+    forPrompt && sanitizedBestHabit
+      ? wrapUserPromptEmbedData(sanitizedBestHabit)
+      : sanitizedBestHabit;
   const bestHabitLine =
     sanitizedBestHabit && rollup.bestHabitHits > 0
-      ? `${displayPartner}'s steady habit: ${sanitizedBestHabit} (${rollup.bestHabitHits} hits).`
+      ? `${partnerName}'s steady habit: ${habitLabel} (${rollup.bestHabitHits} hits).`
       : '';
 
   return {
@@ -213,14 +217,17 @@ export class BuddySummaryMessageService {
         this.messaging,
       );
 
-      const response = await this.openai.chat.completions.create({
-        model: this.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        max_tokens: 160,
-      });
+      const response = await this.openai.chat.completions.create(
+        {
+          model: this.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          max_tokens: 160,
+        },
+        { signal: AbortSignal.timeout(OPENAI_COMPOSE_TIMEOUT_MS) },
+      );
 
       const content = response.choices[0]?.message?.content?.trim();
       if (!content) {

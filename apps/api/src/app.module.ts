@@ -7,6 +7,7 @@ import { InboundDedupeCleanupService } from './cron/inbound-dedupe-cleanup.servi
 import { ReminderService } from './cron/reminder.service';
 import { WinbackService } from './cron/winback.service';
 import { WeeklyRecapService } from './cron/weekly-recap.service';
+import { BuddySummaryService } from './cron/buddy-summary.service';
 import { AuthModule } from './modules/auth.module';
 import { ActivitiesModule } from './modules/activities.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -32,6 +33,7 @@ const repoRoot = path.resolve(__dirname, '../../..');
     ReminderService,
     WinbackService,
     WeeklyRecapService,
+    BuddySummaryService,
   ],
 })
 export class AppModule {}

@@ -736,6 +736,8 @@ export function ProfileContent() {
 
       <PersonalActivitiesSection />
 
+      <AccountabilityBuddySection canUseWhatsapp={canUseWhatsappRecaps} />
+
       {data.isGroupAdmin && (
         <div className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
           <h2 className="text-sm uppercase tracking-wider text-[var(--text-muted)]">
@@ -840,6 +842,199 @@ export function ProfileContent() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function AccountabilityBuddySection({
+  canUseWhatsapp,
+}: {
+  canUseWhatsapp: boolean;
+}) {
+  const utils = trpc.useUtils();
+  const state = trpc.buddy.state.useQuery();
+  const [error, setError] = useState<string | null>(null);
+
+  const invalidate = () => {
+    void utils.buddy.state.invalidate();
+  };
+  const onError = (err: { message: string }) => setError(err.message);
+
+  const request = trpc.buddy.request.useMutation({
+    onSuccess: invalidate,
+    onError,
+  });
+  const respond = trpc.buddy.respond.useMutation({
+    onSuccess: invalidate,
+    onError,
+  });
+  const cancel = trpc.buddy.cancel.useMutation({
+    onSuccess: invalidate,
+    onError,
+  });
+
+  const busy = request.isPending || respond.isPending || cancel.isPending;
+
+  const data = state.data;
+
+  return (
+    <div className="space-y-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+      <div>
+        <h2 className="text-sm uppercase tracking-wider text-[var(--text-muted)]">
+          Accountability buddy
+        </h2>
+        <p className="mt-1 text-xs text-[var(--text-muted)]">
+          Pair up with a group member. Each Sunday you both get a supportive
+          summary of the other&apos;s week — same trail, different pace. No
+          daily pings, no rankings.
+        </p>
+      </div>
+
+      {!canUseWhatsapp && (
+        <p className="text-xs text-[var(--text-muted)]">
+          Add your phone and enable WhatsApp reminders above to pair with a
+          buddy.
+        </p>
+      )}
+
+      {canUseWhatsapp && state.isLoading && (
+        <p className="text-xs text-[var(--text-muted)]">Loading…</p>
+      )}
+
+      {canUseWhatsapp && state.isError && (
+        <QueryErrorState
+          message={state.error?.message}
+          onRetry={() => void state.refetch()}
+          className="text-left"
+        />
+      )}
+
+      {canUseWhatsapp && data && data.members.length === 0 && (
+        <p className="text-xs text-[var(--text-muted)]">
+          Join a group with other members to find a buddy.
+        </p>
+      )}
+
+      {canUseWhatsapp && data && error && (
+        <p className="text-sm text-[var(--accent-red)]">{error}</p>
+      )}
+
+      {canUseWhatsapp && data && data.activePair && (
+        <div className="flex items-center justify-between rounded border border-[var(--accent-red)]/40 bg-[var(--accent-red)]/5 px-4 py-3">
+          <div>
+            <p className="text-sm font-medium text-[var(--text-primary)]">
+              Buddy: {data.activePair.other.name}
+            </p>
+            <p className="text-xs text-[var(--text-muted)]">
+              You&apos;re cheering each other on.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              cancel.mutate();
+            }}
+            disabled={busy}
+            className="text-xs uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--accent-red)] disabled:opacity-50"
+          >
+            End
+          </button>
+        </div>
+      )}
+
+      {canUseWhatsapp && data && data.incomingRequests.length > 0 && (
+        <div className="space-y-2">
+          {data.incomingRequests.map((req) => (
+            <div
+              key={req.id}
+              className="flex items-center justify-between rounded border border-[var(--border)] px-4 py-3"
+            >
+              <p className="text-sm text-[var(--text-primary)]">
+                {req.other.name} wants to be your buddy
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    respond.mutate({ pairId: req.id, accept: true });
+                  }}
+                  disabled={busy}
+                  className="rounded bg-[var(--accent-red)] px-3 py-1 text-xs font-bold uppercase tracking-wider text-[var(--text-on-accent)] disabled:opacity-50"
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    respond.mutate({ pairId: req.id, accept: false });
+                  }}
+                  disabled={busy}
+                  className="rounded border border-[var(--border)] px-3 py-1 text-xs uppercase tracking-wider text-[var(--text-muted)] disabled:opacity-50"
+                >
+                  Decline
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {canUseWhatsapp &&
+        data &&
+        !data.activePair &&
+        data.members.length > 0 && (
+          <ul className="space-y-2">
+            {data.members.map((member) => (
+              <li
+                key={member.id}
+                className="flex items-center justify-between rounded border border-[var(--border)] px-4 py-2"
+              >
+                <span className="text-sm text-[var(--text-primary)]">
+                  {member.name}
+                </span>
+                {member.relation === 'available' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError(null);
+                      request.mutate({ addresseeId: member.id });
+                    }}
+                    disabled={busy}
+                    className="rounded border border-[var(--accent-red)] px-3 py-1 text-xs uppercase tracking-wider text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10 disabled:opacity-50"
+                  >
+                    Request
+                  </button>
+                )}
+                {member.relation === 'pending_outgoing' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError(null);
+                      cancel.mutate();
+                    }}
+                    disabled={busy}
+                    className="text-xs uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--accent-red)] disabled:opacity-50"
+                  >
+                    Requested · Cancel
+                  </button>
+                )}
+                {member.relation === 'pending_incoming' && (
+                  <span className="text-xs uppercase tracking-wider text-[var(--text-muted)]">
+                    Wants to pair
+                  </span>
+                )}
+                {member.relation === 'paired_with_other' && (
+                  <span className="text-xs uppercase tracking-wider text-[var(--text-muted)]">
+                    Paired
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
     </div>
   );
 }

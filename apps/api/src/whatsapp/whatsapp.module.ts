@@ -10,6 +10,7 @@ import { MilestoneMessageService } from './milestone-message.service';
 import { WinbackMessageService } from './winback-message.service';
 import { WeeklyRecapMessageService } from './weekly-recap-message.service';
 import { WeeklyRecapFocusService } from './weekly-recap-focus.service';
+import { BuddySummaryMessageService } from './buddy-summary-message.service';
 import { CheckinAckMessageService } from './checkin-ack-message.service';
 import { InteractiveCheckinService } from './interactive-checkin.service';
 
@@ -25,6 +26,7 @@ import { InteractiveCheckinService } from './interactive-checkin.service';
     WinbackMessageService,
     WeeklyRecapMessageService,
     WeeklyRecapFocusService,
+    BuddySummaryMessageService,
     CheckinAckMessageService,
     InteractiveCheckinService,
   ],
@@ -38,6 +40,7 @@ import { InteractiveCheckinService } from './interactive-checkin.service';
     WinbackMessageService,
     WeeklyRecapMessageService,
     WeeklyRecapFocusService,
+    BuddySummaryMessageService,
     CheckinAckMessageService,
     InteractiveCheckinService,
   ],

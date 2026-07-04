@@ -40,6 +40,8 @@ model User {
   productEvents  ProductEvent[]
   primaryAdminOf Group[]       @relation("GroupPrimaryAdmin")
   groupAdminOf   GroupAdmin[]
+  accountabilityRequestsSent     AccountabilityPair[] @relation("AccountabilityRequester")
+  accountabilityRequestsReceived AccountabilityPair[] @relation("AccountabilityAddressee")
 }
 
 model ReminderLog {
@@ -70,6 +72,7 @@ model Group {
   challengeEndDate   DateTime?
   challengeTimezone  String?
   createdAt          DateTime     @default(now())
+  accountabilityPairs AccountabilityPair[]
 }
 
 model GroupAdmin {
@@ -220,6 +223,29 @@ model DayLabel {
   updatedAt   DateTime @updatedAt
 
   @@unique([groupId, dayNumber])
+}
+
+/// Opt-in accountability dyad (#178): two members of the same group who each
+/// receive a supportive Sunday summary of the other's week. ACTIVE requires
+/// mutual consent (a request that the other member accepts, or a reciprocal
+/// request). Supportive framing only — no ranks, no shame, no daily pings.
+model AccountabilityPair {
+  id          String   @id @default(cuid())
+  groupId     String
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  requesterId String
+  requester   User     @relation("AccountabilityRequester", fields: [requesterId], references: [id])
+  addresseeId String
+  addressee   User     @relation("AccountabilityAddressee", fields: [addresseeId], references: [id])
+  // PENDING | ACTIVE | DECLINED | CANCELLED
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([requesterId, addresseeId])
+  @@index([groupId, status])
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
 }
 
 /// Replay protection for Evolution inbound WhatsApp webhooks (#171).

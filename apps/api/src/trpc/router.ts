@@ -10,6 +10,7 @@ import { activitiesRouter } from './routers/activities.router';
 import { guidanceRouter } from './routers/guidance.router';
 import { galleryRouter } from './routers/gallery.router';
 import { analyticsRouter } from './routers/analytics.router';
+import { buddyRouter } from './routers/buddy.router';
 
 export const appRouter = router({
   auth: authRouter,
@@ -23,6 +24,7 @@ export const appRouter = router({
   history: historyRouter,
   gallery: galleryRouter,
   profile: profileRouter,
+  buddy: buddyRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -667,6 +667,9 @@ function createLeaveGroupContext(stores: {
     dayLabel: {
       deleteMany: vi.fn(async () => ({ count: 0 })),
     },
+    accountabilityPair: {
+      updateMany: vi.fn(async () => ({ count: 0 })),
+    },
     groupAdmin: {
       findMany: vi.fn(
         async ({

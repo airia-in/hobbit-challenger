@@ -35,6 +35,7 @@ vi.mock('../src/lib/trpc', () => ({
       profile: { get: { invalidate: mockInvalidateProfile } },
       auth: { me: { invalidate: vi.fn() } },
       groups: { getMine: { invalidate: vi.fn() } },
+      buddy: { state: { invalidate: vi.fn() } },
     }),
     profile: {
       get: {
@@ -56,6 +57,19 @@ vi.mock('../src/lib/trpc', () => ({
       exportCsv: {
         useQuery: (...args: unknown[]) => mockExportCsvUseQuery(...args),
       },
+    },
+    buddy: {
+      state: {
+        useQuery: () => ({
+          data: undefined,
+          isLoading: false,
+          isError: false,
+          refetch: vi.fn(),
+        }),
+      },
+      request: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      respond: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      cancel: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
     },
   },
 }));

@@ -13,6 +13,7 @@ import {
   getGroupAdminUserIds,
   getReplacementAdminId,
 } from '../utils/group-admin';
+import { cancelBuddyPairsForUser } from './buddy.service';
 import {
   HABIT_ANCHOR_TEXT_MAX_LENGTH,
   sanitizeUserPromptText,
@@ -621,6 +622,8 @@ export async function leaveGroup(prisma: PrismaService, userId: string) {
         data: { groupId: null },
       });
 
+      await cancelBuddyPairsForUser(tx, userId);
+
       await tx.dayLabel.deleteMany({
         where: { groupId: user.groupId! },
       });
@@ -667,6 +670,8 @@ export async function leaveGroup(prisma: PrismaService, userId: string) {
       where: { id: userId },
       data: { groupId: null },
     });
+
+    await cancelBuddyPairsForUser(tx, userId);
   });
 
   return { success: true };

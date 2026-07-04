@@ -28,6 +28,26 @@ DATABASE_URL="file:./packages/db/prisma/dev.db" node scripts/analytics/d7-cohort
 
 Prints JSON rows: `cohort_week_start`, `registered`, `d7_checkin_users`, `d7_checkin_rate_pct`.
 
+## Admin read API (#184)
+
+Cohort metrics are also exposed as read-only, admin-gated tRPC queries so
+learning from them no longer requires shell access. Auth is an **env-gated admin
+token** (cohort metrics are cross-user, so per-group admin roles do not apply):
+set `ADMIN_ANALYTICS_TOKEN` and send it on the `x-admin-token` header. The
+surface **fails closed** when the env var is unset. Responses are aggregate
+counts/rates only — no per-user rows, no PII.
+
+| Procedure                   | Returns                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------- |
+| `analytics.d7Cohort`        | D7 check-in rate per registration cohort week (same SQL as the script below).               |
+| `analytics.streakSurvival`  | Streak survival curve: users reaching streak `>= {1,3,7,14,30}` from `day.finalized`.       |
+| `analytics.reminderLatency` | Reminder → next check-in latency (minutes): `sample_count`, `avg`, `min`, `max` within 24h. |
+| `analytics.report`          | Combined payload bundling all three plus `generatedAt`.                                     |
+
+Each procedure runs a single bounded SQL statement (no application N+1) over the
+`ProductEvent` indexes `(eventKey, createdAt)` and `(userId, createdAt)`. The SQL
+lives in `apps/api/src/services/cohort-analytics.service.ts`.
+
 ### Example SQL (ProductEvent)
 
 SQLite — users registered per ISO week with at least one `activity.logged` event within 7 days of registration:

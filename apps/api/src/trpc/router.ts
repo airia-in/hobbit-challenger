@@ -9,9 +9,11 @@ import { statsRouter } from './routers/stats.router';
 import { activitiesRouter } from './routers/activities.router';
 import { guidanceRouter } from './routers/guidance.router';
 import { galleryRouter } from './routers/gallery.router';
+import { analyticsRouter } from './routers/analytics.router';
 
 export const appRouter = router({
   auth: authRouter,
+  analytics: analyticsRouter,
   groups: groupsRouter,
   activities: activitiesRouter,
   guidance: guidanceRouter,

@@ -1,74 +1,14 @@
+import { afterAll, beforeAll, expect, test } from '@playwright/test';
 import {
-  afterAll,
-  beforeAll,
-  expect,
-  test,
-  type Browser,
-  type Page,
-} from '@playwright/test';
-
-const password = 'CorrectHorse123';
-const tinyPng = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
-  'base64',
-);
-
-function uniquePhone(offset: number): string {
-  const suffix = String((Date.now() + offset) % 1_000_000_000).padStart(9, '0');
-  return `9${suffix}`;
-}
-
-async function register(page: Page, name: string, phone: string) {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Register' }).click();
-  await page.getByPlaceholder('Your name').fill(name);
-  await page.getByPlaceholder('9876543210').fill(phone);
-  await page.getByPlaceholder('Min 8 characters').fill(password);
-  await page.getByRole('button', { name: 'Create Account' }).click();
-  await expect(page).toHaveURL(/\/join/);
-}
-
-function taskCard(page: Page, title: string) {
-  return page.locator('.overflow-hidden').filter({ hasText: title }).first();
-}
-
-async function expandTask(page: Page, title: string) {
-  const card = taskCard(page, title);
-  const expandButton = card.getByRole('button', { name: 'Expand' });
-  if (await expandButton.isVisible().catch(() => false)) {
-    await expandButton.click();
-  }
-  return card;
-}
-
-async function markSubPointDone(page: Page, activity: string, label: string) {
-  const card = taskCard(page, activity);
-  const row = card.locator('div').filter({ hasText: label }).last();
-  await row.getByRole('button', { name: 'Done' }).click();
-}
-
-async function createBrowserUser(browser: Browser) {
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  const unexpected: string[] = [];
-
-  page.on('console', (message) => {
-    if (message.type() === 'error') {
-      unexpected.push(`console: ${message.text()}`);
-    }
-  });
-  page.on('pageerror', (error) => {
-    unexpected.push(`pageerror: ${error.message}`);
-  });
-
-  return { context, page, unexpected };
-}
-
-async function closeQuietly(
-  context: Awaited<ReturnType<Browser['newContext']>>,
-) {
-  await context.close().catch(() => {});
-}
+  closeQuietly,
+  createBrowserUser,
+  expandTask,
+  markSubPointDone,
+  register,
+  taskCard,
+  tinyPng,
+  uniquePhone,
+} from './helpers';
 
 test.describe('production start flows', () => {
   test.describe.configure({ mode: 'serial' });
@@ -110,10 +50,10 @@ test.describe('production start flows', () => {
   test('registration, group create, and member join', async () => {
     await register(admin.page, adminName, uniquePhone(1));
     await expect(
-      admin.page.getByRole('heading', { name: /Create Your Squad/i }),
+      admin.page.getByRole('heading', { name: /Choose your path/i }),
     ).toBeVisible();
     await admin.page.getByPlaceholder('e.g. Iron Will Crew').fill(groupName);
-    await admin.page.getByRole('button', { name: 'Create Group' }).click();
+    await admin.page.getByRole('button', { name: 'Create Fellowship' }).click();
     await expect(
       admin.page.getByRole('heading', { level: 1, name: groupName }),
     ).toBeVisible();

@@ -13,19 +13,16 @@ export function JourneyPathSkeleton({
   return (
     <div
       data-testid="journey-path-skeleton"
-      className={cn('space-y-4', className)}
+      className={cn('flex gap-1 overflow-hidden', className)}
       aria-hidden="true"
     >
-      <Skeleton variant="text" className="h-5 w-32" />
-      <div className="flex gap-1 overflow-hidden">
-        {Array.from({ length: tileCount }, (_, index) => (
-          <Skeleton
-            key={index}
-            variant="rect"
-            className="h-10 w-10 shrink-0 rounded-md"
-          />
-        ))}
-      </div>
+      {Array.from({ length: tileCount }, (_, index) => (
+        <Skeleton
+          key={index}
+          variant="rect"
+          className="h-10 w-10 shrink-0 rounded-md"
+        />
+      ))}
     </div>
   );
 }

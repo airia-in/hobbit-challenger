@@ -33,13 +33,7 @@ export function LeaderboardContent() {
   );
 
   if (me.isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-sm uppercase tracking-[0.3em] text-[var(--text-muted)]">
-          Loading leaderboard...
-        </p>
-      </div>
-    );
+    return <LeaderboardPageSkeleton />;
   }
 
   if (me.isError) {

@@ -729,24 +729,13 @@ export function DashboardContent() {
         )}
 
         {stats &&
-          !heatmapQuery.isLoading &&
-          !heatmapQuery.isError &&
-          heatmapQuery.data && (
-            <LazyCompanionPanel
-              cells={heatmapQuery.data.cells}
-              currentDay={stats.currentDay}
-              todayComplete={companionTodayComplete}
-              dateKey={calendarDateKey}
-            />
-          )}
-
-        {stats &&
           (heatmapQuery.isLoading ||
             heatmapQuery.isError ||
             heatmapQuery.data) && (
             <>
               {heatmapQuery.isLoading ? (
                 <>
+                  <CompanionPanelSkeleton />
                   <section>
                     <h2
                       className="mb-4 text-lg uppercase tracking-wider text-[var(--text-muted)]"
@@ -765,7 +754,6 @@ export function DashboardContent() {
                     </h2>
                     <HeatmapGridSkeleton cellCount={stats.lengthDays} />
                   </section>
-                  <CompanionPanelSkeleton />
                 </>
               ) : heatmapQuery.isError ? (
                 <section>
@@ -783,6 +771,12 @@ export function DashboardContent() {
                 </section>
               ) : heatmapQuery.data ? (
                 <>
+                  <LazyCompanionPanel
+                    cells={heatmapQuery.data.cells}
+                    currentDay={stats.currentDay}
+                    todayComplete={companionTodayComplete}
+                    dateKey={calendarDateKey}
+                  />
                   <section>
                     <h2
                       className="mb-4 text-lg uppercase tracking-wider text-[var(--text-muted)]"

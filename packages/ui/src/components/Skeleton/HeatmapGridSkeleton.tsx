@@ -17,7 +17,9 @@ export function HeatmapGridSkeleton({
     <div
       data-testid="heatmap-grid-skeleton"
       className={cn('grid gap-1', className)}
-      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+      style={{
+        gridTemplateColumns: `repeat(${columns}, minmax(1.25rem, 1fr))`,
+      }}
       aria-hidden="true"
     >
       {Array.from({ length: cellCount }, (_, index) => (

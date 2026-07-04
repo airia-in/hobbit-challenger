@@ -67,9 +67,9 @@ export function DashboardPageSkeleton() {
           <StatsRowSkeleton />
         </section>
 
+        <CompanionPanelSkeleton />
         <JourneyPathSkeleton />
         <HeatmapGridSkeleton />
-        <CompanionPanelSkeleton />
       </div>
     </div>
   );

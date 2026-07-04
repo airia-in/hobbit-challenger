@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { HistoryDayCardSkeleton } from '@workspace-starter/ui';
 import { AuthGateInner } from '../auth/AuthGate';
 import { QueryErrorState } from '../common/QueryErrorState';
 import { AppShell } from '../layout/AppNav';
@@ -130,9 +131,16 @@ export function HistoryContent() {
       </div>
 
       {history.isLoading && (
-        <p className="text-center text-sm text-[var(--text-muted)]">
-          Loading history...
-        </p>
+        <div
+          className="space-y-4"
+          role="status"
+          aria-busy="true"
+          aria-label="Loading history"
+        >
+          {Array.from({ length: 3 }, (_, index) => (
+            <HistoryDayCardSkeleton key={index} />
+          ))}
+        </div>
       )}
 
       {history.isError && (

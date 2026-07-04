@@ -20,6 +20,8 @@
   --ring-offset: var(--bg-base);
   --confetti-warm-1: #f4d58d;
   --confetti-warm-2: #e8c4a0;
+  --skeleton-base: var(--surface-raised);
+  --skeleton-highlight: var(--border);
 
   --font-display: 'Bebas Neue', sans-serif;
   --font-body: 'Inter', sans-serif;

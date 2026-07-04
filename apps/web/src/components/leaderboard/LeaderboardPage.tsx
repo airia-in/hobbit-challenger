@@ -11,6 +11,7 @@ import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
 import { JOURNEY_LABELS } from '../../lib/celebrations';
 import { trpc } from '../../lib/trpc';
+import { LeaderboardPageSkeleton } from './LeaderboardPageSkeleton';
 
 type LeaderboardWindow = 'today' | 'week' | 'total';
 
@@ -87,13 +88,7 @@ export function LeaderboardContent() {
   }
 
   if (leaderboard.isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-sm uppercase tracking-[0.3em] text-[var(--text-muted)]">
-          Loading leaderboard...
-        </p>
-      </div>
-    );
+    return <LeaderboardPageSkeleton />;
   }
 
   if (leaderboard.isError) {

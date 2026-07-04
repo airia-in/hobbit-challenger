@@ -346,6 +346,27 @@ describe('BuddySummaryService', () => {
     expect(trySend).not.toHaveBeenCalled();
   });
 
+  it('sends BUDDY_SUMMARY when WEEKLY_RECAP already SENT for same week anchor', async () => {
+    const trySend = vi.fn();
+    const prisma = createFakePrisma({
+      ...activeWeekSeed(),
+      reminderLogs: [
+        {
+          userId: 'u1',
+          date: LOG_DATE,
+          kind: 'WEEKLY_RECAP',
+          status: 'SENT',
+        },
+      ],
+    });
+    await makeService(prisma, true, trySend).processBuddySummaries();
+
+    expect(trySend).toHaveBeenCalledTimes(2);
+    expect(
+      trySend.mock.calls.some((call) => call[0].recipientId === 'u1'),
+    ).toBe(true);
+  });
+
   it('skips a pair when a member has left the group', async () => {
     const trySend = vi.fn();
     const seed = activeWeekSeed();
@@ -363,5 +384,36 @@ describe('BuddySummaryService', () => {
     await makeService(prisma, true, trySend).processBuddySummaries();
     expect(challengeSpy).not.toHaveBeenCalled();
     expect(trySend).not.toHaveBeenCalled();
+  });
+
+  it('does not query active pairs outside the broad Sunday UTC window', async () => {
+    vi.setSystemTime(new Date('2026-06-27T12:00:00.000Z'));
+    const trySend = vi.fn();
+    const prisma = createFakePrisma(activeWeekSeed());
+    const pairSpy = vi.spyOn(prisma.accountabilityPair, 'findMany');
+    await makeService(prisma, true, trySend).processBuddySummaries();
+    expect(pairSpy).not.toHaveBeenCalled();
+    expect(trySend).not.toHaveBeenCalled();
+  });
+
+  it('coexists with WEEKLY_RECAP on the same ISO-week log date', async () => {
+    const trySend = vi.fn();
+    const prisma = createFakePrisma({
+      ...activeWeekSeed(),
+      reminderLogs: [
+        {
+          userId: 'u1',
+          date: LOG_DATE,
+          kind: 'WEEKLY_RECAP',
+          status: 'SENT',
+        },
+      ],
+    });
+    await makeService(prisma, true, trySend).processBuddySummaries();
+
+    expect(trySend).toHaveBeenCalledTimes(2);
+    expect(
+      trySend.mock.calls.some((call) => call[0].recipientId === 'u1'),
+    ).toBe(true);
   });
 });

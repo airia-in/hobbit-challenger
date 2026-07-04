@@ -2,8 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { BRAND_INTRO } from '@workspace-starter/types';
+import { sanitizeFirstNameForCard } from '../services/milestone-card.service';
 import { loadPromptFile } from '../services/prompt-loader';
 import type { PrismaService } from '../prisma/prisma.service';
+import {
+  sanitizeUserPromptText,
+  USER_NAME_MAX_LENGTH,
+  wrapUserPromptEmbedData,
+} from '../utils/sanitize-prompt-input';
 import {
   BUDDY_SUMMARY_KIND,
   shouldRetryBuddySummary,
@@ -25,6 +31,22 @@ export type BuddySummaryMessageContext = {
   partnerName: string;
   rollup: WeeklyRecapRollup;
 };
+
+/** First-name display for WhatsApp copy. */
+export function sanitizeBuddyDisplayName(raw: string): string {
+  const firstName = sanitizeFirstNameForCard(raw);
+  return firstName === 'Traveler' ? 'Member' : firstName;
+}
+
+/** Sanitized + structurally wrapped name for LLM prompt embedding. */
+export function sanitizeBuddyNameForPrompt(raw: string): string {
+  const sanitized =
+    sanitizeUserPromptText(
+      sanitizeBuddyDisplayName(raw),
+      USER_NAME_MAX_LENGTH,
+    ) || 'Member';
+  return wrapUserPromptEmbedData(sanitized);
+}
 
 /**
  * Supportive, guilt-free variants (Hobbit voice, no trademarked fantasy names).
@@ -66,7 +88,8 @@ export function buildPartnerSummaryLine(
   partnerName: string,
   rollup: WeeklyRecapRollup,
 ): string {
-  const core = `${partnerName} hit ${rollup.daysShowedUp}/${rollup.eligibleDays} days this week`;
+  const displayName = sanitizeBuddyDisplayName(partnerName);
+  const core = `${displayName} hit ${rollup.daysShowedUp}/${rollup.eligibleDays} days this week`;
   const streak =
     rollup.streakEnd > 0 ? ` and is on a ${rollup.streakEnd}-day streak` : '';
   return `${core}${streak}.`;
@@ -74,16 +97,27 @@ export function buildPartnerSummaryLine(
 
 export function buildBuddySummaryCopyLines(
   context: BuddySummaryMessageContext,
+  forPrompt = false,
 ): Record<string, string> {
   const { rollup } = context;
+  const recipientName = forPrompt
+    ? sanitizeBuddyNameForPrompt(context.recipientName)
+    : sanitizeBuddyDisplayName(context.recipientName);
+  const partnerName = forPrompt
+    ? sanitizeBuddyNameForPrompt(context.partnerName)
+    : sanitizeBuddyDisplayName(context.partnerName);
+  const sanitizedBestHabit = rollup.bestHabitName
+    ? sanitizeUserPromptText(rollup.bestHabitName)
+    : '';
+  const displayPartner = sanitizeBuddyDisplayName(context.partnerName);
   const bestHabitLine =
-    rollup.bestHabitName && rollup.bestHabitHits > 0
-      ? `${context.partnerName}'s strongest habit: ${rollup.bestHabitName} (${rollup.bestHabitHits} hits).`
+    sanitizedBestHabit && rollup.bestHabitHits > 0
+      ? `${displayPartner}'s steady habit: ${sanitizedBestHabit} (${rollup.bestHabitHits} hits).`
       : '';
 
   return {
-    recipientName: context.recipientName,
-    partnerName: context.partnerName,
+    recipientName,
+    partnerName,
     weekStartKey: rollup.weekStartKey,
     weekEndKey: rollup.weekEndKey,
     eligibleDays: String(rollup.eligibleDays),
@@ -104,7 +138,7 @@ export function buildBuddySummaryFallback(
   const template = pickVariant(BUDDY_SUMMARY_FALLBACK_VARIANTS, seed);
   const copyLines = buildBuddySummaryCopyLines(context);
   return template
-    .replaceAll('{{recipientName}}', context.recipientName)
+    .replaceAll('{{recipientName}}', copyLines.recipientName)
     .replaceAll('{{brandName}}', messaging.brandName)
     .replaceAll('{{partnerSummary}}', copyLines.partnerSummary)
     .replaceAll('{{dashboardUrl}}', messaging.dashboardUrl);
@@ -115,7 +149,7 @@ export function interpolateBuddySummaryPrompt(
   context: BuddySummaryMessageContext,
   messaging: ReminderMessaging,
 ): string {
-  const copyLines = buildBuddySummaryCopyLines(context);
+  const copyLines = buildBuddySummaryCopyLines(context, true);
   const replacements: Record<string, string> = {
     brandName: messaging.brandName,
     brandIntro: BRAND_INTRO,
@@ -205,6 +239,7 @@ export class BuddySummaryMessageService {
     phone: string;
     logDate: Date;
     context: BuddySummaryMessageContext;
+    existingLog?: { status: string } | null;
   }): Promise<void> {
     const logKey = {
       userId: input.recipientId,
@@ -212,9 +247,11 @@ export class BuddySummaryMessageService {
       kind: BUDDY_SUMMARY_KIND,
     };
 
-    const existing = await input.prisma.reminderLog.findUnique({
-      where: { userId_date_kind: logKey },
-    });
+    const existing =
+      input.existingLog ??
+      (await input.prisma.reminderLog.findUnique({
+        where: { userId_date_kind: logKey },
+      }));
 
     if (existing?.status === 'SENT' || existing?.status === 'SKIPPED_OPTOUT') {
       return;

@@ -6,6 +6,7 @@ import {
   getBuddySummarySubjectSkipReason,
   isBuddySummaryRecipientDormant,
   isBuddySummarySlotDue,
+  isPossibleBuddySummarySweepUtcMinute,
 } from '../utils/buddy-summary-eligibility';
 import {
   getWeeklyRecapLogDate,
@@ -71,8 +72,47 @@ export class BuddySummaryService {
       return;
     }
 
+    const now = new Date();
+    if (!isPossibleBuddySummarySweepUtcMinute(now)) {
+      return;
+    }
+
+    const sweepCandidates = await this.prisma.user.findMany({
+      where: {
+        phone: { not: null },
+        whatsappOptIn: true,
+      },
+      select: {
+        id: true,
+        timezone: true,
+        group: { select: { challengeTimezone: true } },
+      },
+    });
+
+    const sundayUserIds = sweepCandidates
+      .filter((user) =>
+        isWeeklyRecapSundaySweepDue(
+          getWeeklyRecapTimezone({
+            timezone: user.timezone,
+            challengeTimezone: user.group?.challengeTimezone,
+          }),
+          now,
+        ),
+      )
+      .map((user) => user.id);
+
+    if (sundayUserIds.length === 0) {
+      return;
+    }
+
     const pairs = await this.prisma.accountabilityPair.findMany({
-      where: { status: 'ACTIVE' },
+      where: {
+        status: 'ACTIVE',
+        OR: [
+          { requesterId: { in: sundayUserIds } },
+          { addresseeId: { in: sundayUserIds } },
+        ],
+      },
       select: {
         groupId: true,
         requester: { select: pairUserSelect },
@@ -84,7 +124,6 @@ export class BuddySummaryService {
       return;
     }
 
-    const now = new Date();
     const deliveries: Delivery[] = [];
     for (const pair of pairs) {
       const members: Array<[PairUser, PairUser]> = [
@@ -281,6 +320,7 @@ export class BuddySummaryService {
       recipientId: recipient.id,
       phone: recipient.phone!,
       logDate,
+      existingLog,
       context: {
         recipientName: recipient.name,
         partnerName: subject.name,

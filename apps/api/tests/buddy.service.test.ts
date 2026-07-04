@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Prisma } from '@workspace-starter/db';
 import { TRPCError } from '@trpc/server';
 import {
   cancelBuddy,
@@ -28,6 +29,7 @@ function createFakePrisma(seed: { users: StoredUser[]; pairs?: StoredPair[] }) {
   const users = new Map(seed.users.map((u) => [u.id, { ...u }]));
   const pairs = new Map((seed.pairs ?? []).map((p) => [p.id, { ...p }]));
   let nextId = pairs.size + 1;
+  let txChain = Promise.resolve();
 
   const matchWhere = (
     p: StoredPair,
@@ -50,7 +52,130 @@ function createFakePrisma(seed: { users: StoredUser[]; pairs?: StoredPair[] }) {
     return true;
   };
 
-  return {
+  const assertActiveInvariant = (pair: StoredPair): void => {
+    for (const other of pairs.values()) {
+      if (other.id === pair.id || other.status !== 'ACTIVE') {
+        continue;
+      }
+      const usersInPair = new Set([pair.requesterId, pair.addresseeId]);
+      const usersInOther = new Set([other.requesterId, other.addresseeId]);
+      for (const userId of usersInPair) {
+        if (usersInOther.has(userId)) {
+          throw new Prisma.PrismaClientKnownRequestError(
+            'Unique constraint failed',
+            { code: 'P2002', clientVersion: 'test' },
+          );
+        }
+      }
+    }
+  };
+
+  const pairApi = {
+    findFirst: async ({ where }: { where: Record<string, unknown> }) =>
+      [...pairs.values()].find((p) => matchWhere(p, where)) ?? null,
+    findUnique: async ({
+      where,
+    }: {
+      where: {
+        id?: string;
+        requesterId_addresseeId?: {
+          requesterId: string;
+          addresseeId: string;
+        };
+      };
+    }) => {
+      if (where.id) return pairs.get(where.id) ?? null;
+      const key = where.requesterId_addresseeId!;
+      return (
+        [...pairs.values()].find(
+          (p) =>
+            p.requesterId === key.requesterId &&
+            p.addresseeId === key.addresseeId,
+        ) ?? null
+      );
+    },
+    findMany: async ({
+      where,
+    }: {
+      where: { groupId: string; status: { in: string[] } };
+    }) =>
+      [...pairs.values()]
+        .filter(
+          (p) =>
+            p.groupId === where.groupId && where.status.in.includes(p.status),
+        )
+        .map((p) => ({
+          id: p.id,
+          status: p.status,
+          requester: toPerson(users.get(p.requesterId)!),
+          addressee: toPerson(users.get(p.addresseeId)!),
+        })),
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: { status: string };
+    }) => {
+      const pair = pairs.get(where.id)!;
+      if (data.status === 'ACTIVE') {
+        assertActiveInvariant({ ...pair, status: 'ACTIVE' });
+      }
+      pair.status = data.status;
+      return pair;
+    },
+    updateMany: async ({
+      where,
+      data,
+    }: {
+      where: Record<string, unknown>;
+      data: { status: string };
+    }) => {
+      let count = 0;
+      for (const pair of pairs.values()) {
+        if (!matchWhere(pair, where)) {
+          continue;
+        }
+        if (data.status === 'ACTIVE') {
+          assertActiveInvariant({ ...pair, status: 'ACTIVE' });
+        }
+        pair.status = data.status;
+        count += 1;
+      }
+      return { count };
+    },
+    upsert: async ({
+      where,
+      create,
+      update,
+    }: {
+      where: {
+        requesterId_addresseeId: {
+          requesterId: string;
+          addresseeId: string;
+        };
+      };
+      create: StoredPair;
+      update: { status: string };
+    }) => {
+      const key = where.requesterId_addresseeId;
+      const existing = [...pairs.values()].find(
+        (p) =>
+          p.requesterId === key.requesterId &&
+          p.addresseeId === key.addresseeId,
+      );
+      if (existing) {
+        existing.status = update.status;
+        return existing;
+      }
+      const id = `p${nextId++}`;
+      const pair = { ...create, id };
+      pairs.set(id, pair);
+      return pair;
+    },
+  };
+
+  const prisma = {
     _pairs: pairs,
     user: {
       findUnique: async ({ where }: { where: { id: string } }) =>
@@ -69,88 +194,18 @@ function createFakePrisma(seed: { users: StoredUser[]; pairs?: StoredPair[] }) {
           .map((u) => ({ id: u.id, name: u.name, avatarUrl: u.avatarUrl }))
           .sort((a, b) => a.name.localeCompare(b.name)),
     },
-    accountabilityPair: {
-      findFirst: async ({ where }: { where: Record<string, unknown> }) =>
-        [...pairs.values()].find((p) => matchWhere(p, where)) ?? null,
-      findUnique: async ({
-        where,
-      }: {
-        where: {
-          id?: string;
-          requesterId_addresseeId?: {
-            requesterId: string;
-            addresseeId: string;
-          };
-        };
-      }) => {
-        if (where.id) return pairs.get(where.id) ?? null;
-        const key = where.requesterId_addresseeId!;
-        return (
-          [...pairs.values()].find(
-            (p) =>
-              p.requesterId === key.requesterId &&
-              p.addresseeId === key.addresseeId,
-          ) ?? null
-        );
-      },
-      findMany: async ({
-        where,
-      }: {
-        where: { groupId: string; status: { in: string[] } };
-      }) =>
-        [...pairs.values()]
-          .filter(
-            (p) =>
-              p.groupId === where.groupId && where.status.in.includes(p.status),
-          )
-          .map((p) => ({
-            id: p.id,
-            status: p.status,
-            requester: toPerson(users.get(p.requesterId)!),
-            addressee: toPerson(users.get(p.addresseeId)!),
-          })),
-      update: async ({
-        where,
-        data,
-      }: {
-        where: { id: string };
-        data: { status: string };
-      }) => {
-        const pair = pairs.get(where.id)!;
-        pair.status = data.status;
-        return pair;
-      },
-      upsert: async ({
-        where,
-        create,
-        update,
-      }: {
-        where: {
-          requesterId_addresseeId: {
-            requesterId: string;
-            addresseeId: string;
-          };
-        };
-        create: StoredPair;
-        update: { status: string };
-      }) => {
-        const key = where.requesterId_addresseeId;
-        const existing = [...pairs.values()].find(
-          (p) =>
-            p.requesterId === key.requesterId &&
-            p.addresseeId === key.addresseeId,
-        );
-        if (existing) {
-          existing.status = update.status;
-          return existing;
-        }
-        const id = `p${nextId++}`;
-        const pair = { ...create, id };
-        pairs.set(id, pair);
-        return pair;
-      },
+    accountabilityPair: pairApi,
+    $transaction: async <T>(fn: (tx: typeof prisma) => Promise<T>) => {
+      const run = txChain.then(() => fn(prisma));
+      txChain = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
     },
   };
+
+  return prisma;
 }
 
 function toPerson(u: StoredUser) {
@@ -241,6 +296,25 @@ describe('buddy.service pairing', () => {
     );
   });
 
+  it('blocks a second outgoing pending request', async () => {
+    const cat: StoredUser = { ...bo, id: 'u3', name: 'Cat' };
+    const prisma = createFakePrisma({
+      users: [alex, bo, cat],
+      pairs: [
+        {
+          id: 'p1',
+          groupId: 'g1',
+          requesterId: 'u1',
+          addresseeId: 'u2',
+          status: 'PENDING',
+        },
+      ],
+    });
+    await expect(requestBuddy(prisma as never, 'u1', 'u3')).rejects.toThrow(
+      /pending buddy request/,
+    );
+  });
+
   it('accepts a pending request into an active pair', async () => {
     const prisma = createFakePrisma({
       users: [alex, bo],
@@ -256,6 +330,68 @@ describe('buddy.service pairing', () => {
     });
     const result = await respondToBuddy(prisma as never, 'u2', 'p1', true);
     expect(result.status).toBe('ACTIVE');
+  });
+
+  it('requires WhatsApp opt-in when accepting a request', async () => {
+    const prisma = createFakePrisma({
+      users: [{ ...bo, whatsappOptIn: false }, alex],
+      pairs: [
+        {
+          id: 'p1',
+          groupId: 'g1',
+          requesterId: 'u1',
+          addresseeId: 'u2',
+          status: 'PENDING',
+        },
+      ],
+    });
+    await expect(
+      respondToBuddy(prisma as never, 'u2', 'p1', true),
+    ).rejects.toThrow(/WhatsApp reminders/);
+  });
+
+  it('allows only one concurrent accept when two pending requests target the same user', async () => {
+    const cat: StoredUser = { ...bo, id: 'u3', name: 'Cat' };
+    const prisma = createFakePrisma({
+      users: [alex, bo, cat],
+      pairs: [
+        {
+          id: 'p1',
+          groupId: 'g1',
+          requesterId: 'u2',
+          addresseeId: 'u1',
+          status: 'PENDING',
+        },
+        {
+          id: 'p2',
+          groupId: 'g1',
+          requesterId: 'u3',
+          addresseeId: 'u1',
+          status: 'PENDING',
+        },
+      ],
+    });
+
+    const results = await Promise.allSettled([
+      respondToBuddy(prisma as never, 'u1', 'p1', true),
+      respondToBuddy(prisma as never, 'u1', 'p2', true),
+    ]);
+
+    const activePairs = [...prisma._pairs.values()].filter(
+      (pair) => pair.status === 'ACTIVE',
+    );
+    expect(activePairs).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === 'fulfilled'),
+    ).toHaveLength(1);
+    expect(
+      results.filter(
+        (result) =>
+          result.status === 'rejected' &&
+          result.reason instanceof TRPCError &&
+          result.reason.code === 'CONFLICT',
+      ),
+    ).toHaveLength(1);
   });
 
   it('declines a pending request', async () => {

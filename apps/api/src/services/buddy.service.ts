@@ -1,4 +1,5 @@
 import { TRPCError } from '@trpc/server';
+import { Prisma } from '@workspace-starter/db';
 import type { PrismaService } from '../prisma/prisma.service';
 
 export type BuddyPairStatus = 'PENDING' | 'ACTIVE' | 'DECLINED' | 'CANCELLED';
@@ -45,6 +46,8 @@ type MeRow = {
   whatsappOptIn: boolean;
 };
 
+type TxClient = Pick<PrismaService, 'accountabilityPair' | 'user'>;
+
 async function loadMe(prisma: PrismaService, userId: string): Promise<MeRow> {
   const me = await prisma.user.findUnique({
     where: { id: userId },
@@ -72,11 +75,15 @@ function assertEligible(me: MeRow): void {
   }
 }
 
-async function hasActivePair(
-  prisma: PrismaService,
-  userId: string,
-): Promise<boolean> {
-  const active = await prisma.accountabilityPair.findFirst({
+function isActivePairUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002'
+  );
+}
+
+async function hasActivePair(tx: TxClient, userId: string): Promise<boolean> {
+  const active = await tx.accountabilityPair.findFirst({
     where: {
       status: 'ACTIVE',
       OR: [{ requesterId: userId }, { addresseeId: userId }],
@@ -84,6 +91,63 @@ async function hasActivePair(
     select: { id: true },
   });
   return active !== null;
+}
+
+async function hasPendingOutgoingRequest(
+  tx: TxClient,
+  userId: string,
+): Promise<boolean> {
+  const pending = await tx.accountabilityPair.findFirst({
+    where: { status: 'PENDING', requesterId: userId },
+    select: { id: true },
+  });
+  return pending !== null;
+}
+
+function activePairConflictError(): TRPCError {
+  return new TRPCError({
+    code: 'CONFLICT',
+    message: 'You already have an accountability buddy',
+  });
+}
+
+/**
+ * Atomically promotes a PENDING pair to ACTIVE only when neither participant
+ * already has another ACTIVE pair. Partial unique indexes on requesterId and
+ * addresseeId (status = ACTIVE) enforce the invariant at the DB layer.
+ */
+async function activatePairAtomically(
+  prisma: PrismaService,
+  pairId: string,
+  participantIds: [string, string],
+): Promise<{ status: 'ACTIVE' }> {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      for (const userId of participantIds) {
+        if (await hasActivePair(tx, userId)) {
+          throw activePairConflictError();
+        }
+      }
+
+      const updated = await tx.accountabilityPair.updateMany({
+        where: { id: pairId, status: 'PENDING' },
+        data: { status: 'ACTIVE' },
+      });
+      if (updated.count === 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'No pending buddy request to respond to',
+        });
+      }
+
+      return { status: 'ACTIVE' as const };
+    });
+  } catch (error) {
+    if (isActivePairUniqueViolation(error)) {
+      throw activePairConflictError();
+    }
+    throw error;
+  }
 }
 
 export async function getBuddyState(
@@ -228,11 +292,14 @@ export async function requestBuddy(
     select: { id: true, status: true },
   });
   if (reciprocal && reciprocal.status === 'PENDING') {
-    await prisma.accountabilityPair.update({
-      where: { id: reciprocal.id },
-      data: { status: 'ACTIVE' },
+    return activatePairAtomically(prisma, reciprocal.id, [userId, addresseeId]);
+  }
+
+  if (await hasPendingOutgoingRequest(prisma, userId)) {
+    throw new TRPCError({
+      code: 'CONFLICT',
+      message: 'You already have a pending buddy request',
     });
-    return { status: 'ACTIVE' };
   }
 
   // Reuse an existing directed row (revives DECLINED/CANCELLED) or create one.
@@ -284,12 +351,9 @@ export async function respondToBuddy(
     return { status: 'DECLINED' };
   }
 
-  if (await hasActivePair(prisma, userId)) {
-    throw new TRPCError({
-      code: 'CONFLICT',
-      message: 'You already have an accountability buddy',
-    });
-  }
+  const me = await loadMe(prisma, userId);
+  assertEligible(me);
+
   if (await hasActivePair(prisma, pair.requesterId)) {
     throw new TRPCError({
       code: 'CONFLICT',
@@ -297,11 +361,7 @@ export async function respondToBuddy(
     });
   }
 
-  await prisma.accountabilityPair.update({
-    where: { id: pair.id },
-    data: { status: 'ACTIVE' },
-  });
-  return { status: 'ACTIVE' };
+  return activatePairAtomically(prisma, pair.id, [userId, pair.requesterId]);
 }
 
 export async function cancelBuddy(
@@ -330,4 +390,18 @@ export async function cancelBuddy(
     data: { status: 'CANCELLED' },
   });
   return { cancelled: true };
+}
+
+/** Cancel active/pending pairs when a member leaves their group. */
+export async function cancelBuddyPairsForUser(
+  prisma: Pick<PrismaService, 'accountabilityPair'>,
+  userId: string,
+): Promise<void> {
+  await prisma.accountabilityPair.updateMany({
+    where: {
+      status: { in: ACTIVE_OR_PENDING },
+      OR: [{ requesterId: userId }, { addresseeId: userId }],
+    },
+    data: { status: 'CANCELLED' },
+  });
 }

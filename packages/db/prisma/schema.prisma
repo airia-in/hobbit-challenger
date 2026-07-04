@@ -245,6 +245,7 @@ model AccountabilityPair {
   @@unique([requesterId, addresseeId])
   @@index([groupId, status])
   @@index([addresseeId, status])
+  @@index([requesterId, status])
 }
 
 /// Replay protection for Evolution inbound WhatsApp webhooks (#171).

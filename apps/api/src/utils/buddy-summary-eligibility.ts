@@ -118,3 +118,24 @@ export function isBuddySummarySlotDue(input: {
     now: input.now,
   });
 }
+
+/**
+ * Cheap UTC pre-filter before loading all ACTIVE pairs globally.
+ * Sunday ~10:00 local spans roughly Sat 20:00 UTC through Mon 04:00 UTC.
+ */
+export function isPossibleBuddySummarySweepUtcMinute(
+  now = new Date(),
+): boolean {
+  const utcDay = now.getUTCDay();
+  const utcHour = now.getUTCHours();
+  if (utcDay === 6 && utcHour >= 20) {
+    return true;
+  }
+  if (utcDay === 0) {
+    return true;
+  }
+  if (utcDay === 1 && utcHour <= 4) {
+    return true;
+  }
+  return false;
+}

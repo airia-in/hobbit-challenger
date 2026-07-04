@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
-  CompletionHeatmap,
-  LineChart,
+  CompletionHeatmapSkeleton,
+  LineChartSkeleton,
   StreakBadge,
 } from '@workspace-starter/ui';
 import { AuthGateInner } from '../auth/AuthGate';
@@ -10,6 +10,9 @@ import { AppShell } from '../layout/AppNav';
 import { TrpcProvider } from '../TrpcProvider';
 import { trpc } from '../../lib/trpc';
 import { EarnedMilestonesSection } from './EarnedMilestonesSection';
+import { ProgressPageSkeleton } from './ProgressPageSkeleton';
+import { LazyCompletionHeatmap } from '../lazy/LazyCompletionHeatmap';
+import { LazyLineChart } from '../lazy/LazyLineChart';
 
 type ActivityOption = {
   id: string;
@@ -121,13 +124,7 @@ export function ProgressContent() {
   });
 
   if (today.isLoading || dashboard.isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-sm uppercase tracking-[0.3em] text-[var(--text-muted)]">
-          Loading progress...
-        </p>
-      </div>
-    );
+    return <ProgressPageSkeleton />;
   }
 
   if (today.isError || dashboard.isError) {
@@ -219,9 +216,7 @@ export function ProgressContent() {
               Value over time
             </h2>
             {activitySeries.isLoading ? (
-              <p className="text-sm text-[var(--text-muted)]">
-                Loading chart...
-              </p>
+              <LineChartSkeleton />
             ) : activitySeries.isError ? (
               <QueryErrorState
                 message={activitySeries.error?.message}
@@ -229,7 +224,7 @@ export function ProgressContent() {
                 className="text-left"
               />
             ) : (
-              <LineChart
+              <LazyLineChart
                 series={[
                   {
                     label: selectedActivity.title,
@@ -254,7 +249,7 @@ export function ProgressContent() {
             </div>
 
             {activityCompletion.isLoading ? (
-              <p className="text-sm text-[var(--text-muted)]">Loading...</p>
+              <CompletionHeatmapSkeleton />
             ) : activityCompletion.isError ? (
               <QueryErrorState
                 message={activityCompletion.error?.message}
@@ -283,10 +278,10 @@ export function ProgressContent() {
                     ))}
                   </div>
                 ) : null}
-                <CompletionHeatmap days={activityCompletion.data.days} />
+                <LazyCompletionHeatmap days={activityCompletion.data.days} />
               </>
             ) : (
-              <CompletionHeatmap days={[]} />
+              <LazyCompletionHeatmap days={[]} />
             )}
           </div>
         ) : null}
@@ -338,7 +333,7 @@ export function ProgressContent() {
         </div>
 
         {leaderboardSeries.isLoading ? (
-          <p className="text-sm text-[var(--text-muted)]">Loading chart...</p>
+          <LineChartSkeleton />
         ) : leaderboardSeries.isError ? (
           <QueryErrorState
             message={leaderboardSeries.error?.message}
@@ -346,7 +341,7 @@ export function ProgressContent() {
             className="text-left"
           />
         ) : (
-          <LineChart
+          <LazyLineChart
             series={leaderboardChartSeries}
             valueLabel="XP"
             emptyMessage="No leaderboard data yet"

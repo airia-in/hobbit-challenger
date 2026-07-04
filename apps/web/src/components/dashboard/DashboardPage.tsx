@@ -2,13 +2,14 @@ import { getGuidance } from '@workspace-starter/types';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DayCounter,
-  HeatmapGrid,
-  JourneyPath,
   ProofUploader,
   StatsRow,
   StreakBadge,
   TaskCard,
   XpTotalBar,
+  CompanionPanelSkeleton,
+  HeatmapGridSkeleton,
+  JourneyPathSkeleton,
   type SubPointState,
 } from '@workspace-starter/ui';
 import { AuthGateInner } from '../auth/AuthGate';
@@ -54,7 +55,10 @@ import {
 } from '../../lib/today-optimistic';
 import { PerfectDayBanner } from './PerfectDayBanner';
 import { PerfectDayCelebration } from './PerfectDayCelebration';
-import { CompanionPanel } from './CompanionPanel';
+import { DashboardPageSkeleton } from './DashboardPageSkeleton';
+import { LazyCompanionPanel } from '../lazy/LazyCompanionPanel';
+import { LazyHeatmapGrid } from '../lazy/LazyHeatmapGrid';
+import { LazyJourneyPath } from '../lazy/LazyJourneyPath';
 import { useCompletionHaptics } from '../../lib/use-completion-haptics';
 import { StreakRecoveryBanner } from './StreakRecoveryBanner';
 import { MilestoneUnlockToast } from './MilestoneUnlockToast';
@@ -506,16 +510,7 @@ export function DashboardContent() {
   }, [latestMilestone]);
 
   if (activitiesQuery.isLoading || statsQuery.isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-base)]">
-        <p
-          className="text-sm uppercase tracking-[0.3em] text-[var(--text-muted)]"
-          style={{ fontFamily: 'var(--font-mono)' }}
-        >
-          Loading dashboard...
-        </p>
-      </div>
-    );
+    return <DashboardPageSkeleton />;
   }
 
   if (activitiesQuery.isError || statsQuery.isError) {
@@ -734,28 +729,32 @@ export function DashboardContent() {
         )}
 
         {stats &&
-          !heatmapQuery.isLoading &&
-          !heatmapQuery.isError &&
-          heatmapQuery.data && (
-            <CompanionPanel
-              cells={heatmapQuery.data.cells}
-              currentDay={stats.currentDay}
-              todayComplete={companionTodayComplete}
-              dateKey={calendarDateKey}
-            />
-          )}
-
-        {stats &&
           (heatmapQuery.isLoading ||
             heatmapQuery.isError ||
             heatmapQuery.data) && (
             <>
               {heatmapQuery.isLoading ? (
-                <section>
-                  <p className="text-sm text-[var(--text-muted)]">
-                    Loading progress...
-                  </p>
-                </section>
+                <>
+                  <CompanionPanelSkeleton />
+                  <section>
+                    <h2
+                      className="mb-4 text-lg uppercase tracking-wider text-[var(--text-muted)]"
+                      style={{ fontFamily: 'var(--font-mono)' }}
+                    >
+                      Your trail
+                    </h2>
+                    <JourneyPathSkeleton />
+                  </section>
+                  <section>
+                    <h2
+                      className="mb-4 text-lg uppercase tracking-wider text-[var(--text-muted)]"
+                      style={{ fontFamily: 'var(--font-mono)' }}
+                    >
+                      {stats.lengthDays}-Day Progress
+                    </h2>
+                    <HeatmapGridSkeleton cellCount={stats.lengthDays} />
+                  </section>
+                </>
               ) : heatmapQuery.isError ? (
                 <section>
                   <h2
@@ -772,6 +771,12 @@ export function DashboardContent() {
                 </section>
               ) : heatmapQuery.data ? (
                 <>
+                  <LazyCompanionPanel
+                    cells={heatmapQuery.data.cells}
+                    currentDay={stats.currentDay}
+                    todayComplete={companionTodayComplete}
+                    dateKey={calendarDateKey}
+                  />
                   <section>
                     <h2
                       className="mb-4 text-lg uppercase tracking-wider text-[var(--text-muted)]"
@@ -779,7 +784,7 @@ export function DashboardContent() {
                     >
                       Your trail
                     </h2>
-                    <JourneyPath
+                    <LazyJourneyPath
                       cells={heatmapQuery.data.cells}
                       currentDay={stats.currentDay}
                       lengthDays={stats.lengthDays}
@@ -795,7 +800,7 @@ export function DashboardContent() {
                     >
                       {stats.lengthDays}-Day Progress
                     </h2>
-                    <HeatmapGrid cells={heatmapQuery.data.cells} />
+                    <LazyHeatmapGrid cells={heatmapQuery.data.cells} />
                   </section>
                 </>
               ) : null}

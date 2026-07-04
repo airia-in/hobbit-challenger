@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DashboardContent } from '../src/components/dashboard/DashboardPage';
 
@@ -154,7 +154,7 @@ describe('DashboardContent journey path', () => {
     );
   });
 
-  it('renders journey path above the heatmap grid', () => {
+  it('renders journey path above the heatmap grid', async () => {
     render(<DashboardContent />);
     expect(
       screen.getByRole('heading', { name: /your trail/i }),
@@ -162,7 +162,9 @@ describe('DashboardContent journey path', () => {
     expect(
       screen.getByRole('heading', { name: /30-day progress/i }),
     ).toBeInTheDocument();
-    expect(screen.getByTestId('journey-path')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('journey-path')).toBeInTheDocument();
+    });
     const headings = screen.getAllByRole('heading', { level: 2 });
     const trailIndex = headings.findIndex((heading) =>
       /your trail/i.test(heading.textContent ?? ''),

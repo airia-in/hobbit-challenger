@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DashboardContent } from '../src/components/dashboard/DashboardPage';
@@ -198,9 +198,16 @@ describe('DashboardContent companion panel', () => {
     );
   });
 
-  it('renders companion between consistency and journey path when heatmap is loaded', () => {
+  it('renders companion between consistency and journey path when heatmap is loaded', async () => {
     render(<DashboardContent />);
-    expect(screen.getByTestId('companion-panel')).toBeInTheDocument();
+    // Companion and journey path are lazy-loaded behind Suspense, so wait until
+    // both their headings have resolved before asserting their relative order.
+    await waitFor(() => {
+      expect(screen.getByTestId('companion-panel')).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 2, name: /your trail/i }),
+      ).toBeInTheDocument();
+    });
     expect(screen.getByTestId('companion-svg')).toHaveAttribute(
       'data-mood',
       'thriving',
@@ -221,11 +228,13 @@ describe('DashboardContent companion panel', () => {
     expect(trailIndex).toBeGreaterThan(gardenIndex);
   });
 
-  it('hides companion while heatmap is loading', () => {
+  it('shows below-fold skeletons while heatmap is loading', () => {
     mockHeatmapGet.mockReturnValue(loadingQuery());
     render(<DashboardContent />);
     expect(screen.queryByTestId('companion-panel')).not.toBeInTheDocument();
-    expect(screen.getByText(/loading progress/i)).toBeInTheDocument();
+    expect(screen.getByTestId('journey-path-skeleton')).toBeInTheDocument();
+    expect(screen.getByTestId('heatmap-grid-skeleton')).toBeInTheDocument();
+    expect(screen.getByTestId('companion-panel-skeleton')).toBeInTheDocument();
   });
 
   it('hides companion when heatmap errors', () => {
@@ -234,7 +243,7 @@ describe('DashboardContent companion panel', () => {
     expect(screen.queryByTestId('companion-panel')).not.toBeInTheDocument();
   });
 
-  it('reflects a rainy mood when recent days are mostly missed', () => {
+  it('reflects a rainy mood when recent days are mostly missed', async () => {
     mockHeatmapGet.mockReturnValue(
       idleQuery(
         heatmapCells(30, (day) => {
@@ -256,10 +265,12 @@ describe('DashboardContent companion panel', () => {
       }),
     );
     render(<DashboardContent />);
-    expect(screen.getByTestId('companion-svg')).toHaveAttribute(
-      'data-mood',
-      'rainy',
-    );
+    await waitFor(() => {
+      expect(screen.getByTestId('companion-svg')).toHaveAttribute(
+        'data-mood',
+        'rainy',
+      );
+    });
   });
 
   it('does not downgrade mood when viewing a past day but calendar today is complete', async () => {
@@ -306,16 +317,20 @@ describe('DashboardContent companion panel', () => {
     );
 
     render(<DashboardContent />);
-    expect(screen.getByTestId('companion-svg')).toHaveAttribute(
-      'data-mood',
-      'sleepy',
-    );
+    await waitFor(() => {
+      expect(screen.getByTestId('companion-svg')).toHaveAttribute(
+        'data-mood',
+        'sleepy',
+      );
+    });
 
     await user.click(screen.getByTestId('dashboard-date-prev'));
-    expect(screen.getByTestId('companion-svg')).toHaveAttribute(
-      'data-mood',
-      'sleepy',
-    );
+    await waitFor(() => {
+      expect(screen.getByTestId('companion-svg')).toHaveAttribute(
+        'data-mood',
+        'sleepy',
+      );
+    });
     expect(screen.getByTestId('companion-svg')).not.toHaveAttribute(
       'data-mood',
       'rainy',

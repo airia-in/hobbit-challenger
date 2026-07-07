@@ -71,6 +71,8 @@ model Group {
   challengeStartDate DateTime?
   challengeEndDate   DateTime?
   challengeTimezone  String?
+  whatsappGroupJid   String?
+  leaderboardTime    String?
   createdAt          DateTime     @default(now())
   accountabilityPairs AccountabilityPair[]
 }

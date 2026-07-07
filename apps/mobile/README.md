@@ -61,7 +61,43 @@ https://<WEB_DOMAIN>/.well-known/assetlinks.json
 
 The file is generated at `web-host` image build from `ANDROID_SHA256_CERT_FINGERPRINTS`. See [production-hosting.md](../../docs/guides/production-hosting.md#android-app-links-digital-asset-links) for deploy steps and `keytool` fingerprint instructions.
 
-**Signing key today:** the release workflow ships a **debug** APK (`assembleDebug`). Use the debug keystore SHA-256 until a release keystore is configured (#180). When you switch to release signing, update `ANDROID_SHA256_CERT_FINGERPRINTS` and redeploy `web-host`.
+## Signing and keystore setup
+
+Release builds require a signing keystore and repo secrets. Set up once per deployment target (test, staging, production).
+
+### 1. Generate a keystore
+
+```bash
+keytool -genkey -v -keystore release.keystore -alias hobbit-release -keyalg RSA -keysize 2048 -validity 10000
+```
+
+### 2. Add CI secrets
+
+| Secret              | Value                             |
+| ------------------- | --------------------------------- |
+| `KEYSTORE_BASE64`   | `base64 release.keystore` output  |
+| `KEYSTORE_PASSWORD` | Keystore password                 |
+| `KEY_ALIAS`         | Key alias (e.g. `hobbit-release`) |
+| `KEY_PASSWORD`      | Key password                      |
+
+### 3. Update App Links fingerprint
+
+Extract the release SHA-256 and update `ANDROID_SHA256_CERT_FINGERPRINTS`:
+
+```bash
+keytool -list -v -keystore release.keystore -alias hobbit-release | grep SHA256 | cut -d' ' -f3
+```
+
+Redeploy `web-host` after updating the secret so `assetlinks.json` matches.
+
+### 4. Build signed artifacts
+
+The `release.yml` workflow auto-detects `KEYSTORE_BASE64`. When present it builds:
+
+- `app-release.apk` — signed release APK (sideload, testing)
+- `app-release.aab` — signed Android App Bundle (Google Play)
+
+When keystore secrets are absent, only `app-debug.apk` is built (existing behavior).
 
 ## Adding iOS later
 

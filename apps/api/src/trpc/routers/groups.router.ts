@@ -238,6 +238,8 @@ export const groupsRouter = router({
       isAdmin: adminUserIdSet.has(ctx.user.id),
       inviteUrl: buildInviteUrl(ctx.req, group.inviteToken),
       challengeRange,
+      whatsappGroupJid: group.whatsappGroupJid ?? null,
+      leaderboardTime: group.leaderboardTime ?? null,
       members,
     };
   }),
@@ -711,6 +713,63 @@ export const groupsRouter = router({
 
       return { userId: input.userId };
     }),
+
+  setWhatsAppGroupJid: protectedProcedure
+    .input(
+      z.object({
+        whatsappGroupJid: z.string().min(1).nullable().optional(),
+        leaderboardTime: z.string().min(1).nullable().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUnique({
+        where: { id: ctx.user.id },
+      });
+
+      if (!user?.groupId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'No group found' });
+      }
+
+      await requireGroupAdmin(ctx.prisma, ctx.user.id, user.groupId);
+
+      const data: Record<string, string | null> = {};
+      if (input.whatsappGroupJid !== undefined) {
+        data.whatsappGroupJid = input.whatsappGroupJid;
+      }
+      if (input.leaderboardTime !== undefined) {
+        data.leaderboardTime = input.leaderboardTime;
+      }
+
+      const group = await ctx.prisma.group.update({
+        where: { id: user.groupId },
+        data,
+      });
+
+      return {
+        whatsappGroupJid: group.whatsappGroupJid,
+        leaderboardTime: group.leaderboardTime,
+      };
+    }),
+
+  getWhatsAppGroupConfig: protectedProcedure.query(async ({ ctx }) => {
+    const user = await ctx.prisma.user.findUnique({
+      where: { id: ctx.user.id },
+    });
+
+    if (!user?.groupId) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'No group found' });
+    }
+
+    const group = await ctx.prisma.group.findUnique({
+      where: { id: user.groupId },
+      select: { whatsappGroupJid: true, leaderboardTime: true },
+    });
+
+    return {
+      whatsappGroupJid: group?.whatsappGroupJid ?? null,
+      leaderboardTime: group?.leaderboardTime ?? null,
+    };
+  }),
 
   demoteAdmin: protectedProcedure
     .input(z.object({ userId: z.string().min(1) }))

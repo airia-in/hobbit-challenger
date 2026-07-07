@@ -169,12 +169,42 @@ jobs:
           PUBLIC_API_URL: ${{ inputs.public_api_url }}
         run: pnpm --filter @workspace-starter/mobile build
 
+      - name: Decode release keystore
+        if: env.KEYSTORE_BASE64 != ''
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > apps/mobile/android/app/release.keystore
+          echo "KEYSTORE_FILE=apps/mobile/android/app/release.keystore" >> "$GITHUB_ENV"
+
       - name: Build Android debug APK
         working-directory: apps/mobile/android
         env:
           ANDROID_VERSION_NAME: ${{ inputs.version }}
           ANDROID_VERSION_CODE: ${{ github.run_number }}
         run: ./gradlew assembleDebug --no-daemon
+
+      - name: Build Android release APK
+        if: env.KEYSTORE_FILE != ''
+        working-directory: apps/mobile/android
+        env:
+          ANDROID_VERSION_NAME: ${{ inputs.version }}
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Build Android release AAB
+        if: env.KEYSTORE_FILE != ''
+        working-directory: apps/mobile/android
+        env:
+          ANDROID_VERSION_NAME: ${{ inputs.version }}
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew bundleRelease --no-daemon
 
       - name: Archive mobile web bundle
         run: tar -czf mobile-web-bundle.tar.gz -C apps/mobile www capacitor.config.ts package.json
@@ -191,6 +221,22 @@ jobs:
         with:
           name: android-debug-apk
           path: apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 90
+
+      - name: Upload Android release APK artifact
+        if: env.KEYSTORE_FILE != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-apk
+          path: apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 90
+
+      - name: Upload Android release AAB artifact
+        if: env.KEYSTORE_FILE != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-aab
+          path: apps/mobile/android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 90
 
   release:
@@ -216,6 +262,18 @@ jobs:
         with:
           name: android-debug-apk
 
+      - name: Download Android release APK
+        uses: actions/download-artifact@v4
+        with:
+          name: android-release-apk
+        continue-on-error: true
+
+      - name: Download Android release AAB
+        uses: actions/download-artifact@v4
+        with:
+          name: android-release-aab
+        continue-on-error: true
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -228,6 +286,8 @@ jobs:
           files: |
             mobile-web-bundle.tar.gz
             app-debug.apk
+            **/app-release.apk
+            **/app-release.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

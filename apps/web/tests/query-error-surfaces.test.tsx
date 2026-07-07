@@ -28,6 +28,7 @@ const mockPromoteAdminMutate = vi.fn();
 const mockDemoteAdminMutate = vi.fn();
 const mockSetChallengeRangeMutate = vi.fn();
 const mockSetChallengeThisWeekMutate = vi.fn();
+const mockSetWhatsAppGroupJidMutate = vi.fn();
 let removeMemberMutationState = {
   mutate: mockRemoveMemberMutate,
   isPending: false,
@@ -54,6 +55,12 @@ let setChallengeRangeMutationState = {
 };
 let setChallengeThisWeekMutationState = {
   mutate: mockSetChallengeThisWeekMutate,
+  isPending: false,
+  error: null as { message: string } | null,
+  reset: vi.fn(),
+};
+let setWhatsAppGroupJidMutationState = {
+  mutate: mockSetWhatsAppGroupJidMutate,
   isPending: false,
   error: null as { message: string } | null,
   reset: vi.fn(),
@@ -168,6 +175,9 @@ vi.mock('../src/lib/trpc', () => ({
       setChallengeThisWeek: {
         useMutation: () => setChallengeThisWeekMutationState,
       },
+      setWhatsAppGroupJid: {
+        useMutation: () => setWhatsAppGroupJidMutationState,
+      },
     },
     auth: {
       me: {
@@ -207,6 +217,7 @@ afterEach(() => {
   mockDemoteAdminMutate.mockReset();
   mockSetChallengeRangeMutate.mockReset();
   mockSetChallengeThisWeekMutate.mockReset();
+  mockSetWhatsAppGroupJidMutate.mockReset();
   removeMemberMutationState = {
     mutate: mockRemoveMemberMutate,
     isPending: false,
@@ -233,6 +244,12 @@ afterEach(() => {
   };
   setChallengeThisWeekMutationState = {
     mutate: mockSetChallengeThisWeekMutate,
+    isPending: false,
+    error: null,
+    reset: vi.fn(),
+  };
+  setWhatsAppGroupJidMutationState = {
+    mutate: mockSetWhatsAppGroupJidMutate,
     isPending: false,
     error: null,
     reset: vi.fn(),

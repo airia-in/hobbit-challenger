@@ -48,6 +48,42 @@ export class EvolutionApiClient {
     return Boolean(this.url && this.apiKey && this.instance);
   }
 
+  async healthCheck(): Promise<{ ok: boolean; error?: string }> {
+    if (!this.isConfigured()) {
+      return { ok: false, error: 'Evolution API not configured' };
+    }
+
+    try {
+      const resp = await fetch(
+        `${this.url}/instance/connectionState/${this.instance}`,
+        {
+          headers: { apikey: this.apiKey! },
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => resp.statusText);
+        return { ok: false, error: `HTTP ${resp.status}: ${body}` };
+      }
+
+      const json = (await resp.json()) as { instance?: { state?: string } };
+      const state = json?.instance?.state;
+
+      if (state === 'open') {
+        return { ok: true };
+      }
+
+      return {
+        ok: false,
+        error: `Instance state is "${state ?? 'unknown'}", expected "open"`,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: message };
+    }
+  }
+
   async sendText(toPhoneE164: string, text: string): Promise<SendTextResult> {
     if (!this.isConfigured()) {
       return {

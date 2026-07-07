@@ -66,6 +66,9 @@ export function AdminGroupContent() {
   const [rangeStartDate, setRangeStartDate] = useState('');
   const [rangeEndDate, setRangeEndDate] = useState('');
   const [rangeError, setRangeError] = useState<string | null>(null);
+  const [whatsappJidInput, setWhatsappJidInput] = useState('');
+  const [leaderboardTimeInput, setLeaderboardTimeInput] = useState('09:00');
+  const [whatsappJidError, setWhatsappJidError] = useState<string | null>(null);
   const utils = trpc.useUtils();
 
   const group = trpc.groups.getMine.useQuery();
@@ -98,6 +101,20 @@ export function AdminGroupContent() {
       invalidateChallengeRange();
     },
   });
+  const setWhatsAppGroupJid = trpc.groups.setWhatsAppGroupJid.useMutation({
+    onSuccess: (result) => {
+      setWhatsappJidError(null);
+      if (result.whatsappGroupJid !== undefined) {
+        setWhatsappJidInput(result.whatsappGroupJid ?? '');
+      }
+      if (result.leaderboardTime !== undefined) {
+        setLeaderboardTimeInput(result.leaderboardTime ?? '09:00');
+      }
+    },
+    onError: (error) => {
+      setWhatsappJidError(error.message);
+    },
+  });
 
   const challengeRange = group.data?.challengeRange ?? null;
   const rangeLength = inclusiveDayCount(rangeStartDate, rangeEndDate);
@@ -119,6 +136,15 @@ export function AdminGroupContent() {
     setRangeStartDate(toDateInputValue(challengeRange.startDate));
     setRangeEndDate(toDateInputValue(challengeRange.endDate));
   }, [challengeRange]);
+
+  useEffect(() => {
+    if (group.data?.whatsappGroupJid) {
+      setWhatsappJidInput(group.data.whatsappGroupJid);
+    }
+    if (group.data?.leaderboardTime) {
+      setLeaderboardTimeInput(group.data.leaderboardTime);
+    }
+  }, [group.data]);
 
   function submitRange(startDate: string, endDate: string) {
     const lengthDays = inclusiveDayCount(startDate, endDate);
@@ -385,6 +411,90 @@ export function AdminGroupContent() {
           Hover cells for details. Toggle edit mode to set group-wide day
           labels.
         </p>
+      </section>
+
+      <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+        <h2
+          className="text-lg uppercase tracking-wider text-[var(--text-muted)]"
+          style={{ fontFamily: 'var(--font-mono)' }}
+        >
+          WhatsApp Leaderboard
+        </h2>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          Send a daily leaderboard to your WhatsApp group. Add the group's
+          remote JID and set a send time.
+        </p>
+
+        <form
+          className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const jid = whatsappJidInput.trim() || null;
+            if (jid && !jid.includes('@g.us')) {
+              setWhatsappJidError(
+                'Group JID should end with @g.us (e.g. 123456789-123456@g.us)',
+              );
+              return;
+            }
+            setWhatsAppGroupJid.mutate({
+              whatsappGroupJid: jid,
+              leaderboardTime: leaderboardTimeInput,
+            });
+          }}
+        >
+          <label className="space-y-1 text-xs uppercase tracking-wider text-[var(--text-muted)]">
+            <span>WhatsApp Group JID</span>
+            <input
+              type="text"
+              value={whatsappJidInput}
+              onChange={(event) => setWhatsappJidInput(event.target.value)}
+              placeholder="123456789-123456@g.us"
+              className="w-full rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-sm text-[var(--text-primary)]"
+            />
+          </label>
+          <label className="space-y-1 text-xs uppercase tracking-wider text-[var(--text-muted)]">
+            <span>Send time</span>
+            <input
+              type="time"
+              value={leaderboardTimeInput}
+              onChange={(event) => setLeaderboardTimeInput(event.target.value)}
+              className="w-full rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-sm text-[var(--text-primary)]"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={setWhatsAppGroupJid.isPending}
+            className="self-end rounded bg-[var(--accent-red)] px-4 py-2 text-sm font-medium text-[var(--text-on-accent)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Save
+          </button>
+        </form>
+
+        {whatsappJidError && (
+          <p className="mt-2 text-sm text-[var(--accent-red)]">
+            {whatsappJidError}
+          </p>
+        )}
+
+        {setWhatsAppGroupJid.error && !whatsappJidError && (
+          <p className="mt-2 text-sm text-[var(--accent-red)]">
+            {setWhatsAppGroupJid.error.message}
+          </p>
+        )}
+
+        {setWhatsAppGroupJid.isSuccess && !whatsappJidInput && (
+          <p className="mt-2 text-sm text-[var(--text-muted)]">
+            Leaderboard is disabled for this group. Set a JID to enable daily
+            updates.
+          </p>
+        )}
+
+        {whatsappJidInput && (
+          <p className="mt-2 text-xs text-[var(--text-muted)]">
+            Leaderboard will send daily at {leaderboardTimeInput} to{' '}
+            {whatsappJidInput}
+          </p>
+        )}
       </section>
     </div>
   );

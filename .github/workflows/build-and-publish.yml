@@ -1,18 +1,13 @@
 name: Build and Publish
 
-# Runs only after CI ("Verify") succeeds on main, so a red build can never be
-# published or deployed. Builds one image per deployable app — an app is
-# deployable iff it has apps/<name>/Dockerfile — pushes them to GHCR tagged by
-# git SHA (and :latest), then invokes the host-agnostic deploy dispatcher.
+# Manual pipeline. Builds one image per deployable app — an app is deployable
+# iff it has apps/<name>/Dockerfile — pushes them to GHCR tagged by git SHA
+# (and :latest), then invokes the host-agnostic deploy dispatcher.
 #
 # All deployable images are rebuilt on every run (predictable over clever).
 # Products that want affected-only builds can filter the discover matrix.
 
 on:
-  workflow_run:
-    workflows: ['CI']
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -26,8 +21,6 @@ permissions:
 jobs:
   discover:
     name: Discover deployable apps
-    # workflow_run only proceeds when CI passed; workflow_dispatch always runs.
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -36,8 +29,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - name: Discover apps with a Dockerfile
         id: set
@@ -65,8 +56,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - name: Resolve image and tag
         id: image
@@ -75,7 +64,7 @@ jobs:
           if [ -z "$registry" ]; then
             registry="ghcr.io/${GITHUB_REPOSITORY,,}"
           fi
-          sha="${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}"
+          sha="${{ github.sha }}"
           echo "image=${registry}/${{ matrix.app }}" >> "$GITHUB_OUTPUT"
           echo "sha=${sha}" >> "$GITHUB_OUTPUT"
 
@@ -121,8 +110,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -136,7 +123,7 @@ jobs:
           if [ -z "$registry" ]; then
             registry="ghcr.io/${GITHUB_REPOSITORY,,}"
           fi
-          sha="${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}"
+          sha="${{ github.sha }}"
           apps='${{ needs.discover.outputs.matrix }}'
           images=$(echo "$apps" | jq -c --arg reg "$registry" --arg sha "$sha" \
             'map({ (.): ($reg + "/" + . + ":" + $sha) }) | add')

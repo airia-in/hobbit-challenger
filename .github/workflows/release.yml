@@ -1,7 +1,6 @@
 name: Release
 
 # Manual CD: cut a versioned release, publish container images, and stage mobile assets.
-# Automatic deploys still flow through CI → Build and Publish on main.
 
 on:
   workflow_dispatch:

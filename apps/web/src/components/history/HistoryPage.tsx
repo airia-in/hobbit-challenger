@@ -154,40 +154,20 @@ export function HistoryContent() {
         {[...groupedByDate.entries()].map(([dateKey, dayEntries]) => {
           const dayResult = dayEntries.find((e) => e.type === 'day');
           const tasks = dayEntries.filter((e) => e.type === 'task');
-          const failed = dayResult?.type === 'day' && !dayResult.completed;
 
           return (
             <div key={dateKey}>
-              <div
-                className={`rounded-lg border bg-[var(--surface)] p-4 ${
-                  failed
-                    ? 'border-[var(--accent-red)]/30 bg-[var(--accent-red)]/5'
-                    : 'border-[var(--border)]'
-                }`}
-              >
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="text-sm font-medium text-[var(--text-primary)]">
                     {dateKey}
                   </h3>
                   {dayResult?.type === 'day' && (
-                    <span
-                      className={`text-xs uppercase tracking-wider ${
-                        dayResult.completed
-                          ? 'text-[var(--success)]'
-                          : 'text-[var(--accent-red)]'
-                      }`}
-                    >
-                      Day {dayResult.dayNumber} ·{' '}
-                      {dayResult.completed ? 'Complete' : 'Failed'}
+                    <span className="text-xs uppercase tracking-wider text-[var(--text-muted)]">
+                      Day {dayResult.dayNumber}
                     </span>
                   )}
                 </div>
-
-                {dayResult?.type === 'day' && dayResult.failReason && (
-                  <p className="mb-3 text-xs text-[var(--accent-red)]">
-                    {dayResult.failReason}
-                  </p>
-                )}
 
                 {tasks.length > 0 && (
                   <ul className="space-y-2">

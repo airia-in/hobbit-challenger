@@ -141,6 +141,34 @@ describe('HistoryContent', () => {
     expect(screen.getByText('Valid')).toBeInTheDocument();
   });
 
+  it('does not render failed day chrome in history cards', () => {
+    mockListQuery.mockReturnValue({
+      data: {
+        entries: [
+          {
+            type: 'day' as const,
+            id: 'day-6',
+            date: new Date('2026-06-06T00:00:00.000Z'),
+            dayNumber: 6,
+            completed: false,
+            failReason: 'Not all scored activities were logged',
+            attemptNumber: 1,
+          },
+        ],
+        availableFilters: sampleData.availableFilters,
+      },
+      isLoading: false,
+    });
+
+    render(<HistoryContent />);
+
+    expect(screen.getByText('Day 6')).toBeInTheDocument();
+    expect(screen.queryByText(/Failed/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Not all scored activities were logged'),
+    ).not.toBeInTheDocument();
+  });
+
   it('shows error state with retry when query fails', async () => {
     const refetch = vi.fn();
     mockListQuery.mockReturnValue({

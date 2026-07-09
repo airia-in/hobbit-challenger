@@ -49,6 +49,18 @@ Use `pnpm verify:fast` for the standard pre-commit gate and `pnpm verify` for th
 
 Use short, imperative, sentence-case commit subjects, e.g. `Add production start command and localize user list UI`. PRs should include a summary, validation, linked issues, and screenshots for visible UI changes.
 
+## Design Context
+
+The web app's design system is documented in `apps/web/PRODUCT.md` (strategy, brand, anti-references) and `apps/web/DESIGN.md` (visual spec: colors, typography, components, rules). Key facts:
+
+- **Register:** product (app UI, not marketing). Design serves the task.
+- **Palette:** Near-black base (`#0a0a0a`), single red accent (`#e63329`), gold/silver/bronze for podium/rewards. Light theme exists as a secondary mode.
+- **Typography:** Bebas Neue (display numbers), Inter (body), JetBrains Mono (all UI labels at 10px uppercase 0.15em tracking).
+- **Components:** TaskCard is the central interaction surface. Full-pill buttons, 8–12px card corners, flat-by-default (shadows only on primary buttons). Skeleton shimmer for all loading states.
+- **Motion:** 150–200ms state transitions, no orchestrated page-load sequences. `prefers-reduced-motion` respected everywhere.
+- **Anti-patterns:** No second accent color, no enterprise dashboard sprawl, no corporate wellness aesthetics, no gradient text, no ghost cards (border + shadow on same element).
+- **Live mode:** Configured at `.impeccable/live/config.json`. Start the dev server, then `$impeccable live` to iterate in-browser.
+
 ## Security & Configuration Tips
 
 Copy `.env.example` for local config. Keep secrets out of git and update `CORS_ORIGIN` for new frontend origins. Do not commit `dist/`, `.astro/`, `.turbo/`, or coverage artifacts.

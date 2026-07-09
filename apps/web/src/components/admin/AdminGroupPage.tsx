@@ -303,7 +303,7 @@ export function AdminGroupContent() {
             submitRange(rangeStartDate, rangeEndDate);
           }}
         >
-          <label className="space-y-1 text-xs uppercase tracking-wider text-[var(--text-muted)]">
+          <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] [font-family:var(--font-mono)]">
             <span>Start date</span>
             <input
               type="date"
@@ -312,7 +312,7 @@ export function AdminGroupContent() {
               className="w-full rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-sm text-[var(--text-primary)]"
             />
           </label>
-          <label className="space-y-1 text-xs uppercase tracking-wider text-[var(--text-muted)]">
+          <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] [font-family:var(--font-mono)]">
             <span>End date</span>
             <input
               type="date"

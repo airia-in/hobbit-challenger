@@ -1,5 +1,5 @@
 export const fieldLabelClass =
-  'mb-1 block text-xs uppercase tracking-wider text-[var(--text-muted)]';
+  'mb-1 block text-[10px] font-semibold tracking-[0.15em] uppercase text-[var(--text-muted)] [font-family:var(--font-mono)]';
 
 export const fieldInputClass =
   'w-full rounded border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2 text-[var(--text-primary)]';

@@ -54,7 +54,7 @@ function ProofRuleFields({
   return (
     <div className="space-y-3 rounded border border-[var(--border)] p-3">
       <p className={fieldLabelClass}>Proof rules</p>
-      <label className="flex items-center gap-2 text-sm text-[var(--text)]">
+      <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
         <input
           id={`edit-allows-proof-${activityId}`}
           type="checkbox"
@@ -68,7 +68,7 @@ function ProofRuleFields({
         Allow photo proof uploads
       </label>
       {allowsProof && kind === 'CHECKBOX' && (
-        <label className="flex items-center gap-2 text-sm text-[var(--text)]">
+        <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
           <input
             id={`edit-auto-complete-proof-${activityId}`}
             type="checkbox"

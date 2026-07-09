@@ -187,7 +187,7 @@ export function ProgressContent() {
       />
 
       <section className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-        <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)]">
+        <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] [font-family:var(--font-mono)]">
           Activity
         </label>
         {activities.length === 0 ? (

@@ -161,7 +161,7 @@ export function HistoryContent() {
               <div
                 className={`rounded-lg border bg-[var(--surface)] p-4 ${
                   failed
-                    ? 'border-l-4 border-l-[var(--accent-red)] border-[var(--border)]'
+                    ? 'border-[var(--accent-red)]/30 bg-[var(--accent-red)]/5'
                     : 'border-[var(--border)]'
                 }`}
               >

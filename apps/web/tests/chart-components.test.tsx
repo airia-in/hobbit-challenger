@@ -121,6 +121,27 @@ describe('HeatmapGrid', () => {
     expect(getHeatmapColumnCount(75)).toBe(13);
     expect(getHeatmapColumnCount(366)).toBe(24);
   });
+
+  it('renders missed days as neutral while preserving completed and today colors', () => {
+    render(
+      <HeatmapGrid
+        cells={[
+          { dayNumber: 1, state: 'completed', dayLabel: null },
+          { dayNumber: 2, state: 'failed', dayLabel: null },
+          { dayNumber: 3, state: 'today', dayLabel: null },
+        ]}
+      />,
+    );
+
+    expect(screen.getByTitle('Day 1')).toHaveClass('bg-[var(--success)]');
+    expect(screen.getByTitle('Day 2')).toHaveClass(
+      'bg-[var(--surface-raised)]',
+    );
+    expect(screen.getByTitle('Day 2')).not.toHaveClass(
+      'bg-[var(--accent-red)]',
+    );
+    expect(screen.getByTitle('Day 3')).toHaveClass('bg-[var(--gold-fill)]');
+  });
 });
 
 describe('DayCounter', () => {
@@ -167,6 +188,22 @@ describe('JourneyPath', () => {
     for (const state of states) {
       expect(document.querySelector(`[data-state="${state}"]`)).toBeTruthy();
     }
+  });
+
+  it('renders failed trail days as neutral instead of red', () => {
+    const cells: HeatmapCellData[] = [
+      { dayNumber: 1, state: 'completed', dayLabel: null },
+      { dayNumber: 2, state: 'failed', dayLabel: null },
+      { dayNumber: 3, state: 'today', dayLabel: null },
+    ];
+
+    render(<JourneyPath cells={cells} currentDay={3} lengthDays={3} />);
+
+    const failedTile = document.querySelector(
+      '[data-state="failed"] div[title]',
+    );
+    expect(failedTile).toHaveClass('bg-[var(--surface-raised)]');
+    expect(failedTile).not.toHaveClass('bg-[var(--accent-red)]');
   });
 
   it('places landmarks at days 7, 21, 30, and 66 for long challenges', () => {

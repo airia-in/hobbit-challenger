@@ -102,7 +102,7 @@ export function ManageGroupContent() {
           }}
           className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6"
         >
-          <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] [font-family:var(--font-mono)]">
             Fellowship name
           </label>
           <input

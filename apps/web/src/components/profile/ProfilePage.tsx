@@ -391,7 +391,7 @@ export function ProfileContent() {
         </h2>
 
         <div>
-          <label className="mb-1 block text-xs uppercase tracking-wider text-[var(--text-muted)]">
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] [font-family:var(--font-mono)]">
             Display name
           </label>
           <input
@@ -402,7 +402,7 @@ export function ProfileContent() {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs uppercase tracking-wider text-[var(--text-muted)]">
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] [font-family:var(--font-mono)]">
             Phone
           </label>
           <div className="flex">
@@ -425,7 +425,7 @@ export function ProfileContent() {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs uppercase tracking-wider text-[var(--text-muted)]">
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] [font-family:var(--font-mono)]">
             Email <span className="normal-case">(optional)</span>
           </label>
           <input
@@ -438,7 +438,7 @@ export function ProfileContent() {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs uppercase tracking-wider text-[var(--text-muted)]">
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] [font-family:var(--font-mono)]">
             New password
           </label>
           <input
@@ -451,7 +451,7 @@ export function ProfileContent() {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs uppercase tracking-wider text-[var(--text-muted)]">
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] [font-family:var(--font-mono)]">
             Timezone
           </label>
           <select
@@ -480,7 +480,7 @@ export function ProfileContent() {
         </div>
 
         <div id="reminder-time">
-          <label className="mb-1 block text-xs uppercase tracking-wider text-[var(--text-muted)]">
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] [font-family:var(--font-mono)]">
             Morning reminder time
           </label>
           <input
@@ -560,7 +560,7 @@ export function ProfileContent() {
         </div>
 
         <div id="habit-anchor">
-          <label className="mb-1 block text-xs uppercase tracking-wider text-[var(--text-muted)]">
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] [font-family:var(--font-mono)]">
             After I… I will check in
           </label>
           <input

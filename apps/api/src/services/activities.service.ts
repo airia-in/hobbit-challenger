@@ -17,10 +17,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 
 type PrismaClientLike = PrismaService | Prisma.TransactionClient;
 import { deriveChallengeProgress } from '../utils/challenge-range';
-import {
-  computeDayLoggingStatus,
-  isActivityLogLogged,
-} from '../utils/day-completion';
+import { computeDayLoggingStatus } from '../utils/day-completion';
 import {
   addLocalDays,
   formatLocalDateKey,
@@ -218,26 +215,13 @@ function mapActivityToToday(
 }
 
 function computeActivityCanEdit(
-  activity: Pick<Activity, 'kind'>,
-  log: ActivityLog | null,
   isViewingToday: boolean,
   todayWindowOpen: boolean,
 ): boolean {
   if (isViewingToday) {
     return todayWindowOpen;
   }
-  if (!log) {
-    return true;
-  }
-  if (activity.kind === 'NUMBER') {
-    return true;
-  }
-  return !isActivityLogLogged({
-    state: log.state,
-    tier: log.tier,
-    value: log.value,
-    subPoints: log.subPoints,
-  });
+  return true;
 }
 
 function dayNumberForDateKey(
@@ -763,8 +747,6 @@ async function assertCanMutateForDate(
   challengeId: string,
   timezone: string,
   targetDate: Date,
-  activityId: string,
-  options: { activityKind: Activity['kind']; allowUndo?: boolean },
 ) {
   const todayDate = getUserLocalDate(timezone);
   const todayKey = formatLocalDateKey(todayDate, timezone);
@@ -799,33 +781,6 @@ async function assertCanMutateForDate(
       });
     }
     return;
-  }
-
-  if (options.allowUndo) {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: 'Cannot undo entries on past dates',
-    });
-  }
-
-  const existing = await prisma.activityLog.findFirst({
-    where: { challengeId, activityId, date: targetDate },
-  });
-
-  if (
-    options.activityKind !== 'NUMBER' &&
-    existing &&
-    isActivityLogLogged({
-      state: existing.state,
-      tier: existing.tier,
-      value: existing.value,
-      subPoints: existing.subPoints,
-    })
-  ) {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: 'Entry already recorded for this date',
-    });
   }
 }
 
@@ -1023,8 +978,6 @@ export class ActivitiesService {
     for (const activity of activities) {
       const log = logByActivityId.get(activity.id) ?? null;
       const activityCanEdit = computeActivityCanEdit(
-        activity,
-        log,
         isViewingToday,
         todayWindowOpenForEdit,
       );
@@ -1164,14 +1117,14 @@ export class ActivitiesService {
     dateKey?: string,
   ): Promise<MutationResult> {
     const ctx = await this.loadMutationContext(prisma, userId, activityId);
-    const { viewedDate } = resolveViewedDateKey(dateKey, ctx.user.timezone);
+    const mutationTimezone =
+      ctx.user.group?.challengeTimezone ?? ctx.user.timezone;
+    const { viewedDate } = resolveViewedDateKey(dateKey, mutationTimezone);
     await assertCanMutateForDate(
       prisma,
       ctx.challenge.id,
-      ctx.user.timezone,
+      mutationTimezone,
       viewedDate,
-      activityId,
-      { activityKind: ctx.activity.kind, allowUndo: true },
     );
 
     return prisma.$transaction(async (tx) => {
@@ -1254,8 +1207,6 @@ export class ActivitiesService {
       ctx.challenge.id,
       mutationTimezone,
       viewedDate,
-      activityId,
-      { activityKind: ctx.activity.kind },
     );
 
     const scored = mapActivityToScored(ctx.activity);
@@ -1449,8 +1400,6 @@ export class ActivitiesService {
       ctx.challenge.id,
       mutationTimezone,
       viewedDate,
-      activityId,
-      { activityKind: ctx.activity.kind },
     );
 
     const scored = mapActivityToScored(ctx.activity);

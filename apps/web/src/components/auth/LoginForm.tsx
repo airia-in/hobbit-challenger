@@ -121,7 +121,7 @@ function LoginFormInner() {
         </p>
       </div>
 
-      <div className="w-full max-w-[420px] rounded-lg border border-[var(--border)] bg-[var(--surface)] p-8 shadow-2xl">
+      <div className="w-full max-w-[420px] rounded-lg border border-[var(--border)] bg-[var(--surface)] p-8">
         <div className="mb-8 flex border-b border-[var(--border)]">
           {(['signin', 'register'] as const).map((key) => (
             <button
@@ -145,7 +145,7 @@ function LoginFormInner() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {tab === 'register' && (
             <div>
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] [font-family:var(--font-mono)]">
                 Name
               </label>
               <input
@@ -160,7 +160,7 @@ function LoginFormInner() {
           )}
 
           <div>
-            <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] [font-family:var(--font-mono)]">
               {tab === 'signin' ? 'Phone or email' : 'Phone'}
             </label>
             <div className="flex">
@@ -192,7 +192,7 @@ function LoginFormInner() {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] [font-family:var(--font-mono)]">
               Password
             </label>
             <input

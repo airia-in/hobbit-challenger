@@ -1372,7 +1372,7 @@ describe('activities service', () => {
     expect(stored?.xpDeducted).toBe(0);
   });
 
-  it('getToday keeps NUMBER activities editable when logged on a past day', async () => {
+  it('getToday keeps logged activities editable on a past day', async () => {
     const today = getUserLocalDate('UTC');
     const yesterday = addUtcDays(today, -1);
     const yesterdayKey = yesterday.toISOString().slice(0, 10);
@@ -1417,7 +1417,7 @@ describe('activities service', () => {
     const water = result.scoredActivities.find(
       (activity) => activity.id === WATER_ACTIVITY_ID,
     );
-    expect(progressPhoto?.canEdit).toBe(false);
+    expect(progressPhoto?.canEdit).toBe(true);
     expect(diet?.canEdit).toBe(true);
     expect(water?.canEdit).toBe(true);
   });
@@ -1538,7 +1538,7 @@ describe('activities service', () => {
     expect(fake.stores.challenges.get(CHALLENGE_ID)?.totalXp).toBe(26);
   });
 
-  it('undoActivity still rejects undoing a NUMBER entry on a past date', async () => {
+  it('undoActivity clears an entry on a past date', async () => {
     const today = getUserLocalDate('UTC');
     const yesterday = addUtcDays(today, -1);
     const yesterdayKey = yesterday.toISOString().slice(0, 10);
@@ -1560,20 +1560,19 @@ describe('activities service', () => {
       }),
     );
 
-    await expect(
-      service.undoActivity(
-        fake.prisma,
-        USER_ID,
-        WATER_ACTIVITY_ID,
-        yesterdayKey,
-      ),
-    ).rejects.toMatchObject({
-      code: 'BAD_REQUEST',
-      message: 'Cannot undo entries on past dates',
-    });
+    const result = await service.undoActivity(
+      fake.prisma,
+      USER_ID,
+      WATER_ACTIVITY_ID,
+      yesterdayKey,
+    );
+
+    expect(result.log.value).toBeNull();
+    expect(result.log.xpAwarded).toBe(0);
+    expect(result.dayTotals.netXp).toBe(0);
   });
 
-  it('markActivity rejects backfill when a CHECKBOX past-day entry already exists', async () => {
+  it('markActivity allows re-saving a CHECKBOX past-day entry', async () => {
     const today = getUserLocalDate('UTC');
     const yesterday = addUtcDays(today, -1);
     const yesterdayKey = yesterday.toISOString().slice(0, 10);
@@ -1593,20 +1592,19 @@ describe('activities service', () => {
       }),
     );
 
-    await expect(
-      service.markActivity(
-        fake.prisma,
-        USER_ID,
-        CHECKBOX_ACTIVITY_ID,
-        yesterdayKey,
-      ),
-    ).rejects.toMatchObject({
-      code: 'BAD_REQUEST',
-      message: 'Entry already recorded for this date',
-    });
+    const result = await service.markActivity(
+      fake.prisma,
+      USER_ID,
+      CHECKBOX_ACTIVITY_ID,
+      yesterdayKey,
+    );
+
+    expect(result.log.activityId).toBe(CHECKBOX_ACTIVITY_ID);
+    expect(result.log.state).toBe('DONE');
+    expect(result.log.xpAwarded).toBe(200);
   });
 
-  it('setTier rejects backfill when a TIERED past-day entry already exists', async () => {
+  it('setTier updates a TIERED past-day entry', async () => {
     const today = getUserLocalDate('UTC');
     const yesterday = addUtcDays(today, -1);
     const yesterdayKey = yesterday.toISOString().slice(0, 10);
@@ -1662,18 +1660,16 @@ describe('activities service', () => {
       },
     );
 
-    await expect(
-      service.setTier(
-        fake.prisma,
-        USER_ID,
-        TIERED_ACTIVITY_ID,
-        'NONE',
-        yesterdayKey,
-      ),
-    ).rejects.toMatchObject({
-      code: 'BAD_REQUEST',
-      message: 'Entry already recorded for this date',
-    });
+    const result = await service.setTier(
+      fake.prisma,
+      USER_ID,
+      TIERED_ACTIVITY_ID,
+      'NONE',
+      yesterdayKey,
+    );
+
+    expect(result.log.tier).toBe('NONE');
+    expect(result.log.xpAwarded).toBe(100);
   });
 
   it('markActivity allows backfill for an unlogged activity on a past day', async () => {
